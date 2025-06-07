@@ -1,43 +1,12 @@
 /**
  * Gestionnaire de contexte pour les conversations par serveur/canal/DM
  */
+import { getContextKey } from './commandUtils.js';
 
 // Séparation des contextes par type de conversation
 const guildConversations = new Map() // Conversations de serveurs
 const dmConversations = new Map()     // Conversations privées (DM)
 const groupConversations = new Map()  // Conversations de groupe
-
-/**
- * Génère une clé de contexte unique pour stocker les conversations
- * @param {Object} message - Message Discord
- * @returns {Object} - Objet contenant le type et la clé de contexte
- */
-export function getContextKey(message) {
-  if (!message || !message.channel) {
-    console.error('Invalid message object passed to getContextKey')
-    return { type: 'invalid', key: 'invalid_context' }
-  }
-
-  if (message.guild) {
-    // Si c'est un message de serveur
-    return { 
-      type: 'guild', 
-      key: `${message.guild.id}_${message.channel.id}` 
-    }
-  } else if (message.channel.type === 'GROUP_DM') {
-    // Si c'est un groupe DM
-    return { 
-      type: 'group', 
-      key: message.channel.id 
-    }
-  } else {
-    // Si c'est un DM privé
-    return { 
-      type: 'dm', 
-      key: message.channel.id 
-    }
-  }
-}
 
 /**
  * Récupère les données de contexte pour un message

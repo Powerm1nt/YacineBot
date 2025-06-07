@@ -4,8 +4,11 @@ import { demo } from './commands/demo.js'
 import { rename } from './commands/rename.js'
 import { avatar } from './commands/avatar.js'
 import { mvbio } from './commands/mvbio.js'
+import { help } from './commands/help.js'
 import { ai } from './commands/ai.js'
 import { commandLimiter } from './utils/rateLimit.js'
+import { isAuthorized } from './utils/authGuard.js'
+import { getCommandMetadata } from './utils/commandUtils.js'
 dotenv.config();
 
 const BOT_CONFIG = {
@@ -16,12 +19,17 @@ const BOT_CONFIG = {
 const client = new Client();
 const prefix = BOT_CONFIG.prefix;
 
+// Définition des commandes avec leurs handlers
 const commands = {
   demo: async (message, args) => demo(client, message, args),
   rename: async (message, args) => rename(client, message, args),
   avatar: async (message, args) => avatar(client, message, args),
   mvbio: async (message, args) => mvbio(client, message, args),
-}
+  help: async (message, args) => help(client, message, args),
+};
+
+// Liste des commandes disponibles pour l'importation dynamique dans help.js
+export const commandsList = Object.keys(commands);
 
 client.on("messageCreate", async (message) => {
   if(message.author.id === client.user.id) return;
@@ -36,14 +44,19 @@ client.on("messageCreate", async (message) => {
     let args = message.content.split(" ").filter(str => /\w+/.test(str));
     let command = args.shift().replace(prefix, "");
 
-    // Vérifier les permissions pour les commandes restreintes
-    const restrictedCommands = ['mvbio', 'avatar'];
-    if (restrictedCommands.includes(command)) {
-      const { isAuthorized } = await import('./utils/authGuard.js');
-      if (!isAuthorized(message.author.id)) {
-        message.reply('❌ Désolé, vous n\'êtes pas autorisé à utiliser cette commande.');
-        return;
-      }
+    // Vérifier si la commande existe
+    if (!commands[command]) {
+      message.channel.send(`<@${message.author.id}>, cette commande n'existe pas.`);
+      return;
+    }
+
+    // Charger les métadonnées de la commande
+    const metadata = await getCommandMetadata(command);
+
+    // Vérifier l'autorisation avec les métadonnées chargées
+    if (!isAuthorized({ metadata }, message.author.id)) {
+      message.reply('❌ Désolé, vous n\'êtes pas autorisé à utiliser cette commande.');
+      return;
     }
 
     try {

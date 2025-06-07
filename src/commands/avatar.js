@@ -1,6 +1,12 @@
 import fetch from 'node-fetch';
 import { Buffer } from 'buffer'
 
+export const metadata = {
+  name: 'avatar',
+  description: 'Change l\'avatar du bot (global ou sur un serveur)',
+  restricted: true
+};
+
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024; // 8 Mo en octets
 
 export async function avatar(client, message, args) {

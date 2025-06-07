@@ -6,8 +6,8 @@ import {
   extractUserIdsFromText
 } from '../utils/mentionUtils.js'
 import { logMentionsInfo } from '../utils/logUtils.js'
+import { getContextKey } from '../utils/commandUtils.js'
 import {
-  getContextKey,
   getContextData,
   saveContextResponse,
   resetContext,

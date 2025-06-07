@@ -1,6 +1,12 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+export const metadata = {
+  name: 'mvbio',
+  description: 'Modifie la bio du bot',
+  restricted: true
+};
+
 export async function mvbio(client, message, args) {
 
   if (!args || args.length === 0) {
