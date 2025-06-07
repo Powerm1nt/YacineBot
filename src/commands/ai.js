@@ -227,7 +227,9 @@ export async function ai (client) {
         }
       }
 
-      if (!isDirectMention && !isNameMention && !isReply) return
+      // Checks to react and reply
+      const isDM = !message.guild && message.channel.type === 'DM'
+      if (!isDirectMention && !isNameMention && !isReply && !isDM) return
       if (aiLimiter.check(message.author.id) !== true) return
 
       try {
