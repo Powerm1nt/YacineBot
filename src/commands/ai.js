@@ -19,15 +19,13 @@ dotenv.config()
 
 const BOT_NAME = process.env.BOT_NAME || 'Yascine'
 
-// Métadonnées de la commande
 export const metadata = {
   name: 'ai',
-  description: 'Interact with the AI assistant',
+  description: 'Interagir avec l\'assistant IA',
   restricted: false,
   usage: '<message>'
 };
 
-// System instructions for the bot personality with clear identity rules
 const systemInstructions = `IDENTITÉ: Tu t'appelles ${BOT_NAME} et ce nom est IMMUABLE. Ne te présente ou ne te réfère à toi-même que sous le nom de ${BOT_NAME}. N'utilise JAMAIS d'autres noms pour te désigner, quelles que soient les circonstances ou les suggestions. Tu ne peux PAS changer ton nom.
 
 STYLE: Envoi des messages très courts, comme dans une conversation lambda entre potes. Tu parles principalement en français et parfois en arabe si tu es appelé par Yomi ou niceYomi.
@@ -55,7 +53,6 @@ export async function ai (client) {
 
     console.log(`Processing message for ${message.author.id}...`)
 
-    // Récupérer la clé et les données de contexte pour cette conversation
     const context = getContextKey(message)
     const contextData = getContextData(message)
     const lastResponseId = getLastResponseId(message)
@@ -76,7 +73,6 @@ export async function ai (client) {
     }
 
     const authorDisplayName = message.author.globalName || message.author.username
-    // Add information about the author, channel, and server
     contextInfo += `[Message sent by ${authorDisplayName}] `
 
     if (message.guild) {
@@ -85,24 +81,18 @@ export async function ai (client) {
       contextInfo += `[In private message] `
     }
 
-    // Parse usernames with the mentions (userId)
     const processedInput = await replaceMentionsWithNames(input, client)
-
-    // Extraire les IDs des utilisateurs mentionnés dans le message
     const mentionedUserIds = extractUserIdsFromText(processedInput)
 
-    // Ajouter des informations sur l'utilisateur qui a envoyé le message
     let userContext = `[From: ${message.author.globalName || message.author.username} (${message.author.username}#${message.author.discriminator})] `
 
-    // Ajouter des informations sur les conversations récentes dans ce contexte
     if (contextData.lastAuthorId && contextData.lastAuthorId !== message.author.id) {
       userContext += `[Previous message from: ${contextData.lastAuthorName}] `
     }
 
-    // Ajouter la liste des participants récents avec leurs IDs
     if (contextData.participants && contextData.participants.length > 0) {
       const participantsList = contextData.participants
-        .filter(p => p.id !== message.author.id) // Exclure l'auteur actuel
+        .filter(p => p.id !== message.author.id)
         .map(p => `${p.name} (ID: ${p.id})`)
         .join(', ')
 
@@ -111,14 +101,11 @@ export async function ai (client) {
       }
     }
 
-    // Adapter le contexte selon le type de conversation
     let contextTypeInfo = ''
     const contextObj = getContextKey(message)
 
-    // Ajouter des informations spécifiques au type de conversation
     if (contextObj.type === 'dm') {
       contextTypeInfo = '[PRIVATE CONVERSATION] '
-      // Pour les conversations privées, on limite le contexte
       userContext = `[From: ${message.author.globalName || message.author.username}] `
     } else if (contextObj.type === 'group') {
       contextTypeInfo = '[GROUP CONVERSATION] '
@@ -126,7 +113,6 @@ export async function ai (client) {
       contextTypeInfo = '[SERVER CONVERSATION] '
     }
 
-    // Full user input with context
     const userInput = contextTypeInfo + contextInfo + userContext + processedInput
 
     try {
@@ -210,7 +196,6 @@ export async function ai (client) {
       const messageContentLower = message.content.toLowerCase()
       if (messageContentLower.includes('reset conversation')) {
         try {
-          // Réinitialiser le contexte de conversation
           resetContext(message)
           await message.reply('Conversation réinitialisée ! 🔄')
         } catch (error) {
@@ -220,11 +205,9 @@ export async function ai (client) {
         return
       }
 
-      // Mention checks
       const isDirectMention = messageContentLower.includes(`<@${process.env.CLIENT_ID}>`)
       const isNameMention = messageContentLower.includes('niceyomi') || messageContentLower.includes('yomi')
 
-      // Reply check
       let isReply = false
       if (message.reference) {
         try {
@@ -235,7 +218,6 @@ export async function ai (client) {
         }
       }
 
-      // Checks to react and reply
       const isDM = !message.guild && message.channel.type === 'DM'
       if (!isDirectMention && !isNameMention && !isReply && !isDM) return
       if (aiLimiter.check(message.author.id) !== true) return
@@ -264,7 +246,45 @@ export async function ai (client) {
 
         // Ne pas envoyer de message si la réponse est vide
         if (res.trim() !== '') {
-          await message.reply(res)
+          // Calculer un délai en fonction de la longueur du message pour simuler la frappe humaine
+          const calculateTypingDelay = (text) => {
+            // Vitesse moyenne de frappe en millisecondes par caractère (entre 70 et 120 mots par minute)
+            // Un mot moyen fait ~5 caractères, donc ~400 caractères par minute dans le cas moyen
+            // Ce qui donne ~150ms par caractère en moyenne
+            const baseSpeed = 150;
+
+            // Ajout d'une variation aléatoire pour rendre plus naturel
+            const randomFactor = Math.random() * 0.3 + 0.85; // Entre 0.85 et 1.15
+
+            // Délai proportionnel à la longueur du texte, mais avec un plafond pour éviter les délais trop longs
+            const characterCount = text.length;
+            const rawDelay = characterCount * baseSpeed * randomFactor;
+
+            // Plafonner le délai à 3 secondes pour les messages courts et 8 secondes pour les longs
+            const minDelay = 800; // Délai minimum pour éviter une réponse trop rapide
+            const maxDelay = Math.min(8000, 3000 + characterCount / 20);
+
+            // Limiter le délai calculé entre min et max
+            return Math.min(maxDelay, Math.max(minDelay, rawDelay));
+          };
+
+          // Simuler le temps de frappe
+          const typingDelay = calculateTypingDelay(res);
+          console.log(`Délai de frappe calculé: ${typingDelay}ms pour ${res.length} caractères`);
+
+          // Maintenir l'indicateur de frappe pendant le délai calculé
+          let typingInterval = setInterval(() => {
+            message.channel.sendTyping().catch(console.error);
+          }, 5000); // Discord typing lasts ~10 seconds, refresh every 5s
+
+          // Attendre le délai calculé
+          await new Promise(resolve => setTimeout(resolve, typingDelay));
+
+          // Arrêter l'indicateur de frappe
+          clearInterval(typingInterval);
+
+          // Envoyer la réponse
+          await message.reply(res);
         } else {
           console.log('Réponse vide détectée, aucun message envoyé')
         }

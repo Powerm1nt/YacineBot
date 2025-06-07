@@ -12,7 +12,6 @@ export const metadata = {
 // Chemin vers le fichier de stockage des avertissements
 const warningsFilePath = path.join(process.cwd(), 'data', 'warnings.json');
 
-// Fonction pour s'assurer que le répertoire data existe
 function ensureDirectoryExists() {
   const dir = path.join(process.cwd(), 'data');
   if (!fs.existsSync(dir)) {
@@ -20,12 +19,10 @@ function ensureDirectoryExists() {
   }
 }
 
-// Fonction pour charger les avertissements
 function loadWarnings() {
   ensureDirectoryExists();
 
   if (!fs.existsSync(warningsFilePath)) {
-    // Créer un fichier vide si le fichier n'existe pas
     fs.writeFileSync(warningsFilePath, JSON.stringify({}));
     return {};
   }
@@ -39,7 +36,6 @@ function loadWarnings() {
   }
 }
 
-// Fonction pour sauvegarder les avertissements
 function saveWarnings(warnings) {
   ensureDirectoryExists();
 
@@ -50,41 +46,33 @@ function saveWarnings(warnings) {
   }
 }
 
-// Fonction pour ajouter un avertissement
 function addWarning(guildId, userId, moderatorId, reason) {
   const warnings = loadWarnings();
 
-  // Initialiser les objets si nécessaire
   if (!warnings[guildId]) warnings[guildId] = {};
   if (!warnings[guildId][userId]) warnings[guildId][userId] = [];
 
-  // Ajouter le nouvel avertissement
   warnings[guildId][userId].push({
     moderatorId,
     reason,
     timestamp: Date.now()
   });
 
-  // Sauvegarder les changements
   saveWarnings(warnings);
 
-  // Retourner le nombre total d'avertissements
   return warnings[guildId][userId].length;
 }
 
-// Fonction pour obtenir les avertissements d'un utilisateur
 function getUserWarnings(guildId, userId) {
   const warnings = loadWarnings();
   return (warnings[guildId] && warnings[guildId][userId]) ? warnings[guildId][userId] : [];
 }
 
 export async function warn(client, message, args) {
-  // Vérifier les permissions de l'utilisateur
   if (!message.member.permissions.has('MODERATE_MEMBERS')) {
     return message.reply('❌ Vous n\'avez pas la permission d\'avertir des membres.');
   }
 
-  // Sous-commande pour afficher les avertissements
   if (args[0] === 'list' && message.mentions.users.size) {
     const target = message.mentions.users.first();
     const warnings = getUserWarnings(message.guild.id, target.id);
@@ -102,7 +90,6 @@ export async function warn(client, message, args) {
     return message.reply(warningsList);
   }
 
-  // Vérifier si un utilisateur est mentionné
   if (!message.mentions.users.size) {
     return message.reply('❌ Vous devez mentionner un utilisateur à avertir ou utiliser `warn list @utilisateur` pour voir ses avertissements.');
   }
@@ -112,20 +99,15 @@ export async function warn(client, message, args) {
     return message.reply('❌ Cet utilisateur n\'existe pas ou n\'est pas dans ce serveur.');
   }
 
-  // Ne pas permettre d'avertir les modérateurs ou administrateurs
   if (target.permissions.has('MODERATE_MEMBERS')) {
     return message.reply('❌ Vous ne pouvez pas avertir un modérateur ou un administrateur.');
   }
 
-  // Extraire la raison (tous les arguments après la mention)
   const reason = args.slice(1).join(' ') || 'Aucune raison fournie';
-
-  // Ajouter l'avertissement
   const warningCount = addWarning(message.guild.id, target.id, message.author.id, reason);
 
   message.reply(`✅ **${target.user.tag}** a reçu un avertissement (${warningCount} au total). Raison: ${reason}`);
 
-  // Notifier l'utilisateur par MP
   try {
     await target.send(`⚠️ Vous avez reçu un avertissement sur **${message.guild.name}** par ${message.author.tag}.\n**Raison:** ${reason}\n**Total d'avertissements:** ${warningCount}`);
   } catch (error) {
