@@ -41,7 +41,6 @@ client.on("messageCreate", async (message) => {
     // Vérifier le rate limit
     const rateLimitResult = commandLimiter.check(message.author.id);
     if (rateLimitResult !== true) {
-      // Envoyer un message d'erreur à l'utilisateur si rate limité
       message.reply({ content: rateLimitResult });
       return;
     }

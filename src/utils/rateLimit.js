@@ -3,7 +3,7 @@ export class RateLimiter {
     this.options = {
       windowMs: options.windowMs || 30000,
       maxRequests: options.maxRequests || 10,
-      message: options.message || ""
+      message: options.message || "⚠️ Veuillez attendre avant d'envoyer une autre commande."
     };
 
     this.users = new Map();
@@ -17,51 +17,58 @@ export class RateLimiter {
   check(userId) {
     const now = Date.now();
 
+    // Si l'utilisateur n'existe pas encore, l'initialiser
     if (!this.users.has(userId)) {
       this.users.set(userId, {
-        requests: [],
+        requests: [now], // Première requête
         blocked: false,
         blockExpires: 0
       });
+      return true; // Première requête, toujours autorisée
     }
 
     const userData = this.users.get(userId);
 
+    // Si l'utilisateur est bloqué, vérifier si le blocage est terminé
     if (userData.blocked) {
-      if (now > userData.blockExpires) {
+      if (now >= userData.blockExpires) {
+        // Le blocage est terminé, réinitialiser
         userData.blocked = false;
-        userData.requests = [];
+        userData.requests = [now]; // Nouvelle requête après déblocage
+        return true;
       } else {
-        // Vérifier si le message n'est pas vide, sinon utiliser un message par défaut
-        return this.options.message || "⚠️ Veuillez attendre avant d'envoyer une autre commande.";
+        // Encore bloqué
+        const timeLeft = Math.ceil((userData.blockExpires - now) / 1000);
+        return `⚠️ Vous utilisez les commandes trop rapidement. Veuillez attendre ${timeLeft} seconde(s).`;
       }
     }
 
+    // Nettoyer les anciennes requêtes hors de la fenêtre de temps
     userData.requests = userData.requests.filter(
-      timestamp => now - timestamp < this.options.windowMs
+      timestamp => (now - timestamp) < this.options.windowMs
     );
 
+    // Debug pour voir combien de requêtes sont comptées
+    console.log(`Utilisateur ${userId}: ${userData.requests.length}/${this.options.maxRequests} requêtes dans les dernières ${this.options.windowMs/1000}s`);
+
+    // Vérifier si l'utilisateur dépasse la limite
     if (userData.requests.length >= this.options.maxRequests) {
+      // Bloquer l'utilisateur
       userData.blocked = true;
       userData.blockExpires = now + this.options.windowMs;
-      return this.options.message;
+      const timeLeft = Math.ceil(this.options.windowMs / 1000);
+      return `⚠️ Vous utilisez les commandes trop rapidement. Veuillez attendre ${timeLeft} seconde(s).`;
     }
 
+    // Ajouter cette requête à l'historique
     userData.requests.push(now);
     return true;
   }
 
-  /**
-   * Réinitialise les données d'un utilisateur
-   * @param {string} userId - ID de l'utilisateur
-   */
   reset(userId) {
     this.users.delete(userId);
   }
 
-  /**
-   * Réinitialise les données de tous les utilisateurs
-   */
   resetAll() {
     this.users.clear();
   }
