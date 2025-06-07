@@ -32,7 +32,6 @@ export async function replaceMentionsWithNames(text, client) {
         // Remplacer la mention par le nom avec l'ID
         // Format: @nom (ID: ID) - ce format sera converti en <@ID> par le système
         result = result.replace(originalMention, `@${displayName} (ID: ${userId})`)
-        console.log(`Enhanced mention ${originalMention} with name @${displayName} (ID: ${userId})`)
       }
     } catch (error) {
       console.error(`Error fetching user for mention ${match[0]}:`, error)

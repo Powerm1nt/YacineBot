@@ -18,7 +18,7 @@ Un bot Discord qui utilise l'API OpenAI Responses pour maintenir des conversatio
 yarn install
 
 # Configurer le fichier .env avec les variables d'environnement nécessaires
-# CLIENT_ID, TOKEN, OPENAI_API_KEY
+# CLIENT_ID, TOKEN, OPENAI_API_KEY, BOT_NAME
 
 # Lancer le bot
 yarn start

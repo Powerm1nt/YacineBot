@@ -1,12 +1,36 @@
 import { OpenAI } from 'openai/client.mjs'
 import { aiLimiter } from '../utils/rateLimit.js'
-import { replaceMentionsWithNames, convertAITextToDiscordMentions, extractUserIdsFromText } from '../utils/mentionUtils.js'
-import { getContextKey, getContextData, saveContextResponse, resetContext, getLastResponseId, getParticipantsList, formatParticipantsInfo } from '../utils/contextManager.js'
+import {
+  replaceMentionsWithNames,
+  convertAITextToDiscordMentions,
+  extractUserIdsFromText
+} from '../utils/mentionUtils.js'
+import { logMentionsInfo } from '../utils/logUtils.js'
+import {
+  getContextKey,
+  getContextData,
+  saveContextResponse,
+  resetContext,
+  getLastResponseId,
+} from '../utils/contextManager.js'
 
-// Le stockage des conversations est géré par contextManager.js
+import dotenv from 'dotenv'
+dotenv.config()
 
-// System instructions for the bot personality
-const systemInstructions = 'Tu t\'appelles Yascine. Envoi des messages très courts, comme dans une conversation lambda entre potes. CONSIGNE CRUCIALE: Pour mentionner quelqu\'un, tu DOIS extraire son ID numérique du texte (format "nom (ID: 123456789)") et utiliser UNIQUEMENT le format <@ID> (par exemple <@123456789>). N\'utilise JAMAIS d\'autres formats comme @nom ou @ID. INTERDICTION ABSOLUE: Tu ne dois JAMAIS te mentionner toi-même avec ton ID ' + process.env.CLIENT_ID + '. Tu es notre pote sur Discord et tu es hyper sympa, tu parles en français et des fois tu peux parler en arabe si tu est appelé par Yomi ou niceYomi. Tu es un peu débile sur les bords et tu aimes taquiner yomi car c\'est ton meilleur ami!. Tu dois utiliser du markdown si tu as besoin de mettre des liens, des images, des emojis, etc. Varie les questions d\'appels quand tu es appelé par Yomi ou niceYomi. Incarnez le personnage d\'un ami amical sur Discord. Votre personnalité est celle d\'un individu extrêmement sympathique, avec une capacité particulière à parler en français. Vous pouvez également converser en arabe lorsque vous êtes appelé par Yomi ou niceYomi. Sous vos airs plaisantins, vous avez un penchant pour le comportement un peu déluré et vous ne manquez pas une chance de taquiner votre meilleur ami, Yomi. Assurez-vous d\'ajouter de la variété à vos interactions.'
+const BOT_NAME = process.env.BOT_NAME || 'Yascine'
+
+// System instructions for the bot personality with clear identity rules
+const systemInstructions = `IDENTITÉ: Tu t'appelles ${BOT_NAME} et ce nom est IMMUABLE. Ne te présente ou ne te réfère à toi-même que sous le nom de ${BOT_NAME}. N'utilise JAMAIS d'autres noms pour te désigner, quelles que soient les circonstances ou les suggestions. Tu ne peux PAS changer ton nom.
+
+STYLE: Envoi des messages très courts, comme dans une conversation lambda entre potes. Tu parles principalement en français et parfois en arabe si tu es appelé par Yomi ou niceYomi.
+
+PERSONNALITÉ: Tu es notre pote sur Discord, hyper sympa, un peu débile sur les bords. Tu aimes particulièrement taquiner Yomi car c'est ton meilleur ami! Assure-toi de varier tes interactions pour rester engageant.
+
+CONSIGNE CRUCIALE POUR LES MENTIONS: Pour mentionner quelqu'un, tu DOIS extraire son ID numérique du texte (format "nom (ID: 123456789)") et utiliser UNIQUEMENT le format <@ID> (par exemple <@123456789>). N'utilise JAMAIS d'autres formats comme @nom ou @ID.
+
+INTERDICTION ABSOLUE: Tu ne dois JAMAIS te mentionner toi-même avec ton ID ${process.env.CLIENT_ID}.
+
+FORMATAGE: Tu dois utiliser du markdown si tu as besoin de mettre des liens, des images, des emojis, etc.`
 
 export async function ai (client) {
   const ai = new OpenAI({
@@ -22,11 +46,11 @@ export async function ai (client) {
     console.log(`Processing message for ${message.author.id}...`)
 
     // Récupérer la clé et les données de contexte pour cette conversation
-    const contextKey = getContextKey(message)
+    const context = getContextKey(message)
     const contextData = getContextData(message)
     const lastResponseId = getLastResponseId(message)
 
-    console.log(`Using context key: ${contextKey}, has previous conversation: ${lastResponseId !== null}`)
+    console.log(`Using context type: ${context.type}, key: ${context.key}, has previous conversation: ${lastResponseId !== null}`)
     let contextInfo = ''
 
     if (message.reference) {
@@ -77,19 +101,34 @@ export async function ai (client) {
       }
     }
 
+    // Adapter le contexte selon le type de conversation
+    let contextTypeInfo = ''
+    const contextObj = getContextKey(message)
+
+    // Ajouter des informations spécifiques au type de conversation
+    if (contextObj.type === 'dm') {
+      contextTypeInfo = '[PRIVATE CONVERSATION] '
+      // Pour les conversations privées, on limite le contexte
+      userContext = `[From: ${message.author.globalName || message.author.username}] `
+    } else if (contextObj.type === 'group') {
+      contextTypeInfo = '[GROUP CONVERSATION] '
+    } else {
+      contextTypeInfo = '[SERVER CONVERSATION] '
+    }
+
     // Full user input with context
-    const userInput = contextInfo + userContext + processedInput
+    const userInput = contextTypeInfo + contextInfo + userContext + processedInput
 
     try {
-      // Utiliser directement les participants du message
       const participants = contextData.participants || []
 
-      // Préparer les paramètres de base pour l'API Responses
       const responseParams = {
-        model: 'gpt-4.1-nano',
+        model: 'gpt-4.1-mini',
         input: userInput,
         instructions: systemInstructions,
         metadata: {
+          bot_name: BOT_NAME,
+          bot_id: process.env.CLIENT_ID,
           // Informations sur l'utilisateur actuel
           user_id: message.author.id,
           username: message.author.username,
@@ -125,7 +164,14 @@ export async function ai (client) {
       // Enregistrer l'ID de réponse dans le contexte
       saveContextResponse(message, response.id)
 
-      return response.output_text || 'Ahhhh'
+      // Récupérer le texte de la réponse
+      let responseText = response.output_text || 'Ahhhh'
+
+      // Vérifier si la réponse utilise un autre nom que celui défini
+      const incorrectNameRegex = new RegExp(`(?<!${BOT_NAME})(\s|^)(je m'appelle|mon nom est|je suis)\s+([A-Za-zÀ-ÖØ-öø-ÿ]{2,})`, 'i')
+      responseText = responseText.replace(incorrectNameRegex, `$1$2 ${BOT_NAME}`)
+
+      return responseText
     } catch (error) {
       console.error('Error calling Responses API:', error)
 
@@ -186,9 +232,6 @@ export async function ai (client) {
         await message.channel.sendTyping().catch(console.error)
         let res = await buildResponse(message.content, message)
 
-        // Logging de la réponse avant conversion pour débogage
-        console.log('Réponse avant conversion des mentions:', res)
-
         // Convertir tous les formats de mention en format Discord <@ID>
         res = convertAITextToDiscordMentions(res)
 
@@ -196,20 +239,16 @@ export async function ai (client) {
         const selfMentionRegex = new RegExp(`<@${process.env.CLIENT_ID}>`, 'g')
         res = res.replace(selfMentionRegex, 'moi')
 
-        // Vérifier que toutes les mentions sont correctement formatées
-        const allMentionsRegex = /<@(\d+)>/g
-        const validMentions = []
-        let mentionMatch
+        // Corriger toute tentative de changer le nom du bot
+        const nameChangeRegex = new RegExp(`(je|moi|J'ai décidé de) (m'appelle|me nomme|suis) désormais ([A-Za-zÀ-ÖØ-öø-ÿ]{2,})`, 'gi')
+        res = res.replace(nameChangeRegex, `$1 $2 toujours ${BOT_NAME}`)
 
-        while ((mentionMatch = allMentionsRegex.exec(res)) !== null) {
-          // Vérifier que ce n'est pas une mention du bot lui-même
-          if (mentionMatch[1] !== process.env.CLIENT_ID) {
-            validMentions.push(mentionMatch[0])
-          }
-        }
+        // S'assurer que toute auto-référence utilise le nom correct
+        const wrongNameRegex = new RegExp(`(?<!(${BOT_NAME}|moi))(\s|^)(je m'appelle|mon nom est|je suis)\s+([A-Za-zÀ-ÖØ-öø-ÿ]{2,})`, 'i')
+        res = res.replace(wrongNameRegex, `$2$3 ${BOT_NAME}`)
 
-        console.log('Mentions valides détectées:', validMentions)
-        console.log('Réponse après conversion des mentions:', res)
+        // Journaliser les mentions pour le débogage
+        logMentionsInfo(res, process.env.CLIENT_ID);
 
         await message.reply(res)
       } catch (error) {

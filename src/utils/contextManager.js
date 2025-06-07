@@ -2,29 +2,40 @@
  * Gestionnaire de contexte pour les conversations par serveur/canal/DM
  */
 
-// Stockage des contextes de conversation
-const contextConversations = new Map()
+// Séparation des contextes par type de conversation
+const guildConversations = new Map() // Conversations de serveurs
+const dmConversations = new Map()     // Conversations privées (DM)
+const groupConversations = new Map()  // Conversations de groupe
 
 /**
  * Génère une clé de contexte unique pour stocker les conversations
  * @param {Object} message - Message Discord
- * @returns {string} - Clé de contexte
+ * @returns {Object} - Objet contenant le type et la clé de contexte
  */
 export function getContextKey(message) {
   if (!message || !message.channel) {
     console.error('Invalid message object passed to getContextKey')
-    return 'invalid_context'
+    return { type: 'invalid', key: 'invalid_context' }
   }
 
   if (message.guild) {
-    // Si c'est un message de serveur, utiliser l'ID du serveur et du canal
-    return `guild_${message.guild.id}_channel_${message.channel.id}`
+    // Si c'est un message de serveur
+    return { 
+      type: 'guild', 
+      key: `${message.guild.id}_${message.channel.id}` 
+    }
   } else if (message.channel.type === 'GROUP_DM') {
     // Si c'est un groupe DM
-    return `group_${message.channel.id}`
+    return { 
+      type: 'group', 
+      key: message.channel.id 
+    }
   } else {
     // Si c'est un DM privé
-    return `dm_${message.channel.id}`
+    return { 
+      type: 'dm', 
+      key: message.channel.id 
+    }
   }
 }
 
@@ -34,8 +45,19 @@ export function getContextKey(message) {
  * @returns {Object} - Données de contexte
  */
 export function getContextData(message) {
-  const contextKey = getContextKey(message)
-  return contextConversations.get(contextKey) || {}
+  const context = getContextKey(message)
+
+  // Sélectionner le stockage approprié selon le type de contexte
+  switch (context.type) {
+    case 'guild':
+      return guildConversations.get(context.key) || {}
+    case 'dm':
+      return dmConversations.get(context.key) || {}
+    case 'group':
+      return groupConversations.get(context.key) || {}
+    default:
+      return {}
+  }
 }
 
 /**
@@ -50,29 +72,57 @@ export function saveContextResponse(message, responseId) {
     return false
   }
 
-  const contextKey = getContextKey(message)
-
-  contextConversations.set(contextKey, {
+  const context = getContextKey(message)
+  const contextData = {
     lastResponseId: responseId,
     lastMessageTimestamp: new Date().toISOString(),
     lastAuthorId: message.author.id,
     lastAuthorName: message.author.globalName || message.author.username,
-    participants: getParticipants(contextKey, message.author.id, message.author.globalName || message.author.username)
-  })
+    participants: getParticipants(context, message.author.id, message.author.globalName || message.author.username)
+  }
 
-  console.log(`Stored response ID ${responseId} for context ${contextKey}`)
+  // Sauvegarder dans le stockage approprié
+  switch (context.type) {
+    case 'guild':
+      guildConversations.set(context.key, contextData)
+      break
+    case 'dm':
+      dmConversations.set(context.key, contextData)
+      break
+    case 'group':
+      groupConversations.set(context.key, contextData)
+      break
+    default:
+      return false
+  }
+
+  console.log(`Stored response ID ${responseId} for ${context.type} context ${context.key}`)
   return true
 }
 
 /**
  * Met à jour la liste des participants récents dans un contexte
- * @param {string} contextKey - Clé de contexte
+ * @param {Object} context - Objet de contexte avec type et clé
  * @param {string} userId - ID de l'utilisateur
  * @param {string} userName - Nom de l'utilisateur
  * @returns {Array} - Liste mise à jour des participants
  */
-function getParticipants(contextKey, userId, userName) {
-  const contextData = contextConversations.get(contextKey) || {}
+function getParticipants(context, userId, userName) {
+  let contextData = {}
+
+  // Récupérer les données de contexte selon le type
+  switch (context.type) {
+    case 'guild':
+      contextData = guildConversations.get(context.key) || {}
+      break
+    case 'dm':
+      contextData = dmConversations.get(context.key) || {}
+      break
+    case 'group':
+      contextData = groupConversations.get(context.key) || {}
+      break
+  }
+
   const participants = contextData.participants || []
 
   // Vérifier si l'utilisateur est déjà dans la liste
@@ -117,9 +167,24 @@ export function resetContext(message) {
     return false
   }
 
-  const contextKey = getContextKey(message)
-  contextConversations.delete(contextKey)
-  console.log(`Reset context for ${contextKey}`)
+  const context = getContextKey(message)
+
+  // Supprimer le contexte du stockage approprié
+  switch (context.type) {
+    case 'guild':
+      guildConversations.delete(context.key)
+      break
+    case 'dm':
+      dmConversations.delete(context.key)
+      break
+    case 'group':
+      groupConversations.delete(context.key)
+      break
+    default:
+      return false
+  }
+
+  console.log(`Reset context for ${context.type} context ${context.key}`)
   return true
 }
 
@@ -169,16 +234,27 @@ export function cleanupOldContexts() {
   const now = new Date()
   const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000) // 24 heures en millisecondes
 
-  contextConversations.forEach((contextData, contextKey) => {
-    if (contextData.lastMessageTimestamp) {
-      const lastActivity = new Date(contextData.lastMessageTimestamp)
-      if (lastActivity < oneDayAgo) {
-        contextConversations.delete(contextKey)
-        cleanCount++
+  // Fonction helper pour nettoyer un stockage spécifique
+  const cleanupStorage = (storage, type) => {
+    let count = 0
+    storage.forEach((contextData, contextKey) => {
+      if (contextData.lastMessageTimestamp) {
+        const lastActivity = new Date(contextData.lastMessageTimestamp)
+        if (lastActivity < oneDayAgo) {
+          storage.delete(contextKey)
+          count++
+        }
       }
-    }
-  })
+    })
+    console.log(`Cleaned up ${count} inactive ${type} conversation contexts`)
+    return count
+  }
 
-  console.log(`Cleaned up ${cleanCount} inactive conversation contexts`)
+  // Nettoyer chaque type de stockage séparément
+  cleanCount += cleanupStorage(guildConversations, 'guild')
+  cleanCount += cleanupStorage(dmConversations, 'DM')
+  cleanCount += cleanupStorage(groupConversations, 'group')
+
+  console.log(`Cleaned up ${cleanCount} total inactive conversation contexts`)
   return cleanCount
 }

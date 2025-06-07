@@ -5,9 +5,16 @@ import { ai } from './commands/ai.js'
 import { commandLimiter } from './utils/rateLimit.js'
 dotenv.config();
 
+// Configuration globale du bot
+const BOT_CONFIG = {
+  name: 'Yascine',  // Nom immuable du bot
+  prefix: 'f!'     // Préfixe pour les commandes
+};
+
 const client = new Client();
 
-const prefix = "f!";
+// Utiliser le préfixe de la configuration centralisée
+const prefix = BOT_CONFIG.prefix;
 
 const commands = {
   demo: async (message, args) => demo(client, message, args),
