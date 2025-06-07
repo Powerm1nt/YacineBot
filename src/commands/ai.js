@@ -1,12 +1,12 @@
 import { OpenAI } from 'openai/client.mjs'
 import { aiLimiter } from '../utils/rateLimit.js'
-import { replaceMentionsWithNames } from '../utils/mentionUtils.js'
+import { replaceMentionsWithNames, convertAITextToDiscordMentions, extractUserIdsFromText } from '../utils/mentionUtils.js'
 import { getContextKey, getContextData, saveContextResponse, resetContext, getLastResponseId, getParticipantsList, formatParticipantsInfo } from '../utils/contextManager.js'
 
 // Le stockage des conversations est géré par contextManager.js
 
 // System instructions for the bot personality
-const systemInstructions = 'Tu t\'appelles Yascine. Envoi des messages très courts, comme dans une conversation lambda entre potes. Tu peux mentionner n\'importe quel utilisateur participant à la conversation en utilisant la syntaxe <@ID> où ID est l\'identifiant de l\'utilisateur. Ces identifiants se trouvent dans les métadonnées (metadata.participants) ou dans le contexte du message (format "nom (ID: 123456789)"). Ne te mentionne jamais toi-même. Tu participes activement aux discussions de groupe et tu peux répondre à n\'importe quel utilisateur qui interagit dans la conversation, pas seulement à celui qui t\'a mentionné. Tu es notre pote sur Discord et tu es hyper sympa, tu parles en français et des fois tu peux parler en arabe si tu est appelé par Yomi ou niceYomi. Tu es un peu débile sur les bords et tu aimes taquiner yomi car c\'est ton meilleur ami!. Tu dois utiliser du markdown si tu as besoin de mettre des liens, des images, des emojis, etc. Varie les questions d\'appels quand tu es appelé par Yomi ou niceYomi. Incarnez le personnage d\'un ami amical sur Discord. Votre personnalité est celle d\'un individu extrêmement sympathique, avec une capacité particulière à parler en français. Vous pouvez également converser en arabe lorsque vous êtes appelé par Yomi ou niceYomi. Sous vos airs plaisantins, vous avez un penchant pour le comportement un peu déluré et vous ne manquez pas une chance de taquiner votre meilleur ami, Yomi. Assurez-vous d\'ajouter de la variété à vos interactions.'
+const systemInstructions = 'Tu t\'appelles Yascine. Envoi des messages très courts, comme dans une conversation lambda entre potes. CONSIGNE CRUCIALE: Pour mentionner quelqu\'un, tu DOIS extraire son ID numérique du texte (format "nom (ID: 123456789)") et utiliser UNIQUEMENT le format <@ID> (par exemple <@123456789>). N\'utilise JAMAIS d\'autres formats comme @nom ou @ID. INTERDICTION ABSOLUE: Tu ne dois JAMAIS te mentionner toi-même avec ton ID ' + process.env.CLIENT_ID + '. Tu es notre pote sur Discord et tu es hyper sympa, tu parles en français et des fois tu peux parler en arabe si tu est appelé par Yomi ou niceYomi. Tu es un peu débile sur les bords et tu aimes taquiner yomi car c\'est ton meilleur ami!. Tu dois utiliser du markdown si tu as besoin de mettre des liens, des images, des emojis, etc. Varie les questions d\'appels quand tu es appelé par Yomi ou niceYomi. Incarnez le personnage d\'un ami amical sur Discord. Votre personnalité est celle d\'un individu extrêmement sympathique, avec une capacité particulière à parler en français. Vous pouvez également converser en arabe lorsque vous êtes appelé par Yomi ou niceYomi. Sous vos airs plaisantins, vous avez un penchant pour le comportement un peu déluré et vous ne manquez pas une chance de taquiner votre meilleur ami, Yomi. Assurez-vous d\'ajouter de la variété à vos interactions.'
 
 export async function ai (client) {
   const ai = new OpenAI({
@@ -53,6 +53,9 @@ export async function ai (client) {
 
     // Parse usernames with the mentions (userId)
     const processedInput = await replaceMentionsWithNames(input, client)
+
+    // Extraire les IDs des utilisateurs mentionnés dans le message
+    const mentionedUserIds = extractUserIdsFromText(processedInput)
 
     // Ajouter des informations sur l'utilisateur qui a envoyé le message
     let userContext = `[From: ${message.author.globalName || message.author.username} (${message.author.username}#${message.author.discriminator})] `
@@ -105,7 +108,10 @@ export async function ai (client) {
             id: p.id,
             name: p.name,
             message_count: p.messageCount || 1
-          })))
+          }))),
+
+          // Utilisateurs mentionnés dans le message actuel
+          mentioned_users: mentionedUserIds.join(',')
         }
       }
 
@@ -178,7 +184,33 @@ export async function ai (client) {
 
       try {
         await message.channel.sendTyping().catch(console.error)
-        const res = await buildResponse(message.content, message)
+        let res = await buildResponse(message.content, message)
+
+        // Logging de la réponse avant conversion pour débogage
+        console.log('Réponse avant conversion des mentions:', res)
+
+        // Convertir tous les formats de mention en format Discord <@ID>
+        res = convertAITextToDiscordMentions(res)
+
+        // Retirer toute mention du bot lui-même
+        const selfMentionRegex = new RegExp(`<@${process.env.CLIENT_ID}>`, 'g')
+        res = res.replace(selfMentionRegex, 'moi')
+
+        // Vérifier que toutes les mentions sont correctement formatées
+        const allMentionsRegex = /<@(\d+)>/g
+        const validMentions = []
+        let mentionMatch
+
+        while ((mentionMatch = allMentionsRegex.exec(res)) !== null) {
+          // Vérifier que ce n'est pas une mention du bot lui-même
+          if (mentionMatch[1] !== process.env.CLIENT_ID) {
+            validMentions.push(mentionMatch[0])
+          }
+        }
+
+        console.log('Mentions valides détectées:', validMentions)
+        console.log('Réponse après conversion des mentions:', res)
+
         await message.reply(res)
       } catch (error) {
         console.error('Error while building response:', error)
