@@ -13,7 +13,7 @@ export async function help(client, message, args) {
   // si la commande est appelée directement ailleurs
   const rateLimitResult = commandLimiter.check(message.author.id);
   if (rateLimitResult !== true) {
-    message.reply(rateLimitResult);
+    message.reply({ content: rateLimitResult });
     return;
   }
 
@@ -48,5 +48,5 @@ export async function help(client, message, args) {
   helpMessage += '\n**Note:** Les commandes marquées comme "restreintes" ne sont accessibles qu\'aux utilisateurs autorisés.';
 
   // Envoyer le message d'aide
-  message.reply(helpMessage);
+  message.reply({ content: helpMessage });
 }

@@ -12,9 +12,9 @@ export function demo(client, message, args) {
   // si la commande est appelée directement ailleurs
   const rateLimitResult = commandLimiter.check(message.author.id);
   if (rateLimitResult !== true) {
-    message.reply(rateLimitResult);
+    message.reply({ content: rateLimitResult });
     return;
   }
 
-  message.reply('demo');
+  message.reply({ content: 'Voici une démonstration du bot ! 🤖' });
 }

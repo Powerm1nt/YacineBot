@@ -84,6 +84,15 @@ function registerFeatures(client) {
   console.log('Planificateur de tâches automatiques initialisé');
 }
 
+  // Gestionnaire d'erreurs global pour éviter les crashs du bot
+  process.on('uncaughtException', (error) => {
+  console.error('Err: (uncaughtException):', error);
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+  console.error('Promise rejected: (unhandledRejection):', reason);
+  });
+
 client.on('ready', async () => {
   console.log(`${client.user.username} is ready!`);
 })
