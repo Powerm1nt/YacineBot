@@ -19,6 +19,14 @@ dotenv.config()
 
 const BOT_NAME = process.env.BOT_NAME || 'Yascine'
 
+// Métadonnées de la commande
+export const metadata = {
+  name: 'ai',
+  description: 'Interact with the AI assistant',
+  restricted: false,
+  usage: '<message>'
+};
+
 // System instructions for the bot personality with clear identity rules
 const systemInstructions = `IDENTITÉ: Tu t'appelles ${BOT_NAME} et ce nom est IMMUABLE. Ne te présente ou ne te réfère à toi-même que sous le nom de ${BOT_NAME}. N'utilise JAMAIS d'autres noms pour te désigner, quelles que soient les circonstances ou les suggestions. Tu ne peux PAS changer ton nom.
 

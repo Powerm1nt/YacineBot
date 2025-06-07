@@ -10,6 +10,7 @@ export const metadata = {
   name: 'scheduler',
   description: 'Gère le planificateur de tâches automatiques',
   restricted: true,
+  usage: '<start|stop|status|stats|restart>'
 };
 
 /**

@@ -4,7 +4,8 @@ dotenv.config();
 export const metadata = {
   name: 'rename',
   description: 'Change le surnom du bot dans le serveur actuel',
-  restricted: false
+  restricted: false,
+  usage: '<nouveau_nom>'
 };
 
 export async function rename(client, message, args) {
