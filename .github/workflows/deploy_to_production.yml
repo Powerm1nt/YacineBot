@@ -35,7 +35,7 @@ jobs:
           if pm2 list | grep -q "bot"; then
             pm2 reload bot
           else
-            pm2 start yarn --name "bot" -- start
+            pm2 start yarn --name "bot" -- run start
           fi
           pm2 save
 
