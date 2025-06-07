@@ -41,7 +41,8 @@ client.on("messageCreate", async (message) => {
     // Vérifier le rate limit
     const rateLimitResult = commandLimiter.check(message.author.id);
     if (rateLimitResult !== true) {
-      message.reply({ content: rateLimitResult });
+      // DO NOT reply because replying will finally make no sense for a ratelimit
+      // message.reply({ content: rateLimitResult });
       return;
     }
 
