@@ -2,7 +2,7 @@ export class RateLimiter {
   constructor(options = {}) {
     this.options = {
       windowMs: options.windowMs || 30000,
-      maxRequests: options.maxRequests || 5,
+      maxRequests: options.maxRequests || 10,
       message: options.message || ""
     };
 
@@ -32,7 +32,8 @@ export class RateLimiter {
         userData.blocked = false;
         userData.requests = [];
       } else {
-        return this.options.message;
+        // Vérifier si le message n'est pas vide, sinon utiliser un message par défaut
+        return this.options.message || "⚠️ Veuillez attendre avant d'envoyer une autre commande.";
       }
     }
 
@@ -69,11 +70,11 @@ export class RateLimiter {
 export const commandLimiter = new RateLimiter({
   windowMs: 10000,
   maxRequests: 3,
-  message: ""
+  message: "⚠️ Vous utilisez les commandes trop rapidement. Veuillez attendre quelques secondes."
 });
 
 export const aiLimiter = new RateLimiter({
   windowMs: 30000, // 30 secondes
-  maxRequests: 5,
-  message: ""
+  maxRequests: 10,
+  message: "⚠️ Vous interagissez avec l'IA trop rapidement. Veuillez attendre quelques secondes."
 });
