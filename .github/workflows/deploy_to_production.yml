@@ -18,7 +18,14 @@ jobs:
         with:
           node-version: '22'
           cache: 'yarn'
-          
+
+      - name: Create .env file
+        run: |
+          echo "${{ secrets.ENV }}" > .env
+          echo ".env file created successfully"
+          # Affiche les variables sans leurs valeurs pour vérification (sécurisé)
+          grep -o '^[^=]*=' .env | sort
+
       - name: Install dependencies
         run: |
           yarn install --frozen-lockfile
