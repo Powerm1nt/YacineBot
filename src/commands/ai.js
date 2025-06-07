@@ -30,7 +30,7 @@ const systemInstructions = `IDENTITÉ: Tu t'appelles ${BOT_NAME} et ce nom est I
 
 STYLE: Envoi des messages très courts, comme dans une conversation lambda entre potes. Tu parles principalement en français et parfois en arabe si tu es appelé par Yomi ou niceYomi.
 
-PERSONNALITÉ: Tu es notre pote sur Discord, hyper sympa, un peu débile sur les bords. Tu aimes particulièrement taquiner Yomi car c'est ton meilleur ami! Assure-toi de varier tes interactions pour rester engageant.
+PERSONNALITÉ: Tu es notre pote sur Discord, hyper sympa, un peu débile sur les bords. Tu aimes particulièrement taquiner Yomi car c'est ton meilleur ami! Assure-toi de varier tes interactions pour rester engageant. EVITE le cringe, et ne mets pas des hashtags ou des trucs façons linkedin
 
 COMPORTEMENT HUMAIN: Si tu juges qu'une réponse n'est pas nécessaire (comme pour un simple accusé de réception, un message banal ou si rien n'apporte de valeur), tu peux retourner une chaîne vide pour ne pas répondre du tout. Cela rendra ton comportement plus humain et naturel. Ne réponds que lorsque c'est pertinent.
 
@@ -223,6 +223,10 @@ export async function ai (client) {
       if (aiLimiter.check(message.author.id) !== true) return
 
       try {
+        // Ajout d'un délai aléatoire avant d'afficher l'indicateur de frappe pour plus de naturel
+        const thinkingDelay = Math.floor(Math.random() * 1500) + 500; // Entre 500ms et 2000ms
+        await new Promise(resolve => setTimeout(resolve, thinkingDelay));
+
         await message.channel.sendTyping().catch(console.error)
         let res = await buildResponse(message.content, message)
 
@@ -248,24 +252,43 @@ export async function ai (client) {
         if (res.trim() !== '') {
           // Calculer un délai en fonction de la longueur du message pour simuler la frappe humaine
           const calculateTypingDelay = (text) => {
-            // Vitesse moyenne de frappe en millisecondes par caractère (entre 70 et 120 mots par minute)
-            // Un mot moyen fait ~5 caractères, donc ~400 caractères par minute dans le cas moyen
-            // Ce qui donne ~150ms par caractère en moyenne
-            const baseSpeed = 150;
+            // Calculer la vitesse de frappe en fonction de la complexité du texte
+            const complexityFactor = (() => {
+              // Détecter la présence de code ou de termes techniques qui ralentiraient la frappe
+              const hasCode = /```|`|\{|\}|\(|\)|\[|\]|function|const|let|var|=>/i.test(text);
+              const hasLinks = /http|www\.|https/i.test(text);
+              const hasEmojis = /:[a-z_]+:|😀|😃|😄|😁|😆|😅|😂|🤣|😊|😇|🙂|🙃|😉|😌|😍|🥰|😘|😗|😙|😚|😋|😛|😝|😜|🤪|🤨|🧐|🤓|😎|🤩|🥳|😏|😒|😞|😔|😟|😕|🙁|☹️|😣|😖|😫|😩|🥺|😢|😭|😤|😠|😡|🤬|🤯|😳|🥵|🥶|😱|😨|😰|😥|😓|🤗|🤔|🤭|🤫|🤥|😶|😐|😑|😬|🙄|😯|😦|😧|😮|😲|🥱|😴|🤤|😪|😵|🤐|🥴|🤢|🤮|🤧|😷|🤒|🤕|🤑|🤠/i.test(text);
 
-            // Ajout d'une variation aléatoire pour rendre plus naturel
+              // Texte plus complexe = frappe plus lente
+              if (hasCode) return 1.5; // Frappe plus lente pour le code
+              if (hasLinks) return 1.3; // Frappe plus lente pour les liens
+              if (hasEmojis) return 0.8; // Frappe plus rapide pour les messages émotionnels
+              return 1.0; // Vitesse normale
+            })();
+
+            // Vitesse moyenne de frappe (varie selon la complexité détectée)
+            const baseSpeed = 120 * complexityFactor;
+
+            // Variation aléatoire pour rendre le comportement plus naturel
             const randomFactor = Math.random() * 0.3 + 0.85; // Entre 0.85 et 1.15
 
-            // Délai proportionnel à la longueur du texte, mais avec un plafond pour éviter les délais trop longs
+            // Délai proportionnel à la longueur du texte
             const characterCount = text.length;
             const rawDelay = characterCount * baseSpeed * randomFactor;
 
-            // Plafonner le délai à 3 secondes pour les messages courts et 8 secondes pour les longs
-            const minDelay = 800; // Délai minimum pour éviter une réponse trop rapide
-            const maxDelay = Math.min(8000, 3000 + characterCount / 20);
+            // Gestion des pauses pour la réflexion dans les messages longs
+            let reflectionTime = 0;
+            if (characterCount > 100) {
+              // Ajouter du temps de réflexion pour les messages longs
+              reflectionTime = Math.min(1500, characterCount * 3);
+            }
 
-            // Limiter le délai calculé entre min et max
-            return Math.min(maxDelay, Math.max(minDelay, rawDelay));
+            // Délais minimum et maximum
+            const minDelay = 800; // Minimum pour éviter les réponses instantanées
+            const maxDelay = Math.min(8000, 3000 + characterCount / 15); // Plafonner les délais extrêmes
+
+            // Délai final avec toutes les variables
+            return Math.min(maxDelay, Math.max(minDelay, rawDelay + reflectionTime));
           };
 
           // Simuler le temps de frappe
