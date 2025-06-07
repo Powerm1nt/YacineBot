@@ -36,6 +36,16 @@ client.on("messageCreate", async (message) => {
     let args = message.content.split(" ").filter(str => /\w+/.test(str));
     let command = args.shift().replace(prefix, "");
 
+    // Vérifier les permissions pour les commandes restreintes
+    const restrictedCommands = ['mvbio', 'avatar'];
+    if (restrictedCommands.includes(command)) {
+      const { isAuthorized } = await import('./utils/authGuard.js');
+      if (!isAuthorized(message.author.id)) {
+        message.reply('❌ Désolé, vous n\'êtes pas autorisé à utiliser cette commande.');
+        return;
+      }
+    }
+
     try {
       commands[command](message, args);
     } catch(e) {

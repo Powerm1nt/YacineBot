@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 export async function mvbio(client, message, args) {
+
   if (!args || args.length === 0) {
     message.reply('Veuillez spécifier une nouvelle bio. Exemple: f!mvbio En train de jouer à un jeu cool');
     return;

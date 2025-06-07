@@ -4,6 +4,7 @@ import { Buffer } from 'buffer'
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024; // 8 Mo en octets
 
 export async function avatar(client, message, args) {
+
   if (!args || args.length === 0) {
       message.reply('Veuillez spécifier un lien vers une image. Exemples: \n- f!avatar https://exemple.com/image.png (avatar global)\n- f!avatar https://exemple.com/image.png server (avatar de serveur)');
       return;
