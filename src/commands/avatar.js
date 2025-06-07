@@ -19,14 +19,15 @@ export async function avatar(client, message, args) {
 
     const headResponse = await fetch(imageUrl, { method: 'HEAD' });
     if (!headResponse.ok) {
-      return new Error(`Impossible d'accéder à l'image (${headResponse.status}: ${headResponse.statusText})`);
+      throw new Error(`Impossible d'accéder à l'image (${headResponse.status}: ${headResponse.statusText})`);
     }
 
     const contentLength = headResponse.headers.get('content-length');
     if (contentLength) {
       const size = parseInt(contentLength, 10);
+
       if (size > MAX_IMAGE_SIZE) {
-        return new Error(`L'image est trop volumineuse (${(size / (1024 * 1024)).toFixed(2)} Mo). La taille maximale autorisée est de ${MAX_IMAGE_SIZE / (1024 * 1024)} Mo.`);
+        throw new Error(`L'image est trop volumineuse (${(size / (1024 * 1024)).toFixed(2)} Mo). La taille maximale autorisée est de ${MAX_IMAGE_SIZE / (1024 * 1024)} Mo.`);
       }
     } else {
       console.log('Impossible de déterminer la taille de l\'image à partir des en-têtes.');
@@ -36,7 +37,7 @@ export async function avatar(client, message, args) {
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 secondes timeout
 
     try {
-      const response = await fetch(imageUrl, { 
+      const response = await fetch(imageUrl, {
         signal: controller.signal,
         size: MAX_IMAGE_SIZE + 1
       });
@@ -44,12 +45,12 @@ export async function avatar(client, message, args) {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        return new Error(`Impossible de télécharger l'image (${response.status}: ${response.statusText})`);
+        throw new Error(`Impossible de télécharger l'image (${response.status}: ${response.statusText})`);
       }
 
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.startsWith('image/')) {
-        return new Error(`Le lien ne contient pas une image valide (type: ${contentType})`);
+        throw new Error(`Le lien ne contient pas une image valide (type: ${contentType})`);
       }
 
       const validExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
@@ -83,7 +84,7 @@ export async function avatar(client, message, args) {
           extension = mimeExt;
           console.log(`Aucune extension trouvée dans l'URL, utilisation du type MIME: ${contentType} -> ${extension}`);
         } else {
-          return new Error(`Format de fichier non pris en charge. Formats autorisés: ${validExtensions.join(', ')}`);
+          throw new Error(`Format de fichier non pris en charge. Formats autorisés: ${validExtensions.join(', ')}`);
         }
       }
 
@@ -92,14 +93,14 @@ export async function avatar(client, message, args) {
       const totalSize = imageBuffer.length;
 
       if (totalSize > MAX_IMAGE_SIZE) {
-        return new Error(`L'image est trop volumineuse (${(totalSize / (1024 * 1024)).toFixed(2)} Mo). La taille maximale autorisée est de ${MAX_IMAGE_SIZE / (1024 * 1024)} Mo.`);
+        throw new Error(`L'image est trop volumineuse (${(totalSize / (1024 * 1024)).toFixed(2)} Mo). La taille maximale autorisée est de ${MAX_IMAGE_SIZE / (1024 * 1024)} Mo.`);
       }
 
       console.log(`Image téléchargée avec succès. Taille: ${(totalSize / 1024).toFixed(2)} Ko`);
     } catch (error) {
       clearTimeout(timeoutId);
       if (error.name === 'AbortError') {
-        return new Error('Le téléchargement de l\'image a pris trop de temps et a été annulé.');
+        throw new Error('Le téléchargement de l\'image a pris trop de temps et a été annulé.');
       }
       return error;
     }
@@ -110,7 +111,7 @@ export async function avatar(client, message, args) {
       if (isServerAvatar) {
         const botMember = message.guild.members.cache.get(client.user.id);
         if (!botMember) {
-          return new Error('Je n\'ai pas pu trouver mon compte sur ce serveur.');
+          throw new Error('Je n\'ai pas pu trouver mon compte sur ce serveur.');
         }
 
         await botMember.setAvatar(imageBuffer);
