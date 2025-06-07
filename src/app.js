@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { Client } from 'discord.js-selfbot-v13'
 import { demo } from './commands/demo.js'
 import { ai } from './commands/ai.js'
+import { commandLimiter } from './utils/rateLimit.js'
 dotenv.config();
 
 const client = new Client();
@@ -16,6 +17,12 @@ client.on("messageCreate", async (message) => {
   if(message.author.id === client.user.id) return;
 
   if(message.content.startsWith(prefix)) {
+    // Vérifier le rate limit
+    const rateLimitResult = commandLimiter.check(message.author.id);
+    if (rateLimitResult !== true) {
+      return;
+    }
+
     let args = message.content.split(" ").filter(str => /\w+/.test(str));
     let command = args.shift().replace(prefix, "");
 
