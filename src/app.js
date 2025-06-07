@@ -6,9 +6,11 @@ import { avatar } from './commands/avatar.js'
 import { mvbio } from './commands/mvbio.js'
 import { help } from './commands/help.js'
 import { ai } from './commands/ai.js'
+import { scheduler } from './commands/scheduler.js'
 import { commandLimiter } from './utils/rateLimit.js'
 import { isAuthorized } from './utils/authGuard.js'
 import { getCommandMetadata } from './utils/commandUtils.js'
+import { initScheduler } from './services/schedulerService.js'
 dotenv.config();
 
 const BOT_CONFIG = {
@@ -26,6 +28,7 @@ const commands = {
   avatar: async (message, args) => avatar(client, message, args),
   mvbio: async (message, args) => mvbio(client, message, args),
   help: async (message, args) => help(client, message, args),
+  scheduler: async (message, args) => scheduler(client, message, args),
 };
 
 // Liste des commandes disponibles pour l'importation dynamique dans help.js
@@ -75,6 +78,10 @@ if (process.env?.TOKEN === undefined) {
 function registerFeatures(client) {
   ai(client)
   .catch(console.error);
+
+  // Initialiser le planificateur de tâches automatiques
+  initScheduler(client);
+  console.log('Planificateur de tâches automatiques initialisé');
 }
 
 client.on('ready', async () => {

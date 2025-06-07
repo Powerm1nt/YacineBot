@@ -23,8 +23,6 @@ export function logMentionsInfo(text, botId) {
     }
   }
 
-  console.log(`Mentions détectées (${mentions.length}): ${mentions.join(', ')}`)
-
   return {
     count: mentions.length,
     mentions: mentions
