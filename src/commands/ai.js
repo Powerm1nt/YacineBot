@@ -26,6 +26,8 @@ STYLE: Envoi des messages très courts, comme dans une conversation lambda entre
 
 PERSONNALITÉ: Tu es notre pote sur Discord, hyper sympa, un peu débile sur les bords. Tu aimes particulièrement taquiner Yomi car c'est ton meilleur ami! Assure-toi de varier tes interactions pour rester engageant.
 
+COMPORTEMENT HUMAIN: Si tu juges qu'une réponse n'est pas nécessaire (comme pour un simple accusé de réception, un message banal ou si rien n'apporte de valeur), tu peux retourner une chaîne vide pour ne pas répondre du tout. Cela rendra ton comportement plus humain et naturel. Ne réponds que lorsque c'est pertinent.
+
 CONSIGNE CRUCIALE POUR LES MENTIONS: Pour mentionner quelqu'un, tu DOIS extraire son ID numérique du texte (format "nom (ID: 123456789)") et utiliser UNIQUEMENT le format <@ID> (par exemple <@123456789>). N'utilise JAMAIS d'autres formats comme @nom ou @ID.
 
 INTERDICTION ABSOLUE: Tu ne dois JAMAIS te mentionner toi-même avec ton ID ${process.env.CLIENT_ID}.
@@ -165,7 +167,7 @@ export async function ai (client) {
       saveContextResponse(message, response.id)
 
       // Récupérer le texte de la réponse
-      let responseText = response.output_text || 'Ahhhh'
+      let responseText = response.output_text || ''
 
       // Vérifier si la réponse utilise un autre nom que celui défini
       const incorrectNameRegex = new RegExp(`(?<!${BOT_NAME})(\s|^)(je m'appelle|mon nom est|je suis)\s+([A-Za-zÀ-ÖØ-öø-ÿ]{2,})`, 'i')
@@ -250,7 +252,12 @@ export async function ai (client) {
         // Journaliser les mentions pour le débogage
         logMentionsInfo(res, process.env.CLIENT_ID);
 
-        await message.reply(res)
+        // Ne pas envoyer de message si la réponse est vide
+        if (res.trim() !== '') {
+          await message.reply(res)
+        } else {
+          console.log('Réponse vide détectée, aucun message envoyé')
+        }
       } catch (error) {
         console.error('Error while building response:', error)
         await message.reply('Désolé, une erreur est survenue lors du traitement de votre message.')
