@@ -8,25 +8,39 @@ export async function rename(client, message, args) {
   }
 
   try {
+    // Utiliser tous les arguments comme nouveau nom
     const newName = args.join(' ');
 
-    // Change nickname
+    // Créer un message de statut que nous mettrons à jour
+    const statusMessage = await message.reply(`⏳ Traitement de votre demande en cours...`);
+
+    // Changement du surnom dans le serveur si applicable
     if (message.guild) {
       console.log(`Changing bot nickname in server from ${message.member.displayName} to ${newName}...`);
 
       const botMember = message.guild.members.cache.get(client.user.id);
-      if (botMember) {
-        await botMember.setNickname(newName);
-        console.log(`Bot nickname changed to ${botMember.displayName} successfully in server ${message.guild.name}!`);
-        await message.reply(`Mon surnom a été changé en ${newName} dans ce serveur ! 😎`);
-      } else {
-        return new Error('Je n\'ai pas les permissions nécessaires pour changer mon surnom dans ce serveur.');
+      if (!botMember) {
+        throw new Error('Je n\'ai pas pu trouver mon compte sur ce serveur.');
       }
+
+      await botMember.setNickname(newName);
+      console.log(`Surnom du bot changé en ${botMember.displayName} avec succès dans le serveur ${message.guild.name}!`);
     } else {
-      return new Error('Cette commande ne peut être utilisée que dans un serveur, pas en messages privés.');
+      console.log('La commande a été utilisée en messages privés, pas de changement de surnom.');
     }
+
+    // Construire et afficher le message de confirmation
+    const confirmationMessage = `✅ Mon surnom a été changé en "${newName}" dans ce serveur ! 😎`;
+
+    // Mettre à jour le message de statut avec la confirmation
+    await statusMessage.edit(confirmationMessage);
+
   } catch (error) {
-    console.error('Error renaming bot:', error);
-    message.reply(`Désolé, je n'ai pas pu changer mon nom. ${error.message || 'Erreur inconnue'}`);
+    console.error('Erreur lors du changement de surnom:', error);
+    if (statusMessage) {
+      statusMessage.edit(`❌ Désolé, je n'ai pas pu changer mon surnom. ${error.message || 'Erreur inconnue'}`);
+    } else {
+      message.reply(`❌ Désolé, je n'ai pas pu changer mon surnom. ${error.message || 'Erreur inconnue'}`);
+    }
   }
 }
