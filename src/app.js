@@ -49,16 +49,12 @@ client.on("messageCreate", async (message) => {
     let args = message.content.split(" ").filter(str => /\w+/.test(str));
     let command = args.shift().replace(prefix, "");
 
-    // Vérifier si la commande existe
     if (!commands[command]) {
       message.channel.send(`<@${message.author.id}>, cette commande n'existe pas.`);
       return;
     }
 
-    // Charger les métadonnées de la commande
     const metadata = await getCommandMetadata(command);
-
-    // Vérifier l'autorisation avec les métadonnées chargées
     if (!isAuthorized({ metadata }, message.author.id)) {
       message.reply('❌ Désolé, vous n\'êtes pas autorisé à utiliser cette commande.');
       return;
