@@ -1,0 +1,36 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: self-hosted
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+          
+      - name: Install dependencies
+        run: |
+          yarn install --frozen-lockfile
+          
+      - name: Restart PM2 service
+        run: |
+          if pm2 list | grep -q "bot"; then
+            pm2 reload bot
+          else
+            pm2 start yarn --name "bot" -- start
+          fi
+          pm2 save
+
+      - name: Check PM2 status
+        run: pm2 status
