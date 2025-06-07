@@ -1,23 +1,22 @@
 import dotenv from 'dotenv';
 import { Client } from 'discord.js-selfbot-v13'
 import { demo } from './commands/demo.js'
+import { rename } from './commands/rename.js'
 import { ai } from './commands/ai.js'
 import { commandLimiter } from './utils/rateLimit.js'
 dotenv.config();
 
-// Configuration globale du bot
 const BOT_CONFIG = {
-  name: 'Yascine',  // Nom immuable du bot
-  prefix: 'f!'     // Préfixe pour les commandes
+  name: process.env.BOT_NAME || 'Yascine',
+  prefix: process.env.COMMAND_PREFIX || 'f!'
 };
 
 const client = new Client();
-
-// Utiliser le préfixe de la configuration centralisée
 const prefix = BOT_CONFIG.prefix;
 
 const commands = {
   demo: async (message, args) => demo(client, message, args),
+  rename: async (message, args) => rename(client, message, args),
 }
 
 client.on("messageCreate", async (message) => {
