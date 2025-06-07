@@ -29,15 +29,45 @@ jobs:
       - name: Install dependencies
         run: |
           yarn install --frozen-lockfile
-          
-      - name: Restart PM2 service
+
+      - name: Create PM2 ecosystem file
+        run: |
+          cat > ecosystem.config.js << EOF
+          module.exports = {
+            apps: [{
+              name: "bot",
+              script: "yarn",
+              args: "run start",
+              watch: false,
+              autorestart: true,
+              max_restarts: 10,
+              min_uptime: "5s",
+              max_memory_restart: "1G",
+              error_file: "logs/err.log",
+              out_file: "logs/out.log",
+              merge_logs: true,
+              time: true,
+              env: {
+                NODE_ENV: "production"
+              }
+            }]
+          }
+          EOF
+
+      - name: Configure and Start PM2 service
         run: |
           if pm2 list | grep -q "bot"; then
-            pm2 reload bot
-          else
-            pm2 start yarn --name "bot" -- run start
+            pm2 delete bot
           fi
+          pm2 start ecosystem.config.js
+          pm2 startup
           pm2 save
 
-      - name: Check PM2 status
-        run: pm2 status
+      - name: Check PM2 status and logs
+        run: |
+          pm2 status
+          echo "Errors :"
+          tail -n 5 logs/err.log || true
+          echo "Output :"
+          tail -n 5 logs/out.log || true
+
