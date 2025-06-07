@@ -32,7 +32,7 @@ jobs:
 
       - name: Create PM2 ecosystem file
         run: |
-          cat > ecosystem.config.js << EOF
+          cat > ecosystem.config.cjs << EOF
           module.exports = {
             apps: [{
               name: "bot",
@@ -59,7 +59,7 @@ jobs:
           if pm2 list | grep -q "bot"; then
             pm2 delete bot
           fi
-          pm2 start ecosystem.config.js
+          pm2 start ecosystem.config.cjs
           pm2 startup
           pm2 save
 
