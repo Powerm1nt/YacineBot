@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { Client } from 'discord.js-selfbot-v13'
 import { demo } from './commands/demo.js'
 import { rename } from './commands/rename.js'
+import { avatar } from './commands/avatar.js'
 import { ai } from './commands/ai.js'
 import { commandLimiter } from './utils/rateLimit.js'
 dotenv.config();
@@ -17,6 +18,7 @@ const prefix = BOT_CONFIG.prefix;
 const commands = {
   demo: async (message, args) => demo(client, message, args),
   rename: async (message, args) => rename(client, message, args),
+  avatar: async (message, args) => avatar(client, message, args),
 }
 
 client.on("messageCreate", async (message) => {
