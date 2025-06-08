@@ -16,6 +16,7 @@ import { commandLimiter } from './utils/rateLimit.js'
 import { isAuthorized } from './utils/authGuard.js'
 import { getCommandMetadata } from './utils/commandUtils.js'
 import { initScheduler } from './services/schedulerService.js'
+import { morpion } from './commands/morpion.js'
 dotenv.config();
 
 const BOT_CONFIG = {
@@ -39,6 +40,7 @@ const commands = {
   kick: async (message, args) => kick(client, message, args),
   timeout: async (message, args) => timeout(client, message, args),
   warn: async (message, args) => warn(client, message, args),
+  morpion: async (message, args) => morpion(client, message, args),
 };
 
 // Liste des commandes disponibles pour l'importation dynamique dans help.js
