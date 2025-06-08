@@ -13,6 +13,7 @@ import {
   resetContext,
   getLastResponseId,
 } from '../utils/contextManager.js'
+import { conversationService } from '../services/conversationService.js'
 
 import dotenv from 'dotenv'
 dotenv.config()
@@ -54,8 +55,8 @@ export async function ai (client) {
     console.log(`Processing message for ${message.author.id}...`)
 
     const context = getContextKey(message)
-    const contextData = getContextData(message)
-    const lastResponseId = getLastResponseId(message)
+    const contextData = await getContextData(message)
+    const lastResponseId = await getLastResponseId(message)
 
     console.log(`Using context type: ${context.type}, key: ${context.key}, has previous conversation: ${lastResponseId !== null}`)
     let contextInfo = ''
@@ -158,7 +159,23 @@ export async function ai (client) {
       const response = await ai.responses.create(responseParams)
 
       // Enregistrer l'ID de réponse dans le contexte
-      saveContextResponse(message, response.id)
+      await saveContextResponse(message, response.id)
+
+      // Enregistrer également la réponse du bot dans la base de données
+      const guildId = message.guild?.id || null
+      const channelId = context.key
+      try {
+        await conversationService.addMessage(
+          channelId,
+          client.user.id,
+          BOT_NAME,
+          response.output_text || '',
+          true, // isBot=true car c'est la réponse du bot
+          guildId
+        )
+      } catch (error) {
+        console.error('Erreur lors de l\'enregistrement de la réponse dans la base de données:', error)
+      }
 
       // Récupérer le texte de la réponse
       let responseText = response.output_text || ''
@@ -196,7 +213,7 @@ export async function ai (client) {
       const messageContentLower = message.content.toLowerCase()
       if (messageContentLower.includes('reset conversation')) {
         try {
-          resetContext(message)
+          await resetContext(message)
           await message.reply('Conversation réinitialisée ! 🔄')
         } catch (error) {
           console.error('Error while resetting conversation:', error)

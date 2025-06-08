@@ -19,18 +19,22 @@ import { getCommandMetadata } from './utils/commandUtils.js'
 import { initScheduler } from './services/schedulerService.js'
 import { morpion } from './commands/morpion.js'
 import { moignon } from './commands/moignon.js'
+import { SUPABASE_CONFIG, DATABASE_CONFIG, validateDatabaseConfig, validateSupabaseConfig } from './config/database.js'
+import { prisma } from './models/index.js'
 dotenv.config();
 
-// Initialisation de Supabase
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error('Les informations de connexion Supabase sont manquantes dans le fichier .env');
+// Vérification de la configuration de la base de données
+if (!validateDatabaseConfig()) {
+  console.error('La configuration de la base de données est incomplète. Vérifiez votre fichier .env');
   process.exit(1);
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Initialisation de Supabase pour la compatibilité avec l'ancien code
+if (!validateSupabaseConfig()) {
+  console.warn('La configuration Supabase est incomplète. Certaines fonctionnalités pourraient ne pas fonctionner.');
+}
+
+export const supabase = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.key);
 
 const BOT_CONFIG = {
   name: process.env.BOT_NAME || 'Yascine',

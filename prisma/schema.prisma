@@ -6,46 +6,77 @@ generator client {
 }
 
 datasource db {
-  provider      = "postgresql"
-  url           = env("DATABASE_URL")
-  directUrl     = env("DIRECT_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Conversation {
-  id        BigInt   @id @default(autoincrement())
-  userId    String   @unique @map("user_id")
-  messages  Json     @default("[]")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @map("updated_at")
+  id        BigInt    @id @default(autoincrement())
+  guildId   String?   @map("guild_id")
+  channelId String    @map("channel_id")
+  messages  Message[]
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @map("updated_at")
 
+  @@unique([channelId, guildId])
   @@map("conversations")
-  @@index([userId], name: "conversations_user_id_idx")
 }
 
-model UserPreference {
+model Message {
+  id             BigInt       @id @default(autoincrement())
+  conversationId BigInt       @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String       @map("user_id")
+  userName       String       @map("user_name")
+  content        String
+  isBot          Boolean      @default(false) @map("is_bot")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@map("messages")
+}
+
+model GuildPreference {
   id             BigInt   @id @default(autoincrement())
-  userId         String   @unique @map("user_id")
-  responseType   String?  @default("standard") @map("response_type")
+  guildId        String   @unique @map("guild_id")
+  responseType   String?  @map("response_type")
   language       String?  @default("fr")
   notifications  Boolean  @default(true)
-  customSettings Json     @default("{}") @map("custom_settings")
+  customSettings Json?    @map("custom_settings")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @map("updated_at")
 
-  @@map("user_preferences")
-  @@index([userId], name: "user_preferences_user_id_idx")
+  @@map("guild_preferences")
+}
+
+model Task {
+  id          BigInt    @id @default(autoincrement())
+  type        String
+  status      String    @default("pending")
+  data        Json
+  priority    Int       @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @map("updated_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  failedAt    DateTime? @map("failed_at")
+  error       String?
+  retryCount  Int       @default(0) @map("retry_count")
+  nextRetryAt DateTime? @map("next_retry_at")
+
+  @@map("tasks")
 }
 
 model UsageStat {
-  id         BigInt   @id @default(autoincrement())
-  userId     String   @map("user_id")
+  id          BigInt   @id @default(autoincrement())
+  userId      String   @map("user_id")
   commandType String   @map("command_type")
-  tokensUsed Int      @default(0) @map("tokens_used")
-  usedAt     DateTime @default(now()) @map("used_at")
+  tokensUsed  Int      @default(0) @map("tokens_used")
+  usedAt      DateTime @default(now()) @map("used_at")
 
-  @@map("usage_stats")
   @@index([userId], name: "usage_stats_user_id_idx")
   @@index([usedAt], name: "usage_stats_used_at_idx")
+  @@map("usage_stats")
 }
 
 model HealthCheck {

@@ -1,9 +1,12 @@
 /**
  * Gestionnaire de contexte pour les conversations par serveur/canal/DM
+ * Intégration avec Prisma pour la persistance des données
  */
 import { getContextKey } from './commandUtils.js';
+import { prisma } from '../models/index.js';
+import { conversationService } from '../services/conversationService.js';
 
-// Séparation des contextes par type de conversation
+// Cache en mémoire pour les performances
 const guildConversations = new Map() // Conversations de serveurs
 const dmConversations = new Map()     // Conversations privées (DM)
 const groupConversations = new Map()  // Conversations de groupe
@@ -46,44 +49,123 @@ setInterval(() => {
  * @param {Object} message - Message Discord
  * @returns {Object} - Données de contexte
  */
-export function getContextData(message) {
+export async function getContextData(message) {
   const context = getContextKey(message)
+  let contextData = null;
 
-  // Sélectionner le stockage approprié selon le type de contexte
+  // Vérifier d'abord le cache en mémoire pour des performances optimales
   switch (context.type) {
     case 'guild':
-      return guildConversations.get(context.key) || {}
+      contextData = guildConversations.get(context.key);
+      break;
     case 'dm':
-      return dmConversations.get(context.key) || {}
+      contextData = dmConversations.get(context.key);
+      break;
     case 'group':
-      return groupConversations.get(context.key) || {}
-    default:
-      return {}
+      contextData = groupConversations.get(context.key);
+      break;
   }
+
+  // Si les données sont en cache, les retourner immédiatement
+  if (contextData) {
+    return contextData;
+  }
+
+  // Sinon, tenter de récupérer depuis la base de données
+  try {
+    const guildId = context.type === 'guild' ? message.guild?.id : null;
+    const channelId = context.key;
+
+    // Récupérer les messages récents
+    const recentMessages = await conversationService.getRecentMessages(channelId, guildId, 10);
+
+    if (recentMessages.length > 0) {
+      // Créer un objet contextData à partir des messages de la base de données
+      const lastMessage = recentMessages[0]; // Le plus récent en premier
+
+      // Construire la liste des participants à partir des messages
+      const participants = [];
+      const participantMap = new Map();
+
+      recentMessages.forEach(msg => {
+        if (!participantMap.has(msg.userId)) {
+          participantMap.set(msg.userId, {
+            id: msg.userId,
+            name: msg.userName,
+            messageCount: 1,
+            firstSeen: msg.createdAt.toISOString(),
+            lastActive: msg.createdAt.toISOString()
+          });
+        } else {
+          const participant = participantMap.get(msg.userId);
+          participant.messageCount += 1;
+
+          // Mettre à jour lastActive si ce message est plus récent
+          if (new Date(msg.createdAt) > new Date(participant.lastActive)) {
+            participant.lastActive = msg.createdAt.toISOString();
+          }
+        }
+      });
+
+      // Convertir la Map en tableau pour les participants
+      participantMap.forEach(participant => {
+        participants.push(participant);
+      });
+
+      contextData = {
+        lastResponseId: lastMessage.isBot ? lastMessage.id : null,
+        lastMessageTimestamp: lastMessage.createdAt.toISOString(),
+        lastAuthorId: lastMessage.userId,
+        lastAuthorName: lastMessage.userName,
+        participants: participants
+      };
+
+      // Mettre en cache pour les prochaines requêtes
+      switch (context.type) {
+        case 'guild':
+          guildConversations.set(context.key, contextData);
+          break;
+        case 'dm':
+          dmConversations.set(context.key, contextData);
+          break;
+        case 'group':
+          groupConversations.set(context.key, contextData);
+          break;
+      }
+
+      return contextData;
+    }
+  } catch (error) {
+    console.error('Erreur lors de la récupération du contexte depuis la base de données:', error);
+  }
+
+  // Si rien n'est trouvé ou en cas d'erreur, retourner un objet vide
+  return {};
 }
 
 /**
- * Stocke l'ID de réponse pour un contexte spécifique
+ * Stocke l'ID de réponse pour un contexte spécifique et persiste dans la base de données
  * @param {Object} message - Message Discord
  * @param {string} responseId - ID de réponse OpenAI
  * @returns {boolean} - Succès
  */
-export function saveContextResponse(message, responseId) {
+export async function saveContextResponse(message, responseId) {
   if (!message || !responseId) {
     console.error('Invalid parameters for saveContextResponse')
     return false
   }
 
   const context = getContextKey(message)
+  const authorName = message.author.globalName || message.author.username;
   const contextData = {
     lastResponseId: responseId,
     lastMessageTimestamp: new Date().toISOString(),
     lastAuthorId: message.author.id,
-    lastAuthorName: message.author.globalName || message.author.username,
-    participants: getParticipants(context, message.author.id, message.author.globalName || message.author.username)
+    lastAuthorName: authorName,
+    participants: await getParticipants(context, message.author.id, authorName)
   }
 
-  // Vérifier si c'est un nouveau contexte
+  // Vérifier si c'est un nouveau contexte en mémoire
   let isNewContext = false;
   switch (context.type) {
     case 'guild':
@@ -102,27 +184,48 @@ export function saveContextResponse(message, responseId) {
       return false;
   }
 
-  // Mettre à jour les statistiques si c'est un nouveau contexte
-  if (isNewContext) {
-    contextStats.totalContextsCreated++;
+  // Sauvegarder dans la base de données
+  try {
+    const guildId = context.type === 'guild' ? message.guild?.id : null;
+    const channelId = context.key;
 
-    // Vérifier si le nombre de contextes dépasse les limites
-    const currentSize = {
-      guild: guildConversations.size,
-      dm: dmConversations.size,
-      group: groupConversations.size
-    };
-
-    const maxSize = CLEANUP_CONFIG.maxContexts[context.type];
-    if (currentSize[context.type] > maxSize * 0.9) { // À 90% de la capacité, lancer un nettoyage préventif
-      console.log(`Nettoyage préventif des contextes ${context.type}: ${currentSize[context.type]}/${maxSize}`);
-      cleanupOldContexts();
+    // Stocker la réponse du bot comme un message
+    if (message.content) {
+      await conversationService.addMessage(
+        channelId,
+        message.author.id,
+        authorName,
+        message.content,
+        false, // isBot=false car c'est le message de l'utilisateur
+        guildId
+      );
     }
-  }
 
-  updateContextStats();
-  console.log(`Stored response ID ${responseId} for ${context.type} context ${context.key}`)
-  return true
+    // Mettre à jour les statistiques si c'est un nouveau contexte
+    if (isNewContext) {
+      contextStats.totalContextsCreated++;
+
+      // Vérifier si le nombre de contextes dépasse les limites
+      const currentSize = {
+        guild: guildConversations.size,
+        dm: dmConversations.size,
+        group: groupConversations.size
+      };
+
+      const maxSize = CLEANUP_CONFIG.maxContexts[context.type];
+      if (currentSize[context.type] > maxSize * 0.9) { // À 90% de la capacité, lancer un nettoyage préventif
+        console.log(`Nettoyage préventif des contextes ${context.type}: ${currentSize[context.type]}/${maxSize}`);
+        await cleanupOldContexts();
+      }
+    }
+
+    updateContextStats();
+    console.log(`Stored response ID ${responseId} for ${context.type} context ${context.key}`)
+    return true;
+  } catch (error) {
+    console.error('Erreur lors de la sauvegarde du contexte dans la base de données:', error);
+    return false;
+  }
 }
 
 /**
@@ -130,9 +233,9 @@ export function saveContextResponse(message, responseId) {
  * @param {Object} context - Objet de contexte avec type et clé
  * @param {string} userId - ID de l'utilisateur
  * @param {string} userName - Nom de l'utilisateur
- * @returns {Array} - Liste mise à jour des participants
+ * @returns {Promise<Array>} - Liste mise à jour des participants
  */
-function getParticipants(context, userId, userName) {
+async function getParticipants(context, userId, userName) {
   let contextData = {}
 
   // Récupérer les données de contexte selon le type
@@ -156,16 +259,16 @@ function getParticipants(context, userId, userName) {
   if (existingIndex >= 0) {
     // Mettre à jour les informations de l'utilisateur existant
     const existing = participants[existingIndex]
-      // Supprimer l'entrée existante
-      participants.splice(existingIndex, 1)
+    // Supprimer l'entrée existante
+    participants.splice(existingIndex, 1)
 
-      // Ajouter l'utilisateur mis à jour au début de la liste
-      participants.unshift({
-        ...existing,
-        name: userName,  // Mettre à jour le nom au cas où il aurait changé
-        messageCount: (existing.messageCount || 0) + 1,
-        lastActive: new Date().toISOString()
-      })
+    // Ajouter l'utilisateur mis à jour au début de la liste
+    participants.unshift({
+      ...existing,
+      name: userName,  // Mettre à jour le nom au cas où il aurait changé
+      messageCount: (existing.messageCount || 0) + 1,
+      lastActive: new Date().toISOString()
+    })
   } else {
     // Ajouter l'utilisateur au début de la liste
     participants.unshift({
@@ -182,11 +285,11 @@ function getParticipants(context, userId, userName) {
 }
 
 /**
- * Réinitialise le contexte pour un message
+ * Réinitialise le contexte pour un message et supprime les conversations dans la base de données
  * @param {Object} message - Message Discord
- * @returns {boolean} - Succès
+ * @returns {Promise<boolean>} - Succès
  */
-export function resetContext(message) {
+export async function resetContext(message) {
   if (!message) {
     console.error('Invalid message object passed to resetContext')
     return false
@@ -194,7 +297,7 @@ export function resetContext(message) {
 
   const context = getContextKey(message)
 
-  // Supprimer le contexte du stockage approprié
+  // Supprimer le contexte du stockage en mémoire
   switch (context.type) {
     case 'guild':
       guildConversations.delete(context.key)
@@ -209,17 +312,25 @@ export function resetContext(message) {
       return false
   }
 
-  console.log(`Reset context for ${context.type} context ${context.key}`)
-  return true
+  // Supprimer également de la base de données
+  try {
+    const guildId = context.type === 'guild' ? message.guild?.id : null;
+    await conversationService.deleteConversationHistory(context.key, guildId);
+    console.log(`Reset context for ${context.type} context ${context.key} (database cleared)`)
+    return true;
+  } catch (error) {
+    console.error(`Error resetting context in database for ${context.type} ${context.key}:`, error);
+    return false;
+  }
 }
 
 /**
  * Récupère l'ID de la dernière réponse pour un message
  * @param {Object} message - Message Discord
- * @returns {string|null} - ID de la dernière réponse ou null
+ * @returns {Promise<string|null>} - ID de la dernière réponse ou null
  */
-export function getLastResponseId(message) {
-  const contextData = getContextData(message)
+export async function getLastResponseId(message) {
+  const contextData = await getContextData(message)
   return contextData.lastResponseId || null
 }
 
@@ -279,9 +390,9 @@ export function getContextStats() {
 
 /**
  * Nettoie les contextes inactifs et limite la taille totale des caches
- * @returns {number} - Nombre de contextes nettoyés
+ * @returns {Promise<number>} - Nombre de contextes nettoyés
  */
-export function cleanupOldContexts() {
+export async function cleanupOldContexts() {
   let cleanCount = 0
   const now = new Date()
   const inactivityThreshold = CLEANUP_CONFIG.inactivityThreshold || 24;
@@ -326,14 +437,41 @@ export function cleanupOldContexts() {
       });
     }
 
-    console.log(`Nettoyage de ${count} contextes de conversation ${type} (inactifs: ${inactiveEntries.length}, taille: ${storage.size}/${maxAllowed})`);
+    console.log(`Nettoyage de ${count} contextes de conversation ${type} en mémoire (inactifs: ${inactiveEntries.length}, taille: ${storage.size}/${maxAllowed})`);
     return count;
   };
 
-  // Nettoyer chaque type de stockage séparément
+  // Nettoyer chaque type de stockage en mémoire séparément
   cleanCount += cleanupStorage(guildConversations, 'guild');
   cleanCount += cleanupStorage(dmConversations, 'dm');
   cleanCount += cleanupStorage(groupConversations, 'group');
+
+  // Nettoyer également les anciennes conversations dans la base de données
+  try {
+    // Récupérer et supprimer les conversations inactives depuis plus de 'inactivityThreshold' heures
+    const oldConversations = await prisma.conversation.findMany({
+      where: {
+        updatedAt: {
+          lt: inactivityDate
+        }
+      }
+    });
+
+    if (oldConversations.length > 0) {
+      await prisma.conversation.deleteMany({
+        where: {
+          id: {
+            in: oldConversations.map(conv => conv.id)
+          }
+        }
+      });
+
+      console.log(`Nettoyage de ${oldConversations.length} conversations anciennes dans la base de données`);
+      cleanCount += oldConversations.length;
+    }
+  } catch (error) {
+    console.error('Erreur lors du nettoyage des conversations dans la base de données:', error);
+  }
 
   contextStats.totalContextsCleanedUp += cleanCount;
   updateContextStats();

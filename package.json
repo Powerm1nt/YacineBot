@@ -1,14 +1,23 @@
 {
-  "name": "Autism",
+  "name": "niceyomi-bot",
   "version": "1.0.0",
+  "description": "Un bot Discord qui utilise l'API OpenAI avec Supabase et Prisma pour la persistance des données",
+  "main": "src/app.js",
   "type": "module",
-  "module": "src/app.js",
-  "packageManager": "yarn@4.6.0",
+  "packageManager": "yarn@1.22.22",
   "scripts": {
     "start": "node src/app.js",
-    "dev": "nodemon src/app.js"
+    "dev": "nodemon src/app.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy",
+    "prisma:studio": "prisma studio",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "author": "",
+  "license": "ISC",
   "dependencies": {
+    "@prisma/client": "6.9.0",
+    "@supabase/supabase-js": "^2.39.8",
     "date-fns": "^4.1.0",
     "discord.js-selfbot-v13": "^3.6.1",
     "dotenv": "^16.5.0",
@@ -17,6 +26,7 @@
     "toad-scheduler": "^3.1.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "prisma": "6.9.0"
   }
 }
