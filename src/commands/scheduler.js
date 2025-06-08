@@ -2,15 +2,16 @@ import { stopScheduler, initScheduler, getSchedulerStatus, getNextChannel, getTa
 
 // Importer la fonction formatDelay depuis schedulerService.js
 import { formatDelay } from '../services/schedulerService.js';
-// Importer les fonctions depuis messageUtils.js
 import { sendLongMessage, checkAndRegenerateTasks } from '../utils/messageUtils.js';
+import { handleConfigCommand } from '../utils/configHandler.js';
+
 
 // Métadonnées de la commande
 export const metadata = {
   name: 'scheduler',
   description: 'Gère le planificateur de tâches automatiques',
   restricted: true,
-  usage: '<start|stop|status|stats|restart>'
+  usage: '<start|stop|status|stats|restart|config>'
 };
 
 /**
@@ -21,7 +22,7 @@ export const metadata = {
  */
 export async function scheduler(client, message, args) {
   if (!args.length) {
-    message.reply('❌ Utilisation : scheduler <start|stop|status|stats>');
+    message.reply('❌ Utilisation : scheduler <start|stop|status|stats|restart|config>');
     return;
   }
 
@@ -228,7 +229,16 @@ export async function scheduler(client, message, args) {
       }
       break;
 
+    case 'config':
+      try {
+        await handleConfigCommand(client, message, args.slice(1));
+      } catch (error) {
+        console.error('Erreur lors de la configuration:', error);
+        message.channel.send('❌ Une erreur est survenue lors de la configuration.');
+      }
+      break;
+
     default:
-      message.reply('❌ Action non reconnue. Utilisez start, stop, restart ou status.');
+      message.reply('❌ Action non reconnue. Utilisez start, stop, restart, status, stats ou config.');
   }
 }

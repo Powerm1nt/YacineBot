@@ -7,6 +7,7 @@ import { mvbio } from './commands/mvbio.js'
 import { help } from './commands/help.js'
 import { ai } from './commands/ai.js'
 import { scheduler } from './commands/scheduler.js'
+import { status } from './commands/status.js'
 import { ban } from './commands/ban.js'
 import { kick } from './commands/kick.js'
 import { timeout } from './commands/timeout.js'
@@ -33,6 +34,7 @@ const commands = {
   mvbio: async (message, args) => mvbio(client, message, args),
   help: async (message, args) => help(client, message, args),
   scheduler: async (message, args) => scheduler(client, message, args),
+  status: async (message, args) => status(client, message, args),
   ban: async (message, args) => ban(client, message, args),
   kick: async (message, args) => kick(client, message, args),
   timeout: async (message, args) => timeout(client, message, args),

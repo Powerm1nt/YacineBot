@@ -4,6 +4,7 @@ import { convertAITextToDiscordMentions } from '../utils/mentionUtils.js'
 import { format, addMinutes, getHours } from 'date-fns'
 import dotenv from 'dotenv'
 import { randomUUID } from 'crypto'
+import { isGuildEnabled, isChannelTypeEnabled, getSchedulerConfig } from '../utils/configManager.js'
 
 dotenv.config()
 
@@ -114,17 +115,28 @@ async function generateRandomQuestion () {
  * @returns {Object|null} - Canal sélectionné ou null
  */
 function selectRandomChannel(client, channelType = null) {
-  // Si aucun type spécifié, choisir aléatoirement
-  if (!channelType) {
-    // Priorisation: 70% serveurs, 20% MPs, 10% groupes
-    const rand = Math.random();
-    if (rand < 0.7) {
-      channelType = CHANNEL_TYPES.GUILD;
-    } else if (rand < 0.9) {
-      channelType = CHANNEL_TYPES.DM;
-    } else {
-      channelType = CHANNEL_TYPES.GROUP;
+  // Obtenir les types de canaux activés
+  const enabledTypes = [];
+
+  if (isChannelTypeEnabled(CHANNEL_TYPES.GUILD)) enabledTypes.push(CHANNEL_TYPES.GUILD);
+  if (isChannelTypeEnabled(CHANNEL_TYPES.DM)) enabledTypes.push(CHANNEL_TYPES.DM);
+  if (isChannelTypeEnabled(CHANNEL_TYPES.GROUP)) enabledTypes.push(CHANNEL_TYPES.GROUP);
+
+  // Si aucun type n'est activé, retourner null
+  if (enabledTypes.length === 0) {
+    console.log('Aucun type de canal n\'est activé dans la configuration');
+    return null;
+  }
+
+  // Si un type spécifique est demandé, vérifier s'il est activé
+  if (channelType) {
+    if (!isChannelTypeEnabled(channelType)) {
+      console.log(`Le type de canal ${channelType} est désactivé dans la configuration`);
+      return null;
     }
+  } else {
+    // Si aucun type spécifié, choisir aléatoirement parmi les types activés
+    channelType = enabledTypes[Math.floor(Math.random() * enabledTypes.length)];
   }
 
   // En fonction du type de canal
@@ -148,10 +160,12 @@ function selectRandomChannel(client, channelType = null) {
  */
 function selectRandomGuildChannel(client) {
   // Récupérer tous les serveurs où le bot est présent
-  const guilds = Array.from(client.guilds.cache.values());
+  const guilds = Array.from(client.guilds.cache.values())
+    // Filtrer pour ne garder que les serveurs activés dans la configuration
+    .filter(guild => isGuildEnabled(guild.id));
 
   if (guilds.length === 0) {
-    console.log('Aucun serveur disponible');
+    console.log('Aucun serveur disponible ou activé dans la configuration');
     return null;
   }
 
@@ -451,6 +465,20 @@ export function getNextChannel(client) {
     console.error('Erreur lors de la prévisualisation du canal:', error);
     return null;
   }
+}
+
+/**
+ * Récupère la configuration complète des canaux
+ * @returns {Object} - Configuration des canaux
+ */
+export function getChannelConfig() {
+  return {
+    channelTypes: {
+      guild: isChannelTypeEnabled(CHANNEL_TYPES.GUILD),
+      dm: isChannelTypeEnabled(CHANNEL_TYPES.DM),
+      group: isChannelTypeEnabled(CHANNEL_TYPES.GROUP)
+    }
+  };
 }
 
 /**
