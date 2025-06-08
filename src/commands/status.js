@@ -3,7 +3,7 @@ import { commandLimiter } from '../utils/rateLimit.js';
 export const metadata = {
   name: 'status',
   description: 'Affiche le statut du bot et des informations système',
-  restricted: true,
+  restricted: false,
   usage: '[détail]'
 };
 
