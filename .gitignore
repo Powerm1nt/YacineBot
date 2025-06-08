@@ -13,3 +13,4 @@
 .pnp.*
 .env
 /.idea/
+/node_modules/
