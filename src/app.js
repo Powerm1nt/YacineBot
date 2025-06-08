@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { Client } from 'discord.js-selfbot-v13'
+import { createClient } from '@supabase/supabase-js'
 import { demo } from './commands/demo.js'
 import { rename } from './commands/rename.js'
 import { avatar } from './commands/avatar.js'
@@ -19,6 +20,17 @@ import { initScheduler } from './services/schedulerService.js'
 import { morpion } from './commands/morpion.js'
 import { moignon } from './commands/moignon.js'
 dotenv.config();
+
+// Initialisation de Supabase
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('Les informations de connexion Supabase sont manquantes dans le fichier .env');
+  process.exit(1);
+}
+
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
 const BOT_CONFIG = {
   name: process.env.BOT_NAME || 'Yascine',
@@ -84,7 +96,25 @@ if (process.env?.TOKEN === undefined) {
   throw new Error('Token not found');
 }
 
+async function testSupabaseConnection() {
+  try {
+    const { data, error } = await supabase.from('health_check').select('*').limit(1);
+    if (error) throw error;
+    console.log('Connexion à Supabase établie avec succès');
+  } catch (error) {
+    console.warn('Avertissement: Connexion à Supabase échouée, vérifiez vos identifiants et la table health_check:', error.message);
+    // Ne pas quitter le processus pour permettre l'exécution même sans Supabase fonctionnel
+  }
+}
+
 function registerFeatures(client) {
+  // Tester la connexion à Supabase
+  testSupabaseConnection()
+    .catch(e => {
+      console.error(e);
+      process.exit(1);
+    });
+
   ai(client)
   .catch(console.error);
 
@@ -109,4 +139,3 @@ client.on('ready', async () => {
 client.login(process.env.TOKEN)
   .then(() => registerFeatures(client))
   .catch(console.error);
-

@@ -1,0 +1,57 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider      = "postgresql"
+  url           = env("DATABASE_URL")
+  directUrl     = env("DIRECT_URL")
+}
+
+model Conversation {
+  id        BigInt   @id @default(autoincrement())
+  userId    String   @unique @map("user_id")
+  messages  Json     @default("[]")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("conversations")
+  @@index([userId], name: "conversations_user_id_idx")
+}
+
+model UserPreference {
+  id             BigInt   @id @default(autoincrement())
+  userId         String   @unique @map("user_id")
+  responseType   String?  @default("standard") @map("response_type")
+  language       String?  @default("fr")
+  notifications  Boolean  @default(true)
+  customSettings Json     @default("{}") @map("custom_settings")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @map("updated_at")
+
+  @@map("user_preferences")
+  @@index([userId], name: "user_preferences_user_id_idx")
+}
+
+model UsageStat {
+  id         BigInt   @id @default(autoincrement())
+  userId     String   @map("user_id")
+  commandType String   @map("command_type")
+  tokensUsed Int      @default(0) @map("tokens_used")
+  usedAt     DateTime @default(now()) @map("used_at")
+
+  @@map("usage_stats")
+  @@index([userId], name: "usage_stats_user_id_idx")
+  @@index([usedAt], name: "usage_stats_used_at_idx")
+}
+
+model HealthCheck {
+  id          BigInt   @id @default(autoincrement())
+  status      String   @default("ok")
+  lastChecked DateTime @default(now()) @map("last_checked")
+
+  @@map("health_check")
+}
