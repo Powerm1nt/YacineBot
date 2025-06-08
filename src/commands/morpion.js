@@ -1,3 +1,5 @@
+import { convertAITextToDiscordMentions } from '../utils/mentionUtils.js';
+
 export const metadata = {
   name: 'morpion',
   description: 'Jouer une partie de morpion contre un autre joueur',
@@ -5,7 +7,6 @@ export const metadata = {
   usage: 'morpion <@mention_adversaire> [taille]'
 };
 
-// Structure pour stocker les parties en cours
 const activeGames = new Map();
 
 // Symboles utilisés pour le jeu
@@ -172,9 +173,9 @@ function createGameMessage(game, client, status) {
   const currentPlayer = client.users.cache.get(game.currentPlayer);
 
   let message = `**Morpion ${game.size}x${game.size}**\n\n`;
-  message += `@${player1.username} (${PLAYER_X}) VS @${player2.username} (${PLAYER_O})\n\n`;
+  message += `<@${player1.id}> (${PLAYER_X}) VS <@${player2.id}> (${PLAYER_O})\n\n`;
   message += renderBoard(game.board);
-  message += `\nC'est au tour de @${currentPlayer.username} (${game.playerSymbols[game.currentPlayer]})\n`;
+  message += `\nC'est au tour de <@${currentPlayer.id}> (${game.playerSymbols[game.currentPlayer]})\n`;
   message += `Tapez un chiffre de 1 à ${game.size} pour jouer.\n`;
   message += `Alignez ${game.winCondition} symboles pour gagner.\n`;
 
@@ -182,7 +183,8 @@ function createGameMessage(game, client, status) {
     message += `\n${status}\n`;
   }
 
-  return message;
+  // Assurer que toutes les mentions sont au format Discord correct
+  return convertAITextToDiscordMentions(message);
 }
 
 export async function morpion(client, message, args) {
@@ -218,7 +220,7 @@ export async function morpion(client, message, args) {
   if (Array.from(activeGames.values()).some(game =>
       game.players.includes(opponent.id) &&
       game.state !== GAME_STATES.FINISHED)) {
-    message.reply({ content: `${opponent.username} a déjà une partie en cours !` });
+    message.reply({ content: `<@${opponent.id}> a déjà une partie en cours !` });
     return;
   }
 
@@ -261,7 +263,7 @@ export async function morpion(client, message, args) {
   activeGames.set(gameId, game);
 
   // Créer et envoyer le message initial
-  const initialMessage = createGameMessage(game, client);
+  const initialMessage = createGameMessage(game, client, null);
   const gameMessage = await message.channel.send({ content: initialMessage });
 
   // Créer un collecteur de messages pour cette partie
@@ -313,7 +315,7 @@ export async function morpion(client, message, args) {
       game.state = GAME_STATES.FINISHED;
       game.winner = m.author.id;
       
-      const winStatus = `🎉 **${m.author.username}** a gagné la partie ! 🎉`;
+      const winStatus = `🎉 <@${m.author.id}> a gagné la partie ! 🎉`;
       const winMessage = createGameMessage(game, client, winStatus);
 
       message.channel.send({ content: winMessage });
@@ -330,7 +332,7 @@ export async function morpion(client, message, args) {
       // Changer de joueur
       game.currentPlayer = game.players.find(id => id !== m.author.id);
 
-      const turnMessage = createGameMessage(game, client);
+      const turnMessage = createGameMessage(game, client, null);
       message.channel.send({ content: turnMessage });
     }
   });
