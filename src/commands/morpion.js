@@ -1,10 +1,8 @@
-import { commandLimiter } from '../utils/rateLimit.js';
-
 export const metadata = {
   name: 'morpion',
   description: 'Jouer une partie de morpion contre un autre joueur',
   restricted: false,
-  usage: 'morpion <@mention_adversaire>'
+  usage: 'morpion <@mention_adversaire> [taille]'
 };
 
 // Structure pour stocker les parties en cours
@@ -22,44 +20,98 @@ const GAME_STATES = {
   FINISHED: 'finished'
 };
 
+// Taille minimale et maximale de la grille
+const MIN_SIZE = 3;
+const MAX_SIZE = 8;
+const DEFAULT_SIZE = 3;
+
+// Emojis de nombres pour l'affichage
+const NUMBER_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+
 /**
  * Crée un nouveau plateau de jeu
- * @returns {Array} Un tableau 3x3 représentant le plateau de morpion
+ * @param {number} size - La taille du plateau (size x size)
+ * @returns {Array} Un tableau size x size représentant le plateau de morpion
  */
-function createBoard() {
-  return [
-    [EMPTY, EMPTY, EMPTY],
-    [EMPTY, EMPTY, EMPTY],
-    [EMPTY, EMPTY, EMPTY]
-  ];
+function createBoard(size) {
+  const board = [];
+  for (let i = 0; i < size; i++) {
+    board.push(Array(size).fill(EMPTY));
+  }
+  return board;
 }
 
 /**
  * Vérifie s'il y a un gagnant
  * @param {Array} board - Le plateau de jeu
+ * @param {number} size - La taille du plateau
+ * @param {number} winCondition - Nombre de symboles alignés pour gagner
  * @returns {string|null} - Le symbole du gagnant ou null s'il n'y a pas de gagnant
  */
-function checkWinner(board) {
-  // Vérifier les lignes
-  for (let i = 0; i < 3; i++) {
-    if (board[i][0] !== EMPTY && board[i][0] === board[i][1] && board[i][1] === board[i][2]) {
-      return board[i][0];
+function checkWinner(board, size, winCondition) {
+  // Fonction pour vérifier une séquence de symboles
+  const checkSequence = (sequence) => {
+    if (sequence.length < winCondition) return null;
+
+    for (let i = 0; i <= sequence.length - winCondition; i++) {
+      let win = true;
+      const symbol = sequence[i];
+
+      if (symbol === EMPTY) continue;
+
+      for (let j = 1; j < winCondition; j++) {
+        if (sequence[i + j] !== symbol) {
+          win = false;
+          break;
+        }
+      }
+
+      if (win) return symbol;
     }
+
+    return null;
+  };
+
+  // Vérifier les lignes
+  for (let i = 0; i < size; i++) {
+    const winner = checkSequence(board[i]);
+    if (winner) return winner;
   }
 
   // Vérifier les colonnes
-  for (let j = 0; j < 3; j++) {
-    if (board[0][j] !== EMPTY && board[0][j] === board[1][j] && board[1][j] === board[2][j]) {
-      return board[0][j];
+  for (let j = 0; j < size; j++) {
+    const column = [];
+    for (let i = 0; i < size; i++) {
+      column.push(board[i][j]);
     }
+    const winner = checkSequence(column);
+    if (winner) return winner;
   }
 
-  // Vérifier les diagonales
-  if (board[0][0] !== EMPTY && board[0][0] === board[1][1] && board[1][1] === board[2][2]) {
-    return board[0][0];
+  // Vérifier les diagonales (de haut gauche à bas droite)
+  for (let k = 0; k <= 2 * (size - 1); k++) {
+    const diagonal = [];
+    for (let i = 0; i < size; i++) {
+      const j = k - i;
+      if (j >= 0 && j < size) {
+        diagonal.push(board[i][j]);
+      }
+    }
+    const winner = checkSequence(diagonal);
+    if (winner) return winner;
   }
-  if (board[0][2] !== EMPTY && board[0][2] === board[1][1] && board[1][1] === board[2][0]) {
-    return board[0][2];
+
+  // Vérifier les diagonales (de haut droite à bas gauche)
+  for (let k = 0; k <= 2 * (size - 1); k++) {
+    const diagonal = [];
+    for (let i = 0; i < size; i++) {
+      const j = size - 1 - (k - i);
+      if (j >= 0 && j < size) {
+        diagonal.push(board[i][j]);
+      }
+    }
+    const winner = checkSequence(diagonal);
+    if (winner) return winner;
   }
 
   return null;
@@ -71,8 +123,8 @@ function checkWinner(board) {
  * @returns {boolean} - true si le plateau est plein, false sinon
  */
 function isBoardFull(board) {
-  for (let i = 0; i < 3; i++) {
-    for (let j = 0; j < 3; j++) {
+  for (let i = 0; i < board.length; i++) {
+    for (let j = 0; j < board[i].length; j++) {
       if (board[i][j] === EMPTY) {
         return false;
       }
@@ -87,11 +139,18 @@ function isBoardFull(board) {
  * @returns {string} - Représentation visuelle du plateau
  */
 function renderBoard(board) {
-  // Les positions numériques en haut
-  let result = '1️⃣2️⃣3️⃣\n';
+  const size = board.length;
+
+  // Les positions numériques en haut (limité à la taille de la grille)
+  let result = '';
+  for (let i = 0; i < size; i++) {
+    result += NUMBER_EMOJIS[i];
+  }
+  result += '\n';
+
   // Afficher le plateau
-  for (let i = 0; i < 3; i++) {
-    for (let j = 0; j < 3; j++) {
+  for (let i = 0; i < size; i++) {
+    for (let j = 0; j < size; j++) {
       result += board[i][j];
     }
     result += '\n';
@@ -112,25 +171,21 @@ function createGameMessage(game, client, status) {
   const player2 = client.users.cache.get(game.players[1]);
   const currentPlayer = client.users.cache.get(game.currentPlayer);
 
-  let message = `**Morpion**\n\n`;
+  let message = `**Morpion ${game.size}x${game.size}**\n\n`;
   message += `@${player1.username} (${PLAYER_X}) VS @${player2.username} (${PLAYER_O})\n\n`;
   message += renderBoard(game.board);
   message += `\nC'est au tour de @${currentPlayer.username} (${game.playerSymbols[game.currentPlayer]})\n`;
-  message += `Tapez un chiffre de 1 à 3 pour jouer.\n`;
+  message += `Tapez un chiffre de 1 à ${game.size} pour jouer.\n`;
+  message += `Alignez ${game.winCondition} symboles pour gagner.\n`;
+
   if (status) {
     message += `\n${status}\n`;
   }
 
   return message;
 }
-export async function morpion(client, message, args) {
-  // Vérifier la limite de taux
-  const rateLimitResult = commandLimiter.check(message.author.id);
-  if (rateLimitResult !== true) {
-    message.reply({ content: rateLimitResult });
-    return;
-  }
 
+export async function morpion(client, message, args) {
   // Si l'utilisateur est déjà dans une partie
   if (Array.from(activeGames.values()).some(game =>
       game.players.includes(message.author.id) &&
@@ -141,7 +196,7 @@ export async function morpion(client, message, args) {
 
   // Si aucun adversaire n'est mentionné
   if (!message.mentions.users.size) {
-    message.reply({ content: 'Veuillez mentionner un adversaire pour jouer au morpion !' });
+    message.reply({ content: 'Veuillez mentionner un adversaire pour jouer au morpion !\nUsage: `f!morpion @joueur [taille]`' });
     return;
   }
 
@@ -167,11 +222,32 @@ export async function morpion(client, message, args) {
     return;
   }
 
+  // Récupérer la taille de la grille spécifiée (si présente)
+  let size = DEFAULT_SIZE;
+  if (args.length > 1) {
+    const requestedSize = parseInt(args[1]);
+    if (!isNaN(requestedSize)) {
+      if (requestedSize < MIN_SIZE) {
+        message.reply({ content: `La taille minimale de la grille est de ${MIN_SIZE}x${MIN_SIZE}.` });
+        return;
+      } else if (requestedSize > MAX_SIZE) {
+        message.reply({ content: `La taille maximale de la grille est de ${MAX_SIZE}x${MAX_SIZE}.` });
+        return;
+      }
+      size = requestedSize;
+    }
+  }
+
+  // Déterminer la condition de victoire (nombre de symboles alignés)
+  let winCondition = size >= 5 ? 4 : 3;
+
   // Créer une nouvelle partie
   const gameId = Date.now().toString();
   const game = {
     id: gameId,
-    board: createBoard(),
+    board: createBoard(size),
+    size: size,
+    winCondition: winCondition,
     players: [message.author.id, opponent.id],
     playerSymbols: {
       [message.author.id]: PLAYER_X,
@@ -191,7 +267,7 @@ export async function morpion(client, message, args) {
   // Créer un collecteur de messages pour cette partie
   const filter = m =>
     (m.author.id === message.author.id || m.author.id === opponent.id) &&
-    /^[1-3]$/.test(m.content) &&
+    new RegExp(`^[1-${size}]$`).test(m.content) &&
     game.state === GAME_STATES.PLAYING;
 
   const collector = message.channel.createMessageCollector({ filter, time: 300000 }); // 5 minutes
@@ -205,8 +281,8 @@ export async function morpion(client, message, args) {
 
     const column = parseInt(m.content);
 
-    if (isNaN(column) || column < 1 || column > 3) {
-      m.reply({ content: "Position invalide ! Veuillez choisir un chiffre entre 1 et 3." });
+    if (isNaN(column) || column < 1 || column > size) {
+      m.reply({ content: `Position invalide ! Veuillez choisir un chiffre entre 1 et ${size}.` });
       return;
     }
 
@@ -214,7 +290,7 @@ export async function morpion(client, message, args) {
 
     // Trouver la première position libre dans la colonne (en partant du bas)
     let row = -1;
-    for (let i = 2; i >= 0; i--) {
+    for (let i = size - 1; i >= 0; i--) {
       if (game.board[i][col] === EMPTY) {
         row = i;
         break;
@@ -230,8 +306,8 @@ export async function morpion(client, message, args) {
     game.board[row][col] = game.playerSymbols[m.author.id];
     
     // Vérifier s'il y a un gagnant
-    const winner = checkWinner(game.board);
-    
+    const winner = checkWinner(game.board, size, game.winCondition);
+
     // Mettre à jour l'état du jeu
     if (winner) {
       game.state = GAME_STATES.FINISHED;
