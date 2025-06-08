@@ -14,20 +14,6 @@ export const metadata = {
  * @param {Array} args - Les arguments de la commande
  */
 export async function status(client, message, args) {
-  const rateLimitResult = commandLimiter.check(message.author.id);
-  if (rateLimitResult !== true) {
-    message.reply({ content: rateLimitResult });
-    return;
-  }
-
-  // Vérifier si l'utilisateur est autorisé à utiliser cette commande
-  const authorId = message.author.id;
-  const allowedUsers = process.env.ALLOWED_USERS?.split(',') || [];
-  if (!allowedUsers.includes(authorId)) {
-    message.reply('❌ Vous n\'êtes pas autorisé à utiliser cette commande.');
-    return;
-  }
-
   // Récupération des statistiques système
   const uptimeMs = client.uptime;
   const uptimeSeconds = Math.floor(uptimeMs / 1000);
