@@ -1,4 +1,4 @@
-import { loadConfig, saveConfig, setChannelTypeEnabled } from '../utils/configService.js';
+import { loadConfig, saveConfig, setChannelTypeEnabled, setSchedulerEnabled, isSchedulerEnabled } from '../utils/configService.js';
 
 export const metadata = {
   name: 'config',
@@ -7,11 +7,6 @@ export const metadata = {
   usage: 'config'
 };
 
-/**
- * Détermine si une valeur textuelle représente un booléen vrai
- * @param {string} value - Valeur à vérifier
- * @returns {boolean} - true si la valeur représente un booléen vrai
- */
 export function isValueTrue(value) {
   const trueValues = ['true', 'on', 'oui', '1', 'yes', 'vrai', 'actif', 'activé'];
   return trueValues.includes(value.toLowerCase());
@@ -30,14 +25,10 @@ const EMOJIS = {
   DM: '💬',
   GROUP: '👥',
   ENABLE: '✅',
-  DISABLE: '⭕'
+  DISABLE: '⭕',
+  SCHEDULER: '⏰'
 };
 
-/**
- * Ajoute les réactions à un message
- * @param {Object} message - Le message Discord
- * @param {Array} emojis - Les emojis à ajouter
- */
 async function addReactions(message, emojis) {
   try {
     for (const emoji of emojis) {
@@ -48,29 +39,17 @@ async function addReactions(message, emojis) {
         }
     }
 
-/**
- * Crée un collecteur de réactions
- * @param {Object} message - Le message Discord
- * @param {Object} filter - Le filtre pour les réactions
- * @param {number} time - Le temps d'attente en ms
- * @returns {Promise} - Promise qui résout avec la réaction collectée
- */
 function createReactionCollector(message, filter, time = 60000) {
   return message.awaitReactions({ filter, max: 1, time });
   }
 
-/**
- * Affiche la liste de configuration
- * @param {Object} client - Le client Discord
- * @param {Object} message - Le message Discord
- * @param {boolean} showFull - Afficher la liste complète
- */
 async function showConfigList(client, message, showFull) {
   const config = await loadConfig();
   let configMessage = '📝 **Configuration actuelle:**\n\n';
 
   if (config.scheduler) {
     configMessage += '⏰ **Scheduler:**\n';
+    configMessage += `▫️ Service de planification: ${config.scheduler.enableScheduler ? '✅ activé' : '⭕ désactivé'}\n`;
     configMessage += `▫️ Serveurs: ${config.scheduler.channelTypes?.guild ? '✅ activés' : '⭕ désactivés'}\n`;
     configMessage += `▫️ Messages privés: ${config.scheduler.channelTypes?.dm ? '✅ activés' : '⭕ désactivés'}\n`;
     configMessage += `▫️ Groupes: ${config.scheduler.channelTypes?.group ? '✅ activés' : '⭕ désactivés'}\n\n`;
@@ -109,22 +88,9 @@ async function showConfigList(client, message, showFull) {
   return showMainMenu(client, message);
 }
 
-/**
- * Bascule un paramètre entre activé et désactivé
- * @param {Object} client - Le client Discord
- * @param {Object} message - Le message Discord
- * @param {string} settingType - Le type de paramètre (guild, dm, group)
- * @param {boolean} currentValue - La valeur actuelle
- */
-async function toggleSetting(client, message, settingType, currentValue) {
-  let settingName = '';
-  switch (settingType) {
-    case 'guild': settingName = 'serveurs'; break;
-    case 'dm': settingName = 'messages privés'; break;
-    case 'group': settingName = 'groupes'; break;
-  }
+async function toggleSchedulerService(client, message, currentValue) {
   const toggleMessage = await message.reply(
-    `**Modification du paramètre: ${settingName}**\n\n` +
+    `**Modification du service de planification**\n\n` +
     `État actuel: ${currentValue ? '✅ activé' : '⭕ désactivé'}\n\n` +
     `${EMOJIS.ENABLE} - Activer\n` +
     `${EMOJIS.DISABLE} - Désactiver\n` +
@@ -158,9 +124,9 @@ async function toggleSetting(client, message, settingType, currentValue) {
   const newValue = reaction.emoji.name === EMOJIS.ENABLE;
 
   if (newValue !== currentValue) {
-    await setChannelTypeEnabled(settingType, newValue);
+    await setSchedulerEnabled(newValue);
     const confirmMessage = await message.reply(
-      `✅ Les ${settingName} sont maintenant ${newValue ? 'activés ✅' : 'désactivés ⭕'} pour le scheduler.`
+      `✅ Le service de planification est maintenant ${newValue ? 'activé ✅' : 'désactivé ⭕'}.`
     );
 
     setTimeout(async () => {
@@ -174,13 +140,68 @@ async function toggleSetting(client, message, settingType, currentValue) {
 }
 }
 
-/**
- * Affiche le menu de modification
- * @param {Object} client - Le client Discord
- * @param {Object} message - Le message Discord
- */
+async function toggleSetting(client, message, settingType, currentValue) {
+  let settingName = '';
+  switch (settingType) {
+    case 'guild': settingName = 'serveurs'; break;
+    case 'dm': settingName = 'messages privés'; break;
+    case 'group': settingName = 'groupes'; break;
+  }
+
+  const toggleMessage = await message.reply(
+    `**Modification du paramètre: ${settingName}**\n\n` +
+    `État actuel: ${currentValue ? '✅ activé' : '⭕ désactivé'}\n\n` +
+    `${EMOJIS.ENABLE} - Activer\n` +
+    `${EMOJIS.DISABLE} - Désactiver\n` +
+    `${EMOJIS.CANCEL} - Annuler\n\n` +
+    'Cliquez sur une réaction pour confirmer...'
+  );
+
+  await addReactions(toggleMessage, [EMOJIS.ENABLE, EMOJIS.DISABLE, EMOJIS.CANCEL]);
+
+  const filter = (reaction, user) => {
+    return [EMOJIS.ENABLE, EMOJIS.DISABLE, EMOJIS.CANCEL].includes(reaction.emoji.name) &&
+           user.id === message.author.id;
+  };
+
+  const collected = await createReactionCollector(toggleMessage, filter);
+
+  if (collected.size === 0) {
+    return toggleMessage.edit('⏱️ Modification annulée - temps écoulé.');
+  }
+
+  const reaction = collected.first();
+
+  try {
+    await toggleMessage.delete();
+  } catch (error) {}
+
+  if (reaction.emoji.name === EMOJIS.CANCEL) {
+      return showSetMenu(client, message);
+  }
+
+  const newValue = reaction.emoji.name === EMOJIS.ENABLE;
+
+  if (newValue !== currentValue) {
+    await setChannelTypeEnabled(settingType, newValue);
+    const confirmMessage = await message.reply(
+      `✅ Les ${settingName} sont maintenant ${newValue ? 'activés ✅' : 'désactivés ⭕'} pour le scheduler.`
+    );
+
+    setTimeout(async () => {
+  try {
+        await confirmMessage.delete();
+      } catch (error) {}
+      return showSetMenu(client, message);
+    }, 2000);
+  } else {
+    return showSetMenu(client, message);
+  }
+}
+
 async function showSetMenu(client, message) {
   const config = await loadConfig();
+  const schedulerServiceEnabled = await isSchedulerEnabled();
   const guildEnabled = config.scheduler?.channelTypes?.guild ?? true;
   const dmEnabled = config.scheduler?.channelTypes?.dm ?? true;
   const groupEnabled = config.scheduler?.channelTypes?.group ?? true;
@@ -188,6 +209,7 @@ async function showSetMenu(client, message) {
   const setMessage = await message.reply(
     '**⚙️ Modification de la configuration**\n\n' +
     '**Options disponibles:**\n' +
+    `${EMOJIS.SCHEDULER} Service de planification: ${schedulerServiceEnabled ? '✅ activé' : '⭕ désactivé'}\n` +
     `${EMOJIS.GUILD} Serveurs: ${guildEnabled ? '✅ activés' : '⭕ désactivés'}\n` +
     `${EMOJIS.DM} Messages privés: ${dmEnabled ? '✅ activés' : '⭕ désactivés'}\n` +
     `${EMOJIS.GROUP} Groupes: ${groupEnabled ? '✅ activés' : '⭕ désactivés'}\n\n` +
@@ -195,10 +217,10 @@ async function showSetMenu(client, message) {
     'Cliquez sur une réaction pour modifier un paramètre...'
   );
 
-  await addReactions(setMessage, [EMOJIS.GUILD, EMOJIS.DM, EMOJIS.GROUP, EMOJIS.BACK]);
+  await addReactions(setMessage, [EMOJIS.SCHEDULER, EMOJIS.GUILD, EMOJIS.DM, EMOJIS.GROUP, EMOJIS.BACK]);
 
   const filter = (reaction, user) => {
-    return [EMOJIS.GUILD, EMOJIS.DM, EMOJIS.GROUP, EMOJIS.BACK].includes(reaction.emoji.name) &&
+    return [EMOJIS.SCHEDULER, EMOJIS.GUILD, EMOJIS.DM, EMOJIS.GROUP, EMOJIS.BACK].includes(reaction.emoji.name) &&
            user.id === message.author.id;
   };
 
@@ -215,6 +237,8 @@ async function showSetMenu(client, message) {
   } catch (error) {}
 
   switch (reaction.emoji.name) {
+    case EMOJIS.SCHEDULER:
+      return toggleSchedulerService(client, message, schedulerServiceEnabled);
     case EMOJIS.GUILD:
       return toggleSetting(client, message, 'guild', guildEnabled);
     case EMOJIS.DM:
@@ -226,11 +250,6 @@ async function showSetMenu(client, message) {
   }
 }
 
-/**
- * Demande confirmation pour réinitialiser la configuration
- * @param {Object} client - Le client Discord
- * @param {Object} message - Le message Discord
- */
 async function confirmReset(client, message) {
   const confirmMessage = await message.reply(
     '**🔄 Réinitialisation de la configuration**\n\n' +
@@ -262,6 +281,7 @@ async function confirmReset(client, message) {
   if (reaction.emoji.name === EMOJIS.CONFIRM) {
     const defaultConfig = {
       scheduler: {
+        enableScheduler: true,
         channelTypes: {
           guild: true,
           dm: true,
@@ -284,11 +304,6 @@ async function confirmReset(client, message) {
   }
 }
 
-/**
- * Affiche le statut du bot
- * @param {Object} client - Le client Discord
- * @param {Object} message - Le message Discord
- */
 async function showStatus(client, message) {
   try {
     const config = await loadConfig();
@@ -297,6 +312,7 @@ async function showStatus(client, message) {
     let statusMessage = '🤖 **État du bot:**\n\n';
 
     statusMessage += '⚙️ **Configuration:**\n';
+    statusMessage += `▫️ Service de planification: ${config.scheduler?.enableScheduler ? '✅ activé' : '⭕ désactivé'}\n`;
     statusMessage += `▫️ Serveurs: ${config.scheduler?.channelTypes?.guild ? '✅ activés' : '⭕ désactivés'}\n`;
     statusMessage += `▫️ Messages privés: ${config.scheduler?.channelTypes?.dm ? '✅ activés' : '⭕ désactivés'}\n`;
     statusMessage += `▫️ Groupes: ${config.scheduler?.channelTypes?.group ? '✅ activés' : '⭕ désactivés'}\n\n`;
@@ -346,11 +362,6 @@ async function showStatus(client, message) {
   }
 }
 
-/**
- * Affiche le menu principal de configuration
- * @param {Object} client - Le client Discord
- * @param {Object} message - Le message Discord contenant la commande
- */
 async function showMainMenu(client, message) {
   const menuMessage = await message.reply(
     '**📝 Menu de Configuration**\n\n' +
@@ -395,12 +406,6 @@ async function showMainMenu(client, message) {
   }
 }
 
-/**
- * Gère la commande de configuration du bot
- * @param {Object} client - Le client Discord
- * @param {Object} message - Le message Discord contenant la commande
- * @param {Array} args - Les arguments de la commande (non utilisés dans cette version)
- */
 export async function config(client, message, args) {
   try {
     await showMainMenu(client, message);
@@ -409,3 +414,4 @@ export async function config(client, message, args) {
     await message.reply('❌ Une erreur est survenue lors du traitement de la commande. Veuillez réessayer plus tard.');
   }
 }
+
