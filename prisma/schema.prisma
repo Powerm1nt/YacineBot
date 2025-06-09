@@ -12,12 +12,13 @@ datasource db {
 }
 
 model Conversation {
-  id        BigInt    @id @default(autoincrement())
-  guildId   String?   @map("guild_id")
-  channelId String    @map("channel_id")
-  messages  Message[]
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @default(now()) @map("updated_at")
+  id             BigInt    @id @default(autoincrement())
+  guildId        String?   @map("guild_id")
+  channelId      String    @map("channel_id")
+  messages       Message[]
+  lastResponseId String?   @map("last_response_id") // ID de la dernière réponse OpenAI (format 'resp_XXX')
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @default(now()) @map("updated_at")
 
   @@unique([channelId, guildId])
   @@map("conversations")

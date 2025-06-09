@@ -19,8 +19,7 @@ import { getCommandMetadata } from './utils/commandUtils.js'
 import { initScheduler } from './services/schedulerService.js'
 import { morpion } from './commands/morpion.js'
 import { moignon } from './commands/moignon.js'
-import { SUPABASE_CONFIG, DATABASE_CONFIG, validateDatabaseConfig, validateSupabaseConfig } from './config/database.js'
-import { prisma } from './models/index.js'
+import { SUPABASE_CONFIG, validateDatabaseConfig, validateSupabaseConfig } from './config/database.js'
 dotenv.config();
 
 // Vérification de la configuration de la base de données

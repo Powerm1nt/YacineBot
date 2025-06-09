@@ -155,6 +155,12 @@ export async function saveContextResponse(message, responseId) {
     return false
   }
 
+  // Vérifier que l'ID de réponse est au format attendu par l'API OpenAI
+  if (typeof responseId !== 'string' || !responseId.startsWith('resp')) {
+    console.error(`Format d'ID de réponse invalide: ${responseId}. Les IDs doivent commencer par 'resp'`)
+    return false
+  }
+
   const context = getContextKey(message)
   const authorName = message.author.globalName || message.author.username;
   const contextData = {
@@ -199,6 +205,31 @@ export async function saveContextResponse(message, responseId) {
         false, // isBot=false car c'est le message de l'utilisateur
         guildId
       );
+    }
+
+    // Sauvegarder l'ID de réponse OpenAI dans la base de données
+    try {
+      await prisma.conversation.upsert({
+        where: {
+          channelId_guildId: {
+            channelId: channelId,
+            guildId: guildId || null
+          }
+        },
+        update: {
+          lastResponseId: responseId,
+          updatedAt: new Date()
+        },
+        create: {
+          channelId: channelId,
+          guildId: guildId,
+          lastResponseId: responseId,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      });
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde de l\'ID de réponse dans la base de données:', error);
     }
 
     // Mettre à jour les statistiques si c'est un nouveau contexte
@@ -330,8 +361,35 @@ export async function resetContext(message) {
  * @returns {Promise<string|null>} - ID de la dernière réponse ou null
  */
 export async function getLastResponseId(message) {
-  const contextData = await getContextData(message)
-  return contextData.lastResponseId || null
+  const context = getContextKey(message);
+  const guildId = context.type === 'guild' ? message.guild?.id : null;
+  const channelId = context.key;
+
+  try {
+    // Récupérer directement depuis la base de données pour être sûr d'avoir le format correct
+    const conversation = await prisma.conversation.findUnique({
+      where: {
+        channelId_guildId: {
+          channelId: channelId,
+          guildId: guildId || null
+        }
+      },
+      select: {
+        lastResponseId: true
+      }
+    });
+
+    // Vérifier que l'ID est au format attendu par l'API OpenAI (commençant par 'resp')
+    if (conversation?.lastResponseId && 
+        typeof conversation.lastResponseId === 'string' && 
+        conversation.lastResponseId.startsWith('resp')) {
+      return conversation.lastResponseId;
+    }
+  } catch (error) {
+    console.error('Erreur lors de la récupération de l\'ID de réponse depuis la base de données:', error);
+  }
+
+  return null; // Retourner null si l'ID n'est pas valide ou s'il y a une erreur
 }
 
 /**

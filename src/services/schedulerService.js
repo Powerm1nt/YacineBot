@@ -3,7 +3,7 @@ import { OpenAI } from 'openai/client.mjs'
 import { format, addMinutes, getHours } from 'date-fns'
 import dotenv from 'dotenv'
 import { randomUUID } from 'crypto'
-import { isGuildEnabled, isChannelTypeEnabled } from '../utils/configManager.js'
+import { isGuildEnabled, isChannelTypeEnabled } from '../utils/configService.js'
 import { taskService } from './taskService.js'
 
 dotenv.config()
