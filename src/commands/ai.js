@@ -14,7 +14,7 @@ import {
   getLastResponseId,
 } from '../utils/contextManager.js'
 import { conversationService } from '../services/conversationService.js'
-import { convertBigIntsToStrings, safeJsonStringify } from '../utils/jsonUtils.js'
+import { convertBigIntsToStrings } from '../utils/jsonUtils.js'
 
 import dotenv from 'dotenv'
 dotenv.config()
