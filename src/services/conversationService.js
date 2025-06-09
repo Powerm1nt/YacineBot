@@ -1,7 +1,7 @@
 /**
  * Service pour gérer les conversations
  */
-import { prisma } from '../models/index.js';
+import { prisma } from '../models/index.js'
 
 /**
  * Récupère l'historique de conversation pour un canal
@@ -47,33 +47,27 @@ export async function getConversationHistory(channelId, guildId = null) {
  */
 export async function addMessage(channelId, userId, userName, content, isBot = false, guildId = null) {
   try {
-    // Chercher ou créer la conversation
-    let conversation = await prisma.conversation.findUnique({
+    // Chercher ou créer la conversation avec upsert pour éviter les erreurs de contrainte unique
+    const conversation = await prisma.conversation.upsert({
       where: {
         channelId_guildId: {
           channelId,
           guildId: guildId || ""
         }
+      },
+      update: {
+        updatedAt: new Date()
+      },
+      create: {
+        channelId,
+        guildId: guildId || "",
+        createdAt: new Date(),
+        updatedAt: new Date()
       }
     });
 
-    if (!conversation) {
-      conversation = await prisma.conversation.create({
-        data: {
-          channelId,
-          guildId: guildId || ""
-        }
-      });
-    } else {
-      // Mettre à jour le timestamp
-      await prisma.conversation.update({
-        where: { id: conversation.id },
-        data: { updatedAt: new Date() }
-      });
-    }
-
     // Ajouter le message
-    const message = await prisma.message.create({
+    return await prisma.message.create({
       data: {
         conversationId: conversation.id,
         userId,
@@ -82,8 +76,6 @@ export async function addMessage(channelId, userId, userName, content, isBot = f
         isBot
       }
     });
-
-    return message;
   } catch (error) {
     console.error('Erreur lors de l\'ajout du message:', error);
     throw error;
