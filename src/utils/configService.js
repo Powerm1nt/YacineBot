@@ -37,11 +37,11 @@ export async function loadConfig() {
       where: { key: MAIN_CONFIG_KEY }
     });
 
-    if (configRecord) {
+    if (configRecord && configRecord?.value) {
       return configRecord.value;
     } else {
       // Si aucune configuration n'existe, créer une nouvelle avec les valeurs par défaut
-      await saveConfig(defaultConfig);
+      saveConfig(defaultConfig);
       return defaultConfig;
     }
   } catch (error) {
@@ -97,7 +97,7 @@ export async function setGuildConfig(guildId, guildConfig) {
     config.scheduler.guilds[guildId] = guildConfig;
 
     // Sauvegarder la configuration
-    return await saveConfig(config);
+    return saveConfig(config)
   } catch (error) {
     console.error('Erreur lors de la mise à jour de la configuration du serveur:', error);
     return false;
@@ -146,7 +146,7 @@ export async function setChannelTypeEnabled(channelType, enabled) {
     config.scheduler.channelTypes[channelType] = enabled;
 
     // Sauvegarder la configuration
-    return await saveConfig(config);
+    return saveConfig(config)
   } catch (error) {
     console.error(`Erreur lors de la mise à jour du type de canal ${channelType}:`, error);
     return false;

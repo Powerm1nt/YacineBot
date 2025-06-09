@@ -5,6 +5,7 @@ import dotenv from 'dotenv'
 import { randomUUID } from 'crypto'
 import { isGuildEnabled, isChannelTypeEnabled } from '../utils/configService.js'
 import { taskService } from './taskService.js'
+const { prisma } = await import('../models/index.js');
 
 dotenv.config()
 
@@ -159,7 +160,7 @@ function selectRandomChannel(client, channelType = null) {
  * @returns {Object|null} - Canal sélectionné ou null
  */
 function selectRandomGuildChannel(client) {
-  // Récupérer tous les serveurs où le bot est présent
+  // Récupérer tous les serveurs avec lesquels le bot est présent
   const guilds = Array.from(client.guilds.cache.values())
     // Filtrer pour ne garder que les serveurs activés dans la configuration
     .filter(guild => isGuildEnabled(guild.id));
@@ -304,22 +305,9 @@ export async function initScheduler (client) {
   console.log(`Configuration: ${MIN_TASKS}-${MAX_TASKS} tâches, délai: ${formatDelay(MIN_DELAY)}-${formatDelay(MAX_DELAY)}`)
 
   try {
-    // Vérifier l'accès à la base de données avant de créer des tâches
-    const { prisma } = await import('../models/index.js');
-    const { checkSupabaseConnection } = await import('./supabaseService.js');
-
-    // Tenter d'accéder à la base de données
-    let dbAccessible = false;
+    let dbAccessible;
     try {
-      // Vérifier l'accès à Prisma
       await prisma.$queryRaw`SELECT 1`;
-      // Vérifier l'accès à Supabase pour les fonctionnalités legacy
-      const supabaseConnected = await checkSupabaseConnection();
-
-      if (!supabaseConnected) {
-        console.warn('Avertissement: Connexion à Supabase échouée. Les tâches seront créées mais certaines fonctionnalités pourraient être limitées.');
-      }
-
       dbAccessible = true;
     } catch (dbError) {
       console.error('Erreur d\'accès à la base de données:', dbError.message);
@@ -384,7 +372,7 @@ async function createRandomTask (client, taskNumber) {
             scheduler.removeById(taskId)
             activeTasks.delete(taskId)
           }
-          createRandomTask(client, taskNumber)
+          await createRandomTask(client, taskNumber)
           return
         }
 
@@ -433,7 +421,7 @@ async function createRandomTask (client, taskNumber) {
           scheduler.removeById(taskId)
           activeTasks.delete(taskId)
         }
-        createRandomTask(client, taskNumber)
+        await createRandomTask(client, taskNumber)
       } catch (error) {
         console.error(`[Tâche ${taskNumber}] Erreur lors de l'exécution:`, error)
 
@@ -442,7 +430,7 @@ async function createRandomTask (client, taskNumber) {
           scheduler.removeById(taskId)
           activeTasks.delete(taskId)
         }
-        createRandomTask(client, taskNumber)
+        await createRandomTask(client, taskNumber)
       }
     },
     (err) => {

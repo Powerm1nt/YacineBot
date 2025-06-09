@@ -120,27 +120,4 @@ export async function saveUserPreferences(userId, preferences) {
   }
 }
 
-/**
- * Vérifie l'état de la connexion à Supabase
- * @returns {Promise<boolean>} - Statut de la connexion
- */
-export async function checkSupabaseConnection() {
-  try {
-    const { data, error } = await supabase.from('health_check').select('*').limit(1);
-    return !error;
-  } catch (error) {
-    console.error('Erreur de connexion à Supabase:', error);
-    return false;
-  }
-}
 
-// Exporter un objet pour l'utilisation avec les imports nommés
-export const supabaseService = {
-  getUserConversationHistory,
-  saveUserConversationHistory,
-  deleteUserConversationHistory,
-  logUsageStatistics,
-  getUserPreferences,
-  saveUserPreferences,
-  checkSupabaseConnection
-};

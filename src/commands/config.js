@@ -24,10 +24,6 @@ export function isValueTrue(value) {
  * @param {Array} args - Les arguments de la commande
  */
 export async function config(client, message, args) {
-  if (!message.member?.permissions.has('ADMINISTRATOR')) {
-    return message.reply('❌ Cette commande est réservée aux administrateurs du serveur.');
-  }
-
   try {
     if (!args.length) {
       return message.reply('❌ Veuillez spécifier une action de configuration. Exemple: `config list` ou `config set [clé] [valeur]`');
