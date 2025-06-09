@@ -26,7 +26,7 @@ export async function loadConfig() {
     if (configRecord && configRecord?.value) {
       return configRecord.value;
     } else {
-      saveConfig(defaultConfig);
+      await saveConfig(defaultConfig);
       return defaultConfig;
     }
   } catch (error) {

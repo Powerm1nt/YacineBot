@@ -108,7 +108,7 @@ async function registerFeatures(client) {
     await ai(client);
 
     // Initialiser le planificateur de tâches automatiques
-    if (isSchedulerEnabled()) {
+    if (await isSchedulerEnabled()) {
       await initScheduler(client);
       console.log('Planificateur de tâches automatiques initialisé');
     }
