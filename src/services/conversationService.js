@@ -1,7 +1,7 @@
 /**
  * Service pour gérer les conversations
  */
-import { prisma } from '../models/index.js'
+import { prisma } from '../models/index.js';
 
 /**
  * Récupère l'historique de conversation pour un canal

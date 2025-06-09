@@ -22,6 +22,7 @@ import { moignon } from './commands/moignon.js'
 import { SUPABASE_CONFIG, validateDatabaseConfig, validateSupabaseConfig } from './config/database.js'
 import { config } from './commands/config.js'
 import { isSchedulerEnabled } from './utils/configService.js'
+import { context } from './commands/context.js'
 dotenv.config();
 
 // Vérification de la configuration de la base de données
@@ -61,6 +62,7 @@ const commands = {
   morpion: async (message, args) => morpion(client, message, args),
   moignon: async (message, args) => moignon(client, message, args),
   config: async (message, args) => config(client, message, args),
+  context: async (message, args) => context(client, message, args),
 };
 
 // Liste des commandes disponibles pour l'importation dynamique dans help.js

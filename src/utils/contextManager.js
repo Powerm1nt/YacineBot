@@ -16,6 +16,12 @@ let contextStats = {
   }
 };
 
+// Variable pour suivre les cartes de contexte
+new Map([
+  ['guild', guildConversations],
+  ['dm', dmConversations],
+  ['group', groupConversations]
+])
 const CLEANUP_CONFIG = {
   inactivityThreshold: 12,
   maxContexts: {
@@ -358,6 +364,43 @@ export function getContextStats() {
     memoryUsage: process.memoryUsage(),
     config: CLEANUP_CONFIG
   };
+}
+
+/**
+ * Récupère tous les contextes en mémoire
+ * @returns {Array} Tableau de tous les contextes
+ */
+export function getAllContexts() {
+  const contexts = [];
+
+  // Parcourir les contextes de serveur
+  guildConversations.forEach((data, key) => {
+    contexts.push({
+      type: 'guild',
+      key,
+      data: convertBigIntsToStrings(JSON.parse(JSON.stringify(data)))
+    });
+  });
+
+  // Parcourir les contextes de messages privés
+  dmConversations.forEach((data, key) => {
+    contexts.push({
+      type: 'dm',
+      key,
+      data: convertBigIntsToStrings(JSON.parse(JSON.stringify(data)))
+    });
+  });
+
+  // Parcourir les contextes de groupes
+  groupConversations.forEach((data, key) => {
+    contexts.push({
+      type: 'group',
+      key,
+      data: convertBigIntsToStrings(JSON.parse(JSON.stringify(data)))
+    });
+  });
+
+  return contexts;
 }
 
 export async function cleanupOldContexts() {
