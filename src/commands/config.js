@@ -1,4 +1,12 @@
-import { loadConfig, saveConfig, setChannelTypeEnabled, setSchedulerEnabled, isSchedulerEnabled } from '../utils/configService.js';
+import {
+  loadConfig,
+  saveConfig,
+  setChannelTypeEnabled,
+  setSchedulerEnabled,
+  isSchedulerEnabled,
+  defaultConfig
+} from '../utils/configService.js'
+import { initScheduler, stopScheduler } from '../services/schedulerService.js'
 
 export const metadata = {
   name: 'config',
@@ -29,27 +37,74 @@ const EMOJIS = {
   SCHEDULER: '⏰'
 };
 
+async function safeDeleteMessage(message) {
+  try {
+    await message.delete();
+  } catch (error) {}
+}
+
+async function showTemporaryMessage(client, message, content, delay = 2000) {
+  const tempMessage = await message.reply(content);
+    setTimeout(async () => {
+    await safeDeleteMessage(tempMessage);
+    return showMainMenu(client, message);
+  }, delay);
+}
+
+async function handleConfirmationDialog(message, options) {
+  const {
+    title,
+    description,
+    confirmEmoji = '⭕',
+    cancelEmoji = '✅',
+    onConfirm,
+    onCancel = () => showMainMenu(client, message)
+  } = options;
+    const confirmMessage = await message.reply(
+    `**${title}**\n\n${description}\n\n` +
+    `${confirmEmoji} - Désactiver\n` +
+    `${cancelEmoji} - Activer`
+    );
+
+  await addReactions(confirmMessage, [confirmEmoji, cancelEmoji]);
+  const filter = (reaction, user) => {
+    return [confirmEmoji, cancelEmoji].includes(reaction.emoji.name) &&
+           user.id === message.author.id;
+  };
+
+  const collected = await createReactionCollector(confirmMessage, filter);
+
+  await safeDeleteMessage(confirmMessage);
+
+  if (collected.size === 0) {
+    return message.reply('⏱️ Action annulée - temps écoulé.');
+  }
+
+  const reaction = collected.first();
+  return reaction.emoji.name === confirmEmoji ? onConfirm() : onCancel();
+}
+
 async function addReactions(message, emojis) {
   try {
     for (const emoji of emojis) {
       await message.react(emoji);
     }
-        } catch (error) {
+  } catch (error) {
     console.error('Erreur lors de l\'ajout des réactions:', error);
-        }
-    }
+  }
+}
 
 function createReactionCollector(message, filter, time = 60000) {
   return message.awaitReactions({ filter, max: 1, time });
-  }
+}
 
 async function showConfigList(client, message, showFull) {
-  const config = await loadConfig();
+    const config = await loadConfig();
   let configMessage = '📝 **Configuration actuelle:**\n\n';
 
   if (config.scheduler) {
     configMessage += '⏰ **Scheduler:**\n';
-    configMessage += `▫️ Service de planification: ${config.scheduler.enableScheduler ? '✅ activé' : '⭕ désactivé'}\n`;
+    configMessage += `▫️ Service de planification: ${config.scheduler.enabled ? '✅ activé' : '⭕ désactivé'}\n`;
     configMessage += `▫️ Serveurs: ${config.scheduler.channelTypes?.guild ? '✅ activés' : '⭕ désactivés'}\n`;
     configMessage += `▫️ Messages privés: ${config.scheduler.channelTypes?.dm ? '✅ activés' : '⭕ désactivés'}\n`;
     configMessage += `▫️ Groupes: ${config.scheduler.channelTypes?.group ? '✅ activés' : '⭕ désactivés'}\n\n`;
@@ -77,126 +132,84 @@ async function showConfigList(client, message, showFull) {
     `Cliquez sur ${EMOJIS.BACK} pour revenir au menu principal.`);
 
   await listMessage.react(EMOJIS.BACK);
-  const filter = (reaction, user) => {
-    return reaction.emoji.name === EMOJIS.BACK && user.id === message.author.id;
-  };
+    const filter = (reaction, user) => {
+      return reaction.emoji.name === EMOJIS.BACK && user.id === message.author.id;
+    };
 
   await createReactionCollector(listMessage, filter);
-  try {
-    await listMessage.delete();
-  } catch (error) {}
-  return showMainMenu(client, message);
+  await safeDeleteMessage(listMessage);
+    return showMainMenu(client, message);
 }
 
 async function toggleSchedulerService(client, message, currentValue) {
-  const toggleMessage = await message.reply(
-    `**Modification du service de planification**\n\n` +
-    `État actuel: ${currentValue ? '✅ activé' : '⭕ désactivé'}\n\n` +
-    `${EMOJIS.ENABLE} - Activer\n` +
-    `${EMOJIS.DISABLE} - Désactiver\n` +
-    `${EMOJIS.CANCEL} - Annuler\n\n` +
-    'Cliquez sur une réaction pour confirmer...'
-  );
-
-  await addReactions(toggleMessage, [EMOJIS.ENABLE, EMOJIS.DISABLE, EMOJIS.CANCEL]);
-
-  const filter = (reaction, user) => {
-    return [EMOJIS.ENABLE, EMOJIS.DISABLE, EMOJIS.CANCEL].includes(reaction.emoji.name) &&
-           user.id === message.author.id;
-  };
-
-  const collected = await createReactionCollector(toggleMessage, filter);
-
-  if (collected.size === 0) {
-    return toggleMessage.edit('⏱️ Modification annulée - temps écoulé.');
+  return handleConfirmationDialog(message, {
+    title: 'Modification du service de planification',
+    description: `État actuel: ${currentValue ? '✅ activé' : '⭕ désactivé'}`,
+    confirmEmoji: '⭕',
+    cancelEmoji: '✅',
+    onConfirm: async () => {
+      if (currentValue !== false) {
+        await setSchedulerEnabled(false);
+        await stopScheduler();
+        await showTemporaryMessage(client, message, '✅ Le service de planification est maintenant désactivé ⭕');
       }
-
-  const reaction = collected.first();
-
-  try {
-    await toggleMessage.delete();
-  } catch (error) {}
-
-  if (reaction.emoji.name === EMOJIS.CANCEL) {
       return showSetMenu(client, message);
-  }
-
-  const newValue = reaction.emoji.name === EMOJIS.ENABLE;
-
-  if (newValue !== currentValue) {
-    await setSchedulerEnabled(newValue);
-    const confirmMessage = await message.reply(
-      `✅ Le service de planification est maintenant ${newValue ? 'activé ✅' : 'désactivé ⭕'}.`
-    );
-
-    setTimeout(async () => {
-      try {
-        await confirmMessage.delete();
-      } catch (error) {}
+    },
+    onCancel: async () => {
+      if (currentValue !== true) {
+        await setSchedulerEnabled(true);
+        await initScheduler(client);
+        await showTemporaryMessage(client, message, '✅ Le service de planification est maintenant activé ✅');
+      }
       return showSetMenu(client, message);
-    }, 2000);
-  } else {
-    return showSetMenu(client, message);
-}
+    }
+  });
 }
 
 async function toggleSetting(client, message, settingType, currentValue) {
-  let settingName = '';
-  switch (settingType) {
-    case 'guild': settingName = 'serveurs'; break;
-    case 'dm': settingName = 'messages privés'; break;
-    case 'group': settingName = 'groupes'; break;
-  }
-
-  const toggleMessage = await message.reply(
-    `**Modification du paramètre: ${settingName}**\n\n` +
-    `État actuel: ${currentValue ? '✅ activé' : '⭕ désactivé'}\n\n` +
-    `${EMOJIS.ENABLE} - Activer\n` +
-    `${EMOJIS.DISABLE} - Désactiver\n` +
-    `${EMOJIS.CANCEL} - Annuler\n\n` +
-    'Cliquez sur une réaction pour confirmer...'
-  );
-
-  await addReactions(toggleMessage, [EMOJIS.ENABLE, EMOJIS.DISABLE, EMOJIS.CANCEL]);
-
-  const filter = (reaction, user) => {
-    return [EMOJIS.ENABLE, EMOJIS.DISABLE, EMOJIS.CANCEL].includes(reaction.emoji.name) &&
-           user.id === message.author.id;
+  const settingNames = {
+    guild: 'serveurs',
+    dm: 'messages privés',
+    group: 'groupes'
   };
 
-  const collected = await createReactionCollector(toggleMessage, filter);
-
-  if (collected.size === 0) {
-    return toggleMessage.edit('⏱️ Modification annulée - temps écoulé.');
-  }
-
-  const reaction = collected.first();
-
-  try {
-    await toggleMessage.delete();
-  } catch (error) {}
-
-  if (reaction.emoji.name === EMOJIS.CANCEL) {
+  return handleConfirmationDialog(message, {
+    title: `Modification du paramètre: ${settingNames[settingType]}`,
+    description: `État actuel: ${currentValue ? '✅ activé' : '⭕ désactivé'}`,
+    cancelEmoji: '⭕',
+    confirmEmoji: '✅',
+    onConfirm: async () => {
+      if (currentValue !== false) {
+        await setChannelTypeEnabled(settingType, false);
+        await showTemporaryMessage(client, message,
+          `✅ Les ${settingNames[settingType]} sont maintenant désactivés ⭕ pour le scheduler.`
+        );
+      }
       return showSetMenu(client, message);
-  }
-
-  const newValue = reaction.emoji.name === EMOJIS.ENABLE;
-
-  if (newValue !== currentValue) {
-    await setChannelTypeEnabled(settingType, newValue);
-    const confirmMessage = await message.reply(
-      `✅ Les ${settingName} sont maintenant ${newValue ? 'activés ✅' : 'désactivés ⭕'} pour le scheduler.`
-    );
-
-    setTimeout(async () => {
-  try {
-        await confirmMessage.delete();
-      } catch (error) {}
+    },
+    onCancel: async () => {
+      if (currentValue !== true) {
+        await setChannelTypeEnabled(settingType, true);
+        await showTemporaryMessage(client, message,
+          `✅ Les ${settingNames[settingType]} sont maintenant activés ✅ pour le scheduler.`
+        );
+      }
       return showSetMenu(client, message);
-    }, 2000);
-  } else {
-    return showSetMenu(client, message);
-  }
+    }
+  });
+}
+
+async function confirmReset(client, message) {
+  return handleConfirmationDialog(message, {
+    title: '🔄 Réinitialisation de la configuration',
+    description: 'Êtes-vous sûr de vouloir réinitialiser toute la configuration aux valeurs par défaut?\n\nCette action ne peut pas être annulée!',
+    onConfirm: async () => {
+      await saveConfig(defaultConfig);
+      await showTemporaryMessage(client, message,
+        '✅ Toutes les configurations ont été réinitialisées aux valeurs par défaut.'
+      );
+    }
+  });
 }
 
 async function showSetMenu(client, message) {
@@ -232,9 +245,7 @@ async function showSetMenu(client, message) {
 
   const reaction = collected.first();
 
-  try {
-    await setMessage.delete();
-  } catch (error) {}
+  await safeDeleteMessage(setMessage);
 
   switch (reaction.emoji.name) {
     case EMOJIS.SCHEDULER:
@@ -247,60 +258,6 @@ async function showSetMenu(client, message) {
       return toggleSetting(client, message, 'group', groupEnabled);
     case EMOJIS.BACK:
       return showMainMenu(client, message);
-  }
-}
-
-async function confirmReset(client, message) {
-  const confirmMessage = await message.reply(
-    '**🔄 Réinitialisation de la configuration**\n\n' +
-    'Êtes-vous sûr de vouloir réinitialiser toute la configuration aux valeurs par défaut?\n\n' +
-    `${EMOJIS.CONFIRM} - Confirmer la réinitialisation\n` +
-    `${EMOJIS.CANCEL} - Annuler\n\n` +
-    'Cette action ne peut pas être annulée!'
-  );
-
-  await addReactions(confirmMessage, [EMOJIS.CONFIRM, EMOJIS.CANCEL]);
-
-  const filter = (reaction, user) => {
-    return [EMOJIS.CONFIRM, EMOJIS.CANCEL].includes(reaction.emoji.name) &&
-           user.id === message.author.id;
-  };
-
-  const collected = await createReactionCollector(confirmMessage, filter);
-
-  if (collected.size === 0) {
-    return confirmMessage.edit('⏱️ Réinitialisation annulée - temps écoulé.');
-  }
-
-  const reaction = collected.first();
-
-  try {
-    await confirmMessage.delete();
-  } catch (error) {}
-
-  if (reaction.emoji.name === EMOJIS.CONFIRM) {
-    const defaultConfig = {
-      scheduler: {
-        enableScheduler: true,
-        channelTypes: {
-          guild: true,
-          dm: true,
-          group: true
-        }
-      }
-    };
-    await saveConfig(defaultConfig);
-
-    const resetConfirmMessage = await message.reply('✅ Toutes les configurations ont été réinitialisées aux valeurs par défaut.');
-
-    setTimeout(async () => {
-      try {
-        await resetConfirmMessage.delete();
-      } catch (error) {}
-      return showMainMenu(client, message);
-    }, 2000);
-  } else {
-    return showMainMenu(client, message);
   }
 }
 
@@ -344,21 +301,12 @@ async function showStatus(client, message) {
 
     await createReactionCollector(statusReply, filter);
 
-    try {
-      await statusReply.delete();
-    } catch (error) {}
+    await safeDeleteMessage(statusReply);
 
     return showMainMenu(client, message);
   } catch (error) {
     console.error('Erreur lors de la récupération du statut:', error);
-    const errorMessage = await message.reply('❌ Une erreur est survenue lors de la récupération du statut.');
-
-    setTimeout(async () => {
-      try {
-        await errorMessage.delete();
-      } catch (error) {}
-      return showMainMenu(client, message);
-    }, 3000);
+    await showTemporaryMessage(client, message, '❌ Une erreur est survenue lors de la récupération du statut.', 3000);
   }
 }
 
@@ -388,9 +336,7 @@ async function showMainMenu(client, message) {
 
   const reaction = collected.first();
 
-  try {
-    await menuMessage.delete();
-  } catch (error) {}
+  await safeDeleteMessage(menuMessage);
 
   switch (reaction.emoji.name) {
     case EMOJIS.LIST:
@@ -414,4 +360,3 @@ export async function config(client, message, args) {
     await message.reply('❌ Une erreur est survenue lors du traitement de la commande. Veuillez réessayer plus tard.');
   }
 }
-

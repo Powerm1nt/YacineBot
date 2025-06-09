@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const defaultConfig = {
+export const defaultConfig = {
   scheduler: {
     enabled: true,
     guilds: {},

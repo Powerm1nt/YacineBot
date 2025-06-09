@@ -21,6 +21,7 @@ import { morpion } from './commands/morpion.js'
 import { moignon } from './commands/moignon.js'
 import { SUPABASE_CONFIG, validateDatabaseConfig, validateSupabaseConfig } from './config/database.js'
 import { config } from './commands/config.js'
+import { isSchedulerEnabled } from './utils/configService.js'
 dotenv.config();
 
 // Vérification de la configuration de la base de données
@@ -107,8 +108,10 @@ async function registerFeatures(client) {
     await ai(client);
 
     // Initialiser le planificateur de tâches automatiques
-    await initScheduler(client);
-    console.log('Planificateur de tâches automatiques initialisé');
+    if (isSchedulerEnabled()) {
+      await initScheduler(client);
+      console.log('Planificateur de tâches automatiques initialisé');
+    }
   } catch (error) {
     console.error('Erreur lors de l\'initialisation des fonctionnalités:', error);
     // Ne pas quitter pour permettre le fonctionnement de base du bot

@@ -248,8 +248,8 @@ function isActiveHour (startHour = 8, endHour = 23) {
  */
 export async function initScheduler (client) {
   // Vérifier si les messages automatiques sont activés
-  if (process.env.ENABLE_AUTO_MESSAGES !== 'true') {
-    console.log('Les messages automatiques sont désactivés dans les variables d\'environnement')
+  if (!(await isSchedulerEnabled()) || process.env.ENABLE_AUTO_MESSAGES !== 'true') {
+    console.log('Les messages automatiques sont désactivés')
     return
   }
 
