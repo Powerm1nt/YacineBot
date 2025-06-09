@@ -51,8 +51,26 @@ CREATE TABLE "tasks" (
     "error" TEXT,
     "retry_count" INTEGER NOT NULL DEFAULT 0,
     "next_retry_at" TIMESTAMP(3),
+    "scheduler_id" TEXT,
+    "taskNumber" INTEGER,
+    "nextExecution" TIMESTAMP(3),
+    "target_channel_type" TEXT,
 
     CONSTRAINT "tasks_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "task_executions" (
+    "id" SERIAL NOT NULL,
+    "task_id" BIGINT NOT NULL,
+    "scheduler_id" TEXT,
+    "channel_id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "executed_at" TIMESTAMP(3) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "task_executions_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -82,6 +100,9 @@ CREATE UNIQUE INDEX "conversations_channel_id_guild_id_key" ON "conversations"("
 CREATE UNIQUE INDEX "guild_preferences_guild_id_key" ON "guild_preferences"("guild_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "tasks_scheduler_id_key" ON "tasks"("scheduler_id");
+
+-- CreateIndex
 CREATE INDEX "usage_stats_user_id_idx" ON "usage_stats"("user_id");
 
 -- CreateIndex
@@ -89,3 +110,6 @@ CREATE INDEX "usage_stats_used_at_idx" ON "usage_stats"("used_at");
 
 -- AddForeignKey
 ALTER TABLE "messages" ADD CONSTRAINT "messages_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "task_executions" ADD CONSTRAINT "task_executions_task_id_fkey" FOREIGN KEY ("task_id") REFERENCES "tasks"("id") ON DELETE CASCADE ON UPDATE CASCADE;

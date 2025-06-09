@@ -5,6 +5,7 @@ import { format, addMinutes, getHours } from 'date-fns'
 import dotenv from 'dotenv'
 import { randomUUID } from 'crypto'
 import { isGuildEnabled, isChannelTypeEnabled, getSchedulerConfig } from '../utils/configManager.js'
+import { taskService } from './taskService.js'
 
 dotenv.config()
 
@@ -289,7 +290,7 @@ function isActiveHour (startHour = 8, endHour = 23) {
  * Initialise le planificateur de tâches
  * @param {Object} client - Client Discord
  */
-export function initScheduler (client) {
+export async function initScheduler (client) {
   // Vérifier si les messages automatiques sont activés
   if (process.env.ENABLE_AUTO_MESSAGES !== 'true') {
     console.log('Les messages automatiques sont désactivés dans les variables d\'environnement')
@@ -303,12 +304,58 @@ export function initScheduler (client) {
   console.log(`Planificateur initialisé à ${currentTime} avec le fuseau horaire système (${TIMEZONE} configuré)`)
   console.log(`Configuration: ${MIN_TASKS}-${MAX_TASKS} tâches, délai: ${formatDelay(MIN_DELAY)}-${formatDelay(MAX_DELAY)}`)
 
-  // Créer un nombre aléatoire de tâches
-  const taskCount = getRandomTaskCount()
-  console.log(`Création de ${taskCount} tâches aléatoires...`)
+  try {
+    // Vérifier l'accès à la base de données avant de créer des tâches
+    const { prisma } = await import('../models/index.js');
+    const { checkSupabaseConnection } = await import('./supabaseService.js');
 
-  for (let i = 0; i < taskCount; i++) {
-    createRandomTask(client, i + 1)
+    // Tenter d'accéder à la base de données
+    let dbAccessible = false;
+    try {
+      // Vérifier l'accès à Prisma
+      await prisma.$queryRaw`SELECT 1`;
+      // Vérifier l'accès à Supabase pour les fonctionnalités legacy
+      const supabaseConnected = await checkSupabaseConnection();
+
+      if (!supabaseConnected) {
+        console.warn('Avertissement: Connexion à Supabase échouée. Les tâches seront créées mais certaines fonctionnalités pourraient être limitées.');
+      }
+
+      dbAccessible = true;
+    } catch (dbError) {
+      console.error('Erreur d\'accès à la base de données:', dbError.message);
+      dbAccessible = false;
+    }
+
+    if (!dbAccessible) {
+      console.warn('Impossible de créer des tâches planifiées - pas d\'accès à la base de données');
+      return;
+    }
+
+    // Tenter de restaurer les tâches existantes depuis la base de données
+    const savedTasks = await taskService.getAllTasks();
+
+    if (savedTasks && savedTasks.length > 0) {
+      console.log(`Restauration de ${savedTasks.length} tâches depuis la base de données...`);
+
+      // Supprimer d'abord les anciennes tâches de la base de données
+      await taskService.deleteAllTasks();
+
+      // Recréer les tâches avec de nouveaux délais
+      for (let i = 0; i < savedTasks.length; i++) {
+        await createRandomTask(client, savedTasks[i].taskNumber);
+      }
+    } else {
+      // Aucune tâche trouvée, créer un nombre aléatoire de nouvelles tâches
+      const taskCount = getRandomTaskCount();
+      console.log(`Aucune tâche existante trouvée. Création de ${taskCount} nouvelles tâches...`);
+
+      for (let i = 0; i < taskCount; i++) {
+        await createRandomTask(client, i + 1);
+      }
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'initialisation du planificateur:', error);
   }
 }
 
@@ -317,7 +364,7 @@ export function initScheduler (client) {
  * @param {Object} client - Client Discord
  * @param {number} taskNumber - Numéro de la tâche (pour identification)
  */
-function createRandomTask (client, taskNumber) {
+async function createRandomTask (client, taskNumber) {
   // Générer un identifiant unique pour cette tâche
   const taskId = `random-question-task-${taskNumber}-${randomUUID().substring(0, 8)}`
 
@@ -365,10 +412,22 @@ function createRandomTask (client, taskNumber) {
         }
 
         // Envoyer le message avec mention
-        await channel.send(`<@${user.id}> ${question}`)
+        const sentMessage = await channel.send(`<@${user.id}> ${question}`)
 
         const currentTime = formatDate(new Date(), 'HH:mm:ss')
         console.log(`[${currentTime}] Message envoyé à ${user.user.username} dans ${channel.channelInfo.name} - Fuseau horaire: ${TIMEZONE}`)
+
+        // Enregistrer l'exécution dans la base de données
+        try {
+          await taskService.logTaskExecution(
+            taskId, // Utiliser taskId comme schedulerId
+            channel.id,
+            user.id,
+            question
+          );
+        } catch (logError) {
+          console.warn(`Erreur lors de l'enregistrement de l'exécution de la tâche ${taskId}:`, logError.message);
+        }
 
         // Recréer la tâche avec un nouveau délai
         if (activeTasks.has(taskId)) {
@@ -429,6 +488,13 @@ function createRandomTask (client, taskNumber) {
     targetChannel: null,
     targetUser: null
   })
+
+  // Enregistrer la tâche dans la base de données
+  try {
+    await taskService.saveTask(taskId, taskNumber, nextExecutionTime, targetChannelType);
+  } catch (error) {
+    console.warn(`Erreur lors de l'enregistrement de la tâche ${taskId} en base de données:`, error.message);
+  }
 }
 
 /**

@@ -1,161 +1,139 @@
 /**
- * Service pour gérer les tâches planifiées
+ * Service pour gérer la persistance des tâches planifiées
  */
 import { prisma } from '../models/index.js';
 
 /**
- * Ajoute une nouvelle tâche à la file d'attente
- * @param {string} type - Type de tâche
- * @param {Object} data - Données associées à la tâche
- * @param {number} priority - Priorité de la tâche (0-10)
- * @returns {Promise<Object>} - Tâche créée
+ * Sauvegarde une tâche planifiée dans la base de données
+ * @param {string} schedulerId - ID unique de la tâche (ancien taskId)
+ * @param {number} taskNumber - Numéro de la tâche
+ * @param {Date} nextExecution - Date de la prochaine exécution
+ * @param {string} targetChannelType - Type de canal cible (guild, dm, group)
+ * @returns {Promise<Object>} La tâche créée
  */
-export async function addTask(type, data, priority = 0) {
+export async function saveTask(schedulerId, taskNumber, nextExecution, targetChannelType = null) {
   try {
-    const task = await prisma.task.create({
-      data: {
-        type,
-        data,
-        priority,
-        status: 'pending'
+    return await prisma.task.upsert({
+      where: { schedulerId },
+      update: { 
+        taskNumber,
+        nextExecution,
+        targetChannelType,
+        updatedAt: new Date()
+      },
+      create: {
+        type: 'scheduler',
+        status: 'pending',
+        data: {},
+        schedulerId,
+        taskNumber,
+        nextExecution,
+        targetChannelType
       }
     });
-
-    return task;
   } catch (error) {
-    console.error('Erreur lors de l\'ajout de la tâche:', error);
+    console.error('Erreur lors de la sauvegarde de la tâche:', error);
     throw error;
   }
 }
 
 /**
- * Récupère la prochaine tâche à exécuter
- * @param {Array<string>} types - Types de tâches à récupérer
- * @returns {Promise<Object|null>} - Tâche à exécuter ou null
+ * Récupère toutes les tâches planifiées
+ * @returns {Promise<Array>} Liste des tâches
  */
-export async function getNextTask(types = []) {
+export async function getAllTasks() {
   try {
-    const whereClause = {
-      status: 'pending',
-      OR: [
-        { nextRetryAt: null },
-        { nextRetryAt: { lte: new Date() } }
-      ]
-    };
+    return await prisma.task.findMany({
+      where: { 
+        type: 'scheduler',
+        schedulerId: { not: null }
+      }
+    });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des tâches:', error);
+    return [];
+  }
+}
 
-    // Ajouter le filtre de types si spécifié
-    if (types && types.length > 0) {
-      whereClause.type = { in: types };
-    }
+/**
+ * Supprime une tâche planifiée
+ * @param {string} schedulerId - ID du scheduler (ancien taskId) à supprimer
+ * @returns {Promise<boolean>} Succès de l'opération
+ */
+export async function deleteTask(schedulerId) {
+  try {
+    await prisma.task.delete({
+      where: { schedulerId }
+    });
+    return true;
+  } catch (error) {
+    console.error('Erreur lors de la suppression de la tâche:', error);
+    return false;
+  }
+}
 
-    // Récupérer et verrouiller la tâche dans une transaction
-    const task = await prisma.$transaction(async (tx) => {
-      const nextTask = await tx.task.findFirst({
-        where: whereClause,
-        orderBy: [
-          { priority: 'desc' },
-          { createdAt: 'asc' }
-        ]
-      });
+/**
+ * Supprime toutes les tâches planifiées
+ * @returns {Promise<boolean>} Succès de l'opération
+ */
+export async function deleteAllTasks() {
+  try {
+    await prisma.task.deleteMany({
+      where: { 
+        type: 'scheduler',
+        schedulerId: { not: null }
+      }
+    });
+    return true;
+  } catch (error) {
+    console.error('Erreur lors de la suppression de toutes les tâches:', error);
+    return false;
+  }
+}
 
-      if (!nextTask) return null;
-
-      // Marquer comme démarrée
-      return await tx.task.update({
-        where: { id: nextTask.id },
-        data: {
-          status: 'processing',
-          startedAt: new Date(),
-          updatedAt: new Date()
-        }
-      });
+/**
+ * Enregistre l'exécution d'une tâche
+ * @param {string} schedulerId - ID du scheduler (ancien taskId)
+ * @param {string} channelId - ID du canal où le message a été envoyé
+ * @param {string} userId - ID de l'utilisateur ciblé
+ * @param {string} message - Message envoyé
+ * @returns {Promise<Object>} L'exécution enregistrée
+ */
+export async function logTaskExecution(schedulerId, channelId, userId, message) {
+  try {
+    // Rechercher d'abord la tâche par son schedulerId
+    const task = await prisma.task.findUnique({
+      where: { schedulerId }
     });
 
-    return task;
+    if (!task) {
+      console.warn(`Aucune tâche trouvée avec schedulerId: ${schedulerId}`);
+      return null;
+    }
+
+    // Créer l'exécution liée à la tâche
+    return await prisma.taskExecution.create({
+      data: {
+        taskId: task.id,
+        schedulerId,
+        channelId,
+        userId,
+        message,
+        executedAt: new Date()
+      }
+    });
   } catch (error) {
-    console.error('Erreur lors de la récupération de la prochaine tâche:', error);
+    console.error('Erreur lors de l\'enregistrement de l\'exécution de la tâche:', error);
+    // Ne pas propager l'erreur pour ne pas interrompre l'exécution de la tâche
     return null;
   }
 }
 
-/**
- * Marque une tâche comme terminée
- * @param {number} taskId - ID de la tâche
- * @returns {Promise<boolean>} - Succès de l'opération
- */
-export async function completeTask(taskId) {
-  try {
-    await prisma.task.update({
-      where: { id: taskId },
-      data: {
-        status: 'completed',
-        completedAt: new Date(),
-        updatedAt: new Date()
-      }
-    });
-
-    return true;
-  } catch (error) {
-    console.error('Erreur lors de la complétion de la tâche:', error);
-    return false;
-  }
-}
-
-/**
- * Marque une tâche comme échouée
- * @param {number} taskId - ID de la tâche
- * @param {string} error - Message d'erreur
- * @returns {Promise<boolean>} - Succès de l'opération
- */
-export async function failTask(taskId, error) {
-  try {
-    const task = await prisma.task.findUnique({
-      where: { id: taskId }
-    });
-
-    if (!task) return false;
-
-    const retryCount = (task.retryCount || 0) + 1;
-    const maxRetries = 3; // Nombre maximal de tentatives
-
-    if (retryCount <= maxRetries) {
-      // Calculer le délai exponentiel pour la prochaine tentative
-      const backoffMinutes = Math.pow(2, retryCount - 1) * 5; // 5, 10, 20 minutes
-      const nextRetryAt = new Date(Date.now() + backoffMinutes * 60 * 1000);
-
-      await prisma.task.update({
-        where: { id: taskId },
-        data: {
-          status: 'retry',
-          error,
-          retryCount,
-          nextRetryAt,
-          updatedAt: new Date()
-        }
-      });
-    } else {
-      // Plus de tentatives, marquer comme définitivement échouée
-      await prisma.task.update({
-        where: { id: taskId },
-        data: {
-          status: 'failed',
-          error,
-          failedAt: new Date(),
-          updatedAt: new Date()
-        }
-      });
-    }
-
-    return true;
-  } catch (error) {
-    console.error('Erreur lors de la gestion de l\'échec de la tâche:', error);
-    return false;
-  }
-}
-
+// Exporter un objet pour les imports nommés
 export const taskService = {
-  addTask,
-  getNextTask,
-  completeTask,
-  failTask
+  saveTask,
+  getAllTasks,
+  deleteTask,
+  deleteAllTasks,
+  logTaskExecution
 };

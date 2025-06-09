@@ -100,31 +100,18 @@ if (process.env?.TOKEN === undefined) {
   throw new Error('Token not found');
 }
 
-async function testSupabaseConnection() {
+async function registerFeatures(client) {
   try {
-    const { data, error } = await supabase.from('health_check').select('*').limit(1);
-    if (error) throw error;
-    console.log('Connexion à Supabase établie avec succès');
+    // Initialiser l'IA
+    await ai(client);
+
+    // Initialiser le planificateur de tâches automatiques
+    await initScheduler(client);
+    console.log('Planificateur de tâches automatiques initialisé');
   } catch (error) {
-    console.warn('Avertissement: Connexion à Supabase échouée, vérifiez vos identifiants et la table health_check:', error.message);
-    // Ne pas quitter le processus pour permettre l'exécution même sans Supabase fonctionnel
+    console.error('Erreur lors de l\'initialisation des fonctionnalités:', error);
+    // Ne pas quitter pour permettre le fonctionnement de base du bot
   }
-}
-
-function registerFeatures(client) {
-  // Tester la connexion à Supabase
-  testSupabaseConnection()
-    .catch(e => {
-      console.error(e);
-      process.exit(1);
-    });
-
-  ai(client)
-  .catch(console.error);
-
-  // Initialiser le planificateur de tâches automatiques
-  initScheduler(client);
-  console.log('Planificateur de tâches automatiques initialisé');
 }
 
   // Gestionnaire d'erreurs global pour éviter les crashs du bot

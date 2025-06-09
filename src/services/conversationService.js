@@ -16,7 +16,7 @@ export async function getConversationHistory(channelId, guildId = null) {
       where: {
         channelId_guildId: {
           channelId,
-          guildId
+          guildId: guildId || ""
         }
       },
       include: {
@@ -52,7 +52,7 @@ export async function addMessage(channelId, userId, userName, content, isBot = f
       where: {
         channelId_guildId: {
           channelId,
-          guildId
+          guildId: guildId || ""
         }
       }
     });
@@ -61,7 +61,7 @@ export async function addMessage(channelId, userId, userName, content, isBot = f
       conversation = await prisma.conversation.create({
         data: {
           channelId,
-          guildId
+          guildId: guildId || ""
         }
       });
     } else {
@@ -102,7 +102,7 @@ export async function deleteConversationHistory(channelId, guildId = null) {
       where: {
         channelId_guildId: {
           channelId,
-          guildId
+          guildId: guildId || ""
         }
       }
     });
@@ -127,7 +127,7 @@ export async function getRecentMessages(channelId, guildId = null, limit = 10) {
       where: {
         channelId_guildId: {
           channelId,
-          guildId
+          guildId: guildId || ""
         }
       },
       include: {

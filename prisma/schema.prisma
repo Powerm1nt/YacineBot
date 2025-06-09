@@ -50,13 +50,16 @@ model GuildPreference {
 }
 
 model Task {
-  id          BigInt    @id @default(autoincrement())
-  type        String
-  status      String    @default("pending")
-  data        Json
-  priority    Int       @default(0)
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @default(now()) @map("updated_at")
+  id        BigInt   @id @default(autoincrement())
+  // Champs communs à toutes les tâches
+  type      String
+  status    String   @default("pending")
+  data      Json
+  priority  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  // Champs pour les tâches du worker
   startedAt   DateTime? @map("started_at")
   completedAt DateTime? @map("completed_at")
   failedAt    DateTime? @map("failed_at")
@@ -64,7 +67,32 @@ model Task {
   retryCount  Int       @default(0) @map("retry_count")
   nextRetryAt DateTime? @map("next_retry_at")
 
+  // Champs pour les tâches planifiées (scheduler)
+  schedulerId       String?   @unique @map("scheduler_id") // Correspond à l'ancien taskId
+  taskNumber        Int? // Numéro de la tâche planifiée
+  nextExecution     DateTime? // Date de la prochaine exécution
+  targetChannelType String?   @map("target_channel_type") // Type de canal cible
+
+  // Relations
+  executions TaskExecution[]
+
   @@map("tasks")
+}
+
+// Modèle pour les exécutions des tâches
+model TaskExecution {
+  id          Int      @id @default(autoincrement())
+  // Relation avec la tâche parente
+  taskId      BigInt   @map("task_id")
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  schedulerId String?  @map("scheduler_id") // Pour garder une référence à l'ancien taskId (schedulerId)
+  channelId   String   @map("channel_id")
+  userId      String   @map("user_id")
+  message     String
+  executedAt  DateTime @map("executed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("task_executions")
 }
 
 model UsageStat {
