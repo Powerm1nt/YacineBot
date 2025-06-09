@@ -4,7 +4,8 @@ import {
   getLastResponseId,
   getContextStats,
   cleanupOldContexts,
-  resetContext
+  resetContext,
+  getAllContexts
 } from '../utils/contextManager.js'
 import { conversationService } from '../services/conversationService.js'
 import { sendLongMessage } from '../utils/messageUtils.js'
@@ -112,16 +113,57 @@ async function showContextStats(client, message) {
 
 async function listAllContexts(client, message) {
   try {
-    // Dans cette version simplifiée, nous allons juste afficher un résumé
-    // car nous n'avons pas accès à getAllContexts() sans la modifier
+    // Utiliser la fonction getAllContexts pour obtenir tous les contextes en mémoire
+    const allContexts = getAllContexts();
     const stats = getContextStats();
 
-    let response = '## 📋 Résumé des contextes en mémoire\n\n';
-    response += 'Pour voir plus de détails sur un contexte spécifique, utilisez `context memory <channelId>`\n\n';
+    let response = '## 📋 Liste des contextes en mémoire\n\n';
+    response += 'Vue d\'ensemble de tous les contextes actuellement en mémoire\n\n';
 
     response += `**Contextes de serveur:** ${stats.contextCounts.guild || 0} contextes\n`;
     response += `**Contextes DM:** ${stats.contextCounts.dm || 0} contextes\n`;
     response += `**Contextes de groupe:** ${stats.contextCounts.group || 0} contextes\n\n`;
+
+    // Regrouper les contextes par type
+    const byType = {
+      guild: allContexts.filter(c => c.type === 'guild'),
+      dm: allContexts.filter(c => c.type === 'dm'),
+      group: allContexts.filter(c => c.type === 'group')
+    };
+
+    // Afficher les contextes de serveur récents (max 5)
+    if (byType.guild.length > 0) {
+      response += '### 🏠 Contextes de serveur récents\n';
+      const recentGuildContexts = byType.guild
+        .sort((a, b) => new Date(b.data.lastMessageTimestamp || 0) - new Date(a.data.lastMessageTimestamp || 0))
+        .slice(0, 5);
+
+      recentGuildContexts.forEach(ctx => {
+        const participantsCount = ctx.data.participants?.length || 0;
+        const lastActive = ctx.data.lastMessageTimestamp ? 
+          format(new Date(ctx.data.lastMessageTimestamp), 'dd/MM/yyyy HH:mm:ss') : 'Inconnu';
+
+        response += `• **Canal:** ${ctx.key} - **Participants:** ${participantsCount} - **Dernier message:** ${lastActive}\n`;
+      });
+      response += '\n';
+    }
+
+    // Afficher les contextes DM récents (max 5)
+    if (byType.dm.length > 0) {
+      response += '### 💬 Contextes de messages privés récents\n';
+      const recentDmContexts = byType.dm
+        .sort((a, b) => new Date(b.data.lastMessageTimestamp || 0) - new Date(a.data.lastMessageTimestamp || 0))
+        .slice(0, 5);
+
+      recentDmContexts.forEach(ctx => {
+        const lastAuthor = ctx.data.lastAuthorName || 'Inconnu';
+        const lastActive = ctx.data.lastMessageTimestamp ? 
+          format(new Date(ctx.data.lastMessageTimestamp), 'dd/MM/yyyy HH:mm:ss') : 'Inconnu';
+
+        response += `• **Utilisateur:** ${lastAuthor} - **Canal:** ${ctx.key} - **Dernier message:** ${lastActive}\n`;
+      });
+      response += '\n';
+    }
 
     response += `*Total: ${stats.contextCounts.total || 0} contextes en mémoire*\n\n`;
     response += `Vous pouvez répondre avec **nettoyer** pour supprimer les contextes inactifs.`;
