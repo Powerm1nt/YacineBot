@@ -11,12 +11,45 @@ import { conversationService } from '../services/conversationService.js'
 import { sendLongMessage } from '../utils/messageUtils.js'
 import { format } from 'date-fns'
 
+const EMOJIS = {
+  CLEAN: '🧹',
+  REFRESH: '🔄',
+  DETAILS: '🔍',
+  RESET: '⚠️',
+  BACK: '⬅️',
+  CONFIRM: '✅',
+  CANCEL: '❌',
+  GUILD: '🏠',
+  DM: '💬',
+  GROUP: '👥'
+};
+
 export const metadata = {
   name: 'context',
   description: 'Affiche les informations sur le contexte actuel et les statistiques',
   restricted: true,
   usage: 'context [action]'
 };
+
+  async function addReactions(message, emojis) {
+  try {
+    for (const emoji of emojis) {
+      await message.react(emoji);
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'ajout des réactions:', error);
+  }
+  }
+
+  function createReactionCollector(message, filter, time = 60000) {
+  return message.awaitReactions({ filter, max: 1, time });
+  }
+
+  async function safeDeleteMessage(message) {
+  try {
+    await message.delete();
+  } catch (error) {}
+  }
 
 export async function context(client, message, args) {
   const action = args[0]?.toLowerCase();
@@ -166,23 +199,153 @@ async function listAllContexts(client, message) {
     }
 
     response += `*Total: ${stats.contextCounts.total || 0} contextes en mémoire*\n\n`;
-    response += `Vous pouvez répondre avec **nettoyer** pour supprimer les contextes inactifs.`;
+    response += `Actions disponibles:\n\n`;
+    response += `${EMOJIS.CLEAN} - Nettoyer les contextes inactifs\n`;
+    response += `${EMOJIS.REFRESH} - Rafraîchir la liste\n`;
+    response += `${EMOJIS.DETAILS} - Voir plus de détails\n`;
 
     const sentMessage = await message.reply(response);
 
-    // Configurer un collecteur pour le message de réponse
-    const filter = m => m.author.id === message.author.id && 
-                        m.content.toLowerCase().includes('nettoyer');
-    const collector = message.channel.createMessageCollector({ filter, time: 60000, max: 1 });
+    // Ajouter les réactions pour les actions
+    await addReactions(sentMessage, [EMOJIS.CLEAN, EMOJIS.REFRESH, EMOJIS.DETAILS]);
 
-    collector.on('collect', async m => {
-      const cleanedCount = await cleanupOldContexts();
-      await message.channel.send(`✅ ${cleanedCount} contextes inactifs ont été nettoyés.`);
-    });
+    // Configurer un collecteur pour les réactions
+    const filter = (reaction, user) => {
+      return [EMOJIS.CLEAN, EMOJIS.REFRESH, EMOJIS.DETAILS].includes(reaction.emoji.name) &&
+             user.id === message.author.id;
+    };
+
+    const collected = await createReactionCollector(sentMessage, filter);
+
+    if (collected.size > 0) {
+      const reaction = collected.first();
+      await safeDeleteMessage(sentMessage);
+
+      switch(reaction.emoji.name) {
+        case EMOJIS.CLEAN:
+          const cleanedCount = await cleanupOldContexts();
+          const cleanMessage = await message.reply(`✅ ${cleanedCount} contextes inactifs ont été nettoyés.`);
+          setTimeout(() => safeDeleteMessage(cleanMessage), 3000);
+          return listAllContexts(client, message); // Rafraîchir la liste après nettoyage
+
+        case EMOJIS.REFRESH:
+          return listAllContexts(client, message); // Rafraîchir simplement la liste
+
+        case EMOJIS.DETAILS:
+          return showDetailedContextList(client, message, allContexts);
+      }
+    } else {
+      await safeDeleteMessage(sentMessage);
+      return message.reply('⏱️ Action annulée - temps écoulé.');
+    }
 
   } catch (error) {
     console.error('Erreur lors de l\'affichage de la liste des contextes:', error);
     return message.reply('Une erreur est survenue lors de la récupération de la liste des contextes.');
+  }
+}
+
+async function showDetailedContextList(client, message, allContexts) {
+  try {
+    // Créer une liste plus détaillée des contextes
+    let response = '## 🔍 Détails des contextes en mémoire\n\n';
+
+    // Grouper par type
+    const byType = {
+      guild: allContexts.filter(c => c.type === 'guild'),
+      dm: allContexts.filter(c => c.type === 'dm'),
+      group: allContexts.filter(c => c.type === 'group')
+    };
+
+    // Afficher les détails pour les contextes de serveur
+    if (byType.guild.length > 0) {
+      response += `### ${EMOJIS.GUILD} Contextes de serveur (${byType.guild.length})\n`;
+      byType.guild
+        .sort((a, b) => new Date(b.data.lastMessageTimestamp || 0) - new Date(a.data.lastMessageTimestamp || 0))
+        .forEach(ctx => {
+          const participantsCount = ctx.data.participants?.length || 0;
+          const messageCount = ctx.data.participants?.reduce((sum, p) => sum + (p.messageCount || 0), 0) || 0;
+          const lastActive = ctx.data.lastMessageTimestamp ? 
+            format(new Date(ctx.data.lastMessageTimestamp), 'dd/MM/yyyy HH:mm:ss') : 'Inconnu';
+
+          response += `• **Canal:** ${ctx.key}\n`;
+          response += `  - **Participants:** ${participantsCount} (${messageCount} messages)\n`;
+          response += `  - **Dernier message:** ${lastActive}\n`;
+          response += `  - **Dernier auteur:** ${ctx.data.lastAuthorName || 'Inconnu'}\n\n`;
+        });
+    }
+
+    // Afficher les détails pour les contextes DM
+    if (byType.dm.length > 0) {
+      response += `### ${EMOJIS.DM} Contextes de messages privés (${byType.dm.length})\n`;
+      byType.dm
+        .sort((a, b) => new Date(b.data.lastMessageTimestamp || 0) - new Date(a.data.lastMessageTimestamp || 0))
+        .forEach(ctx => {
+          const messageCount = ctx.data.participants?.reduce((sum, p) => sum + (p.messageCount || 0), 0) || 0;
+          const lastActive = ctx.data.lastMessageTimestamp ? 
+            format(new Date(ctx.data.lastMessageTimestamp), 'dd/MM/yyyy HH:mm:ss') : 'Inconnu';
+
+          response += `• **Canal:** ${ctx.key}\n`;
+          response += `  - **Utilisateur:** ${ctx.data.lastAuthorName || 'Inconnu'}\n`;
+          response += `  - **Messages:** ${messageCount}\n`;
+          response += `  - **Dernier message:** ${lastActive}\n\n`;
+        });
+    }
+
+    // Afficher les détails pour les contextes de groupe
+    if (byType.group.length > 0) {
+      response += `### ${EMOJIS.GROUP} Contextes de groupe (${byType.group.length})\n`;
+      byType.group
+        .sort((a, b) => new Date(b.data.lastMessageTimestamp || 0) - new Date(a.data.lastMessageTimestamp || 0))
+        .forEach(ctx => {
+          const participantsCount = ctx.data.participants?.length || 0;
+          const messageCount = ctx.data.participants?.reduce((sum, p) => sum + (p.messageCount || 0), 0) || 0;
+          const lastActive = ctx.data.lastMessageTimestamp ? 
+            format(new Date(ctx.data.lastMessageTimestamp), 'dd/MM/yyyy HH:mm:ss') : 'Inconnu';
+
+          response += `• **Groupe:** ${ctx.key}\n`;
+          response += `  - **Participants:** ${participantsCount} (${messageCount} messages)\n`;
+          response += `  - **Dernier message:** ${lastActive}\n`;
+          response += `  - **Dernier auteur:** ${ctx.data.lastAuthorName || 'Inconnu'}\n\n`;
+        });
+    }
+
+    response += `\n${EMOJIS.BACK} - Retourner à la liste principale\n${EMOJIS.CLEAN} - Nettoyer les contextes inactifs`;
+
+    const detailsMessage = await message.reply(response);
+
+    // Ajouter les réactions pour les actions
+    await addReactions(detailsMessage, [EMOJIS.BACK, EMOJIS.CLEAN]);
+
+    // Configurer un collecteur pour les réactions
+    const filter = (reaction, user) => {
+      return [EMOJIS.BACK, EMOJIS.CLEAN].includes(reaction.emoji.name) &&
+             user.id === message.author.id;
+    };
+
+    const collected = await createReactionCollector(detailsMessage, filter);
+
+    await safeDeleteMessage(detailsMessage);
+
+    if (collected.size > 0) {
+      const reaction = collected.first();
+
+      switch(reaction.emoji.name) {
+        case EMOJIS.CLEAN:
+          const cleanedCount = await cleanupOldContexts();
+          const cleanMessage = await message.reply(`✅ ${cleanedCount} contextes inactifs ont été nettoyés.`);
+          setTimeout(() => safeDeleteMessage(cleanMessage), 3000);
+          return listAllContexts(client, message);
+
+        case EMOJIS.BACK:
+          return listAllContexts(client, message);
+      }
+    } else {
+      return message.reply('⏱️ Action annulée - temps écoulé.');
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'affichage des détails des contextes:', error);
+    return message.reply('Une erreur est survenue lors de la récupération des détails des contextes.');
   }
 }
 
@@ -248,12 +411,20 @@ async function readConversationsFromDB(client, message, channelId) {
     await sendLongMessage(message.channel, summary, { reply: message.reply.bind(message) });
 
     // Demander si l'utilisateur souhaite voir les messages détaillés
-    const confirmation = await message.reply('Voulez-vous voir les 20 derniers messages détaillés ? (oui/non)');
+    const confirmation = await message.reply(`Voulez-vous voir les 20 derniers messages détaillés ?\n\n${EMOJIS.CONFIRM} - Oui\n${EMOJIS.CANCEL} - Non`);
 
-    const filter = m => m.author.id === message.author.id && ['oui', 'non', 'yes', 'no'].includes(m.content.toLowerCase());
-    const collected = await message.channel.awaitMessages({ filter, max: 1, time: 30000 });
+    await addReactions(confirmation, [EMOJIS.CONFIRM, EMOJIS.CANCEL]);
 
-    if (collected.size > 0 && ['oui', 'yes'].includes(collected.first().content.toLowerCase())) {
+    const filter = (reaction, user) => {
+      return [EMOJIS.CONFIRM, EMOJIS.CANCEL].includes(reaction.emoji.name) &&
+             user.id === message.author.id;
+    };
+
+    const collected = await createReactionCollector(confirmation, filter, 30000);
+
+    await safeDeleteMessage(confirmation);
+
+    if (collected.size > 0 && collected.first().emoji.name === EMOJIS.CONFIRM) {
       // Afficher les 20 derniers messages
       const lastMessages = conversations.slice(-20);
 
@@ -370,25 +541,53 @@ async function readConversationsFromMemory(client, message, contextKeyParam) {
       response += participantsInfo + '\n\n';
     }
 
-    response += 'Pour réinitialiser ce contexte, répondez avec **reset** à ce message.'
+    response += `\n\n${EMOJIS.RESET} - Réinitialiser ce contexte`;
 
     const sentMessage = await message.reply(response);
 
-    // Configurer un collecteur pour le message de réponse au lieu d'utiliser un bouton
-    const filter = m => m.author.id === message.author.id && 
-                      (m.content.toLowerCase() === 'reset' || 
-                       m.content.toLowerCase() === 'réinitialiser' ||
-                       m.content.toLowerCase().includes('reset') ||
-                       m.content.toLowerCase().includes('réinitialiser'));
+    // Ajouter les réactions pour les actions
+    await addReactions(sentMessage, [EMOJIS.RESET]);
 
-    const collector = message.channel.createMessageCollector({ filter, time: 60000, max: 1 });
+    // Configurer un collecteur pour les réactions
+    const filter = (reaction, user) => {
+      return reaction.emoji.name === EMOJIS.RESET && user.id === message.author.id;
+    };
 
-    collector.on('collect', async m => {
-      const success = await resetContext(message);
-      await message.channel.send(success ? 
-        '✅ Contexte réinitialisé avec succès !' : 
-        '❌ Erreur lors de la réinitialisation du contexte.');
-    });
+    const collected = await createReactionCollector(sentMessage, filter);
+
+    if (collected.size > 0) {
+      // Demander confirmation avant de réinitialiser
+      await safeDeleteMessage(sentMessage);
+
+      const confirmMessage = await message.reply(
+        `**⚠️ Confirmation de réinitialisation**\n\n` +
+        `Êtes-vous sûr de vouloir réinitialiser ce contexte ? Cette action ne peut pas être annulée.\n\n` +
+        `${EMOJIS.CONFIRM} - Confirmer la réinitialisation\n` +
+        `${EMOJIS.CANCEL} - Annuler`
+      );
+
+      await addReactions(confirmMessage, [EMOJIS.CONFIRM, EMOJIS.CANCEL]);
+
+      const confirmFilter = (reaction, user) => {
+        return [EMOJIS.CONFIRM, EMOJIS.CANCEL].includes(reaction.emoji.name) &&
+               user.id === message.author.id;
+      };
+
+      const confirmCollected = await createReactionCollector(confirmMessage, confirmFilter);
+
+      await safeDeleteMessage(confirmMessage);
+
+      if (confirmCollected.size > 0 && confirmCollected.first().emoji.name === EMOJIS.CONFIRM) {
+        const success = await resetContext(message);
+        const resultMessage = await message.reply(success ? 
+          '✅ Contexte réinitialisé avec succès !' : 
+          '❌ Erreur lors de la réinitialisation du contexte.');
+
+        setTimeout(() => safeDeleteMessage(resultMessage), 3000);
+      }
+    } else {
+      await safeDeleteMessage(sentMessage);
+    }
 
   } catch (error) {
     console.error('Erreur lors de la lecture des conversations depuis la mémoire:', error);
