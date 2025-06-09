@@ -1,0 +1,9 @@
+name: make-plans
+version: 0.0.1
+schema: v1
+rules:
+  - always make small modifications for each steps
+    make a plan on the plans folder, check each steps when done
+    don't put too much comments on the code, put documentation (jsdoc)
+
+
