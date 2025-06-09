@@ -1,10 +1,9 @@
 import { ToadScheduler, SimpleIntervalJob, AsyncTask } from 'toad-scheduler'
 import { OpenAI } from 'openai/client.mjs'
-import { convertAITextToDiscordMentions } from '../utils/mentionUtils.js'
 import { format, addMinutes, getHours } from 'date-fns'
 import dotenv from 'dotenv'
 import { randomUUID } from 'crypto'
-import { isGuildEnabled, isChannelTypeEnabled, getSchedulerConfig } from '../utils/configManager.js'
+import { isGuildEnabled, isChannelTypeEnabled } from '../utils/configManager.js'
 import { taskService } from './taskService.js'
 
 dotenv.config()

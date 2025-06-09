@@ -1,4 +1,4 @@
-import { loadConfig, saveConfig, getSchedulerConfig, setChannelTypeEnabled, isChannelTypeEnabled } from './configManager.js';
+import { loadConfig, saveConfig, setChannelTypeEnabled, isChannelTypeEnabled } from './configManager.js';
 
 /**
  * Gère les commandes de configuration

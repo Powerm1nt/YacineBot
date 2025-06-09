@@ -1,13 +1,6 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { PrismaClient } from '@prisma/client';
 
-// Obtenir le chemin du répertoire actuel
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Chemin vers le fichier de configuration
-const configPath = path.join(__dirname, '..', '..', 'config.json');
+const prisma = new PrismaClient();
 
 /**
  * Configuration par défaut
@@ -29,19 +22,26 @@ const defaultConfig = {
 };
 
 /**
- * Charge la configuration du bot
+ * Clé utilisée pour stocker la configuration principale dans la base de données
+ */
+const MAIN_CONFIG_KEY = 'main';
+
+/**
+ * Charge la configuration du bot depuis la base de données
  * @returns {Object} - Configuration chargée
  */
-export function loadConfig() {
+export async function loadConfig() {
   try {
-    // Vérifier si le fichier existe
-    if (fs.existsSync(configPath)) {
-      const configData = fs.readFileSync(configPath, 'utf8');
-      const config = JSON.parse(configData);
-      return config;
+    // Rechercher la configuration dans la base de données
+    const configRecord = await prisma.config.findUnique({
+      where: { key: MAIN_CONFIG_KEY }
+    });
+
+    if (configRecord) {
+      return configRecord.value;
     } else {
-      // Créer le fichier avec la config par défaut
-      saveConfig(defaultConfig);
+      // Si aucune configuration n'existe, créer une nouvelle avec les valeurs par défaut
+      await saveConfig(defaultConfig);
       return defaultConfig;
     }
   } catch (error) {
@@ -51,13 +51,23 @@ export function loadConfig() {
 }
 
 /**
- * Sauvegarde la configuration du bot
+ * Sauvegarde la configuration du bot dans la base de données
  * @param {Object} config - Configuration à sauvegarder
  * @returns {boolean} - Succès de la sauvegarde
  */
-export function saveConfig(config) {
+export async function saveConfig(config) {
   try {
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    await prisma.config.upsert({
+      where: { key: MAIN_CONFIG_KEY },
+      update: { 
+        value: config,
+        updatedAt: new Date()
+      },
+      create: {
+        key: MAIN_CONFIG_KEY,
+        value: config
+      }
+    });
     return true;
   } catch (error) {
     console.error('Erreur lors de la sauvegarde de la configuration:', error);
@@ -66,27 +76,14 @@ export function saveConfig(config) {
 }
 
 /**
- * Récupère la configuration du scheduler
- * @returns {Object} - Configuration du scheduler
- */
-export function getSchedulerConfig() {
-  const config = loadConfig();
-  if (!config.scheduler) {
-    config.scheduler = defaultConfig.scheduler;
-    saveConfig(config);
-  }
-  return config.scheduler;
-}
-
-/**
  * Définit la configuration d'un serveur pour le scheduler
  * @param {string} guildId - ID du serveur
  * @param {Object} guildConfig - Configuration du serveur
  * @returns {boolean} - Succès de l'opération
  */
-export function setGuildConfig(guildId, guildConfig) {
+export async function setGuildConfig(guildId, guildConfig) {
   try {
-    const config = loadConfig();
+    const config = await loadConfig();
 
     // S'assurer que la structure est complète
     if (!config.scheduler) {
@@ -100,7 +97,7 @@ export function setGuildConfig(guildId, guildConfig) {
     config.scheduler.guilds[guildId] = guildConfig;
 
     // Sauvegarder la configuration
-    return saveConfig(config);
+    return await saveConfig(config);
   } catch (error) {
     console.error('Erreur lors de la mise à jour de la configuration du serveur:', error);
     return false;
@@ -112,8 +109,8 @@ export function setGuildConfig(guildId, guildConfig) {
  * @param {string} guildId - ID du serveur
  * @returns {Object} - Configuration du serveur
  */
-export function getGuildConfig(guildId) {
-  const config = loadConfig();
+export async function getGuildConfig(guildId) {
+  const config = await loadConfig();
   return config.scheduler?.guilds?.[guildId] || { enabled: true };
 }
 
@@ -122,8 +119,8 @@ export function getGuildConfig(guildId) {
  * @param {string} guildId - ID du serveur
  * @returns {boolean} - true si le serveur est activé
  */
-export function isGuildEnabled(guildId) {
-  const guildConfig = getGuildConfig(guildId);
+export async function isGuildEnabled(guildId) {
+  const guildConfig = await getGuildConfig(guildId);
   return guildConfig.enabled !== false; // Par défaut activé si non spécifié
 }
 
@@ -133,9 +130,9 @@ export function isGuildEnabled(guildId) {
  * @param {boolean} enabled - État d'activation
  * @returns {boolean} - Succès de l'opération
  */
-export function setChannelTypeEnabled(channelType, enabled) {
+export async function setChannelTypeEnabled(channelType, enabled) {
   try {
-    const config = loadConfig();
+    const config = await loadConfig();
 
     // S'assurer que la structure est complète
     if (!config.scheduler) {
@@ -149,7 +146,7 @@ export function setChannelTypeEnabled(channelType, enabled) {
     config.scheduler.channelTypes[channelType] = enabled;
 
     // Sauvegarder la configuration
-    return saveConfig(config);
+    return await saveConfig(config);
   } catch (error) {
     console.error(`Erreur lors de la mise à jour du type de canal ${channelType}:`, error);
     return false;
@@ -161,8 +158,8 @@ export function setChannelTypeEnabled(channelType, enabled) {
  * @param {string} channelType - Type de canal (guild, dm, group)
  * @returns {boolean} - true si le type de canal est activé
  */
-export function isChannelTypeEnabled(channelType) {
-  const config = loadConfig();
+export async function isChannelTypeEnabled(channelType) {
+  const config = await loadConfig();
   const defaultValue = defaultConfig.scheduler.channelTypes[channelType];
   return config.scheduler?.channelTypes?.[channelType] !== false && defaultValue !== false;
 }

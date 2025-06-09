@@ -114,3 +114,13 @@ model HealthCheck {
 
   @@map("health_check")
 }
+
+model Config {
+  id        BigInt   @id @default(autoincrement())
+  key       String   @unique
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("configs")
+}
