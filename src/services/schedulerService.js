@@ -32,7 +32,18 @@ const MAX_TASKS = parseInt(process.env.MAX_TASKS || '3')
 const activeTasks = new Map()
 
 function formatDate (date, formatStr = 'HH:mm:ss dd/MM/yyyy') {
-  return format(date, formatStr)
+  try {
+    // Vérifier que date est un objet Date valide
+    const dateObj = date instanceof Date ? date : new Date(date);
+    if (isNaN(dateObj.getTime())) {
+      console.warn(`formatDate: Date invalide fournie: ${date}`);
+      return 'Date invalide';
+    }
+    return format(dateObj, formatStr);
+  } catch (error) {
+    console.error(`Erreur lors du formatage de la date ${date}:`, error);
+    return 'Erreur de date';
+  }
 }
 
 function getCurrentHour () {
