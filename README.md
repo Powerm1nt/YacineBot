@@ -1,5 +1,4 @@
-# Autism
-# NiceYomi Bot Discord
+# YacineBot
 
 ## Description
 Un bot Discord qui utilise l'API OpenAI Responses pour maintenir des conversations contextuelles.
