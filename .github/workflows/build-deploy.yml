@@ -70,5 +70,5 @@ jobs:
         scp -r deploy/* $SSH_USER@$SSH_HOST:$DEPLOY_PATH/
         ssh $SSH_USER@$SSH_HOST "cd $DEPLOY_PATH && ./scripts/restart.sh"
 
-          - name: Log deployment completion
+    - name: Log deployment completion
       run: echo "Deployment completed successfully"
