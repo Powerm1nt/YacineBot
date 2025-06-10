@@ -18,14 +18,12 @@ import { getCommandMetadata } from './utils/commandUtils.js'
 import { initScheduler } from './services/schedulerService.js'
 import { morpion } from './commands/morpion.js'
 import { moignon } from './commands/moignon.js'
-import { DATABASE_CONFIG, validateDatabaseConfig } from './config/database.js'
 import { config } from './commands/config.js'
 import { isSchedulerEnabled } from './utils/configService.js'
 import { context } from './commands/context.js'
 dotenv.config();
 
-// Vérification de la configuration de la base de données
-if (!validateDatabaseConfig()) {
+if (!process.env.DATABASE_URL) {
   console.error('La configuration de la base de données est incomplète. Vérifiez votre fichier .env');
   process.exit(1);
 }
