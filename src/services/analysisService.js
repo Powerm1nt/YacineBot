@@ -1,6 +1,7 @@
-import { OpenAI } from 'openai/client.mjs';
-import dotenv from 'dotenv';
-import { prisma } from '../models/prisma.js';
+import { OpenAI } from 'openai/client.mjs'
+import dotenv from 'dotenv'
+import { prisma } from '../models/prisma.js'
+import { safeJsonParse } from '../utils/jsonUtils.js'
 
 dotenv.config();
 
@@ -31,9 +32,11 @@ export async function analyzeMessageRelevance(content, contextInfo = '') {
 2. Informations utiles ou importantes contenues dans le message
 3. Potentiel d'apporter de la valeur à la conversation
 
-Réponds UNIQUEMENT au format JSON avec deux propriétés:
+Réponds UNIQUEMENT au format JSON brut (sans formatage markdown, sans bloc de code) avec deux propriétés:
 - relevanceScore: un nombre entre 0 et 1 (0 = non pertinent, 1 = très pertinent)
-- hasKeyInfo: booléen indiquant si le message contient des informations clés importantes (true/false)`;
+- hasKeyInfo: booléen indiquant si le message contient des informations clés importantes (true/false)
+
+IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, renvoie uniquement l'objet JSON brut.`;
 
     const response = await ai.responses.create({
       model: 'gpt-4.1-mini',
@@ -42,15 +45,11 @@ Réponds UNIQUEMENT au format JSON avec deux propriétés:
     });
 
     // Extraire le JSON de la réponse
-    let result;
-    try {
-      result = JSON.parse(response.output_text);
-      // Valider le format
-      if (typeof result.relevanceScore !== 'number' || typeof result.hasKeyInfo !== 'boolean') {
-        throw new Error('Format de réponse invalide');
-      }
-    } catch (parseError) {
-      console.error('Erreur de parsing de la réponse:', parseError);
+    const result = safeJsonParse(response.output_text, null);
+
+    // Valider le format
+    if (!result || typeof result.relevanceScore !== 'number' || typeof result.hasKeyInfo !== 'boolean') {
+      console.error('Format de réponse invalide:', response.output_text);
       return { relevanceScore: 0.5, hasKeyInfo: false };
     }
 
@@ -81,9 +80,11 @@ export async function analyzeConversationRelevance(messages) {
 
     const systemInstructions = `Tu es un système d'analyse de pertinence de conversations.
 
-Analyse la conversation fournie et réponds UNIQUEMENT au format JSON avec deux propriétés:
+Analyse la conversation fournie et réponds UNIQUEMENT au format JSON brut (sans formatage markdown, sans bloc de code) avec deux propriétés:
 - relevanceScore: un nombre entre 0 et 1 indiquant la pertinence globale de la conversation
-- topicSummary: un résumé concis (max 100 caractères) des principaux sujets abordés`;
+- topicSummary: un résumé concis (max 100 caractères) des principaux sujets abordés
+
+IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, renvoie uniquement l'objet JSON brut.`;
 
     const response = await ai.responses.create({
       model: 'gpt-4.1-mini',
@@ -92,15 +93,11 @@ Analyse la conversation fournie et réponds UNIQUEMENT au format JSON avec deux 
     });
 
     // Extraire le JSON de la réponse
-    let result;
-    try {
-      result = JSON.parse(response.output_text);
-      // Valider le format
-      if (typeof result.relevanceScore !== 'number' || typeof result.topicSummary !== 'string') {
-        throw new Error('Format de réponse invalide');
-      }
-    } catch (parseError) {
-      console.error('Erreur de parsing de la réponse pour la conversation:', parseError);
+    const result = safeJsonParse(response.output_text, null);
+
+    // Valider le format
+    if (!result || typeof result.relevanceScore !== 'number' || typeof result.topicSummary !== 'string') {
+      console.error('Format de réponse invalide pour la conversation:', response.output_text);
       return { relevanceScore: 0.5, topicSummary: 'Analyse impossible' };
     }
 
@@ -143,8 +140,7 @@ export async function updateConversationRelevance(channelId, guildId = null) {
     // Analyser la conversation
     const analysis = await analyzeConversationRelevance(conversation.messages);
 
-    // Mettre à jour la conversation avec les résultats
-    const updated = await prisma.conversation.update({
+    return await prisma.conversation.update({
       where: { id: conversation.id },
       data: {
         relevanceScore: analysis.relevanceScore,
@@ -152,8 +148,6 @@ export async function updateConversationRelevance(channelId, guildId = null) {
         updatedAt: new Date()
       }
     });
-
-    return updated;
   } catch (error) {
     console.error('Erreur lors de la mise à jour de la pertinence de la conversation:', error);
     return null;
@@ -215,7 +209,7 @@ export async function shareConversation(channelId, guildId = null, shareWithUser
 export async function getSharedConversations(userId) {
   try {
     // Trouver toutes les conversations partagées avec cet utilisateur
-    const sharedConversations = await prisma.conversation.findMany({
+    return await prisma.conversation.findMany({
       where: {
         isShared: true,
         sharedWith: { has: userId }
@@ -235,8 +229,6 @@ export async function getSharedConversations(userId) {
         }
       }
     });
-
-    return sharedConversations;
   } catch (error) {
     console.error('Erreur lors de la récupération des conversations partagées:', error);
     return [];

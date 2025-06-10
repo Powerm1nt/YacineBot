@@ -44,6 +44,25 @@ export function convertBigIntsToStrings(obj) {
 }
 
 /**
+ * Extrait le JSON d'une chaîne qui pourrait contenir du markdown
+ * @param {string} text - Texte potentiellement avec formatage markdown
+ * @returns {string} - JSON nettoyé
+ */
+export function extractJsonFromMarkdown(text) {
+  if (!text) return '';
+
+  let cleanedText = text.trim();
+
+  // Supprimer les blocs de code markdown si présents
+  if (cleanedText.startsWith('```json') || cleanedText.startsWith('```')) {
+    cleanedText = cleanedText.replace(/^```(json)?\n/, '');
+    cleanedText = cleanedText.replace(/\n```$/, '');
+  }
+
+  return cleanedText;
+}
+
+/**
  * Analyse une chaîne JSON avec gestion sécurisée des erreurs
  * @param {string} jsonString - Chaîne JSON à analyser
  * @param {*} defaultValue - Valeur par défaut en cas d'erreur
@@ -51,7 +70,9 @@ export function convertBigIntsToStrings(obj) {
  */
 export function safeJsonParse(jsonString, defaultValue = {}) {
   try {
-    return JSON.parse(jsonString);
+    // Nettoyer d'abord le JSON du formatage markdown
+    const cleanedJson = extractJsonFromMarkdown(jsonString);
+    return JSON.parse(cleanedJson);
   } catch (error) {
     console.error('Erreur lors de l\'analyse JSON:', error);
     return defaultValue;

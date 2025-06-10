@@ -60,6 +60,19 @@ fi
 # Définition de la variable d'environnement PGPASSWORD pour éviter l'invite de mot de passe
 export PGPASSWORD="$DB_PASS"
 
+# Vérifier la connectivité à la base de données avant de continuer
+echo "Vérification de la connexion à la base de données..."
+if ! psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "template1" -c "\conninfo" > /dev/null 2>&1; then
+  echo "Erreur: Impossible de se connecter à la base de données avec les paramètres fournis."
+  echo "Vérifiez vos informations de connexion dans le fichier .env:"
+  echo "- Hôte: $DB_HOST"
+  echo "- Port: $DB_PORT"
+  echo "- Utilisateur: $DB_USER"
+  echo "- Base de données: $DB_NAME (cible)"
+  exit 1
+fi
+echo "Connexion à la base de données établie avec succès."
+
 echo "ATTENTION: Cette opération va remplacer toutes les données existantes dans la base $DB_NAME"
 echo "Êtes-vous sûr de vouloir continuer? (y/n)"
 read -r confirm
@@ -110,9 +123,14 @@ fi
 
 # Vérification de la version de psql
 check_pg_version() {
-  # Obtenir la version du serveur
+  # Obtenir la version du serveur (utiliser template1 qui est toujours disponible)
   export PGPASSWORD="$DB_PASS"
-  SERVER_VERSION=$(psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "postgres" -t -c "SHOW server_version;" 2>/dev/null | xargs)
+  SERVER_VERSION=$(psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "template1" -t -c "SHOW server_version;" 2>/dev/null | xargs)
+
+  # Si la commande échoue, essayer avec la base postgres comme fallback
+  if [ -z "$SERVER_VERSION" ]; then
+    SERVER_VERSION=$(psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "postgres" -t -c "SHOW server_version;" 2>/dev/null | xargs)
+  fi
   unset PGPASSWORD
 
   if [ -z "$SERVER_VERSION" ]; then
@@ -191,23 +209,49 @@ run_psql_command() {
 
 # Suppression des connexions existantes à la base de données
 echo "Fermeture des connexions actives à la base de données..."
-run_psql_command "postgres" "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();" "Fermeture des connexions actives"
+
+# Essayer plusieurs méthodes pour terminer les connexions
+run_psql_command "template1" "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();" "Fermeture des connexions actives (via template1)"
+
+# Si la commande ci-dessus échoue, essayer d'autres alternatives
+if [ $? -ne 0 ]; then
+  echo "Tentative alternative de fermeture des connexions..."
+  PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();" 2>/dev/null || true
+
+  # Dernière tentative avec le safe mode
+  echo "Dernière tentative avec la base template1..."
+  PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "template1" -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();" 2>/dev/null || true
+fi
 
 # Attente pour s'assurer que toutes les connexions sont fermées
-sleep 2
+sleep 3
 
 # Recréation de la base de données
 echo "Recréation de la base de données..."
-run_psql_command "postgres" "DROP DATABASE IF EXISTS $DB_NAME;" "Suppression de la base de données existante"
+# Utiliser template1 au lieu de postgres pour éviter les problèmes d'autorisation
+run_psql_command "template1" "DROP DATABASE IF EXISTS \"$DB_NAME\";" "Suppression de la base de données existante"
 if [ $? -ne 0 ]; then
-  echo "Erreur critique: impossible de supprimer la base de données existante"
-  exit 1
+  echo "Échec de la première tentative de suppression. Nouvelle tentative avec une autre approche..."
+  PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "template1" -c "DROP DATABASE IF EXISTS \"$DB_NAME\";" 2>/dev/null
+
+  if [ $? -ne 0 ]; then
+    echo "Erreur critique: impossible de supprimer la base de données existante"
+    echo "Vérifiez que votre utilisateur a les droits suffisants et qu'aucune connexion n'est active."
+    exit 1
+  fi
 fi
 
-run_psql_command "postgres" "CREATE DATABASE $DB_NAME;" "Création d'une nouvelle base de données vide"
+# Utiliser template1 au lieu de postgres pour la création de base de données
+run_psql_command "template1" "CREATE DATABASE \"$DB_NAME\";" "Création d'une nouvelle base de données vide"
 if [ $? -ne 0 ]; then
-  echo "Erreur critique: impossible de créer une nouvelle base de données"
-  exit 1
+  echo "Échec de la première tentative de création. Nouvelle tentative avec une autre approche..."
+  PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "template1" -c "CREATE DATABASE \"$DB_NAME\";" 2>/dev/null
+
+  if [ $? -ne 0 ]; then
+    echo "Erreur critique: impossible de créer une nouvelle base de données"
+    echo "Vérifiez que votre utilisateur a les droits suffisants."
+    exit 1
+  fi
 fi
 
 # Restauration des données
