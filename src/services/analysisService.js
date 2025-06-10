@@ -1,6 +1,6 @@
 import { OpenAI } from 'openai/client.mjs'
 import dotenv from 'dotenv'
-import { prisma } from '../models/prisma.js'
+import { prisma } from './prisma.js'
 import { safeJsonParse } from '../utils/jsonUtils.js'
 
 dotenv.config();

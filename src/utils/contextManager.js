@@ -1,5 +1,5 @@
 import { getContextKey } from './commandUtils.js';
-import { prisma } from '../models/prisma.js';
+import { prisma } from '../services/prisma.js';
 import { conversationService } from '../services/conversationService.js';
 import { convertBigIntsToStrings } from './jsonUtils.js';
 import { analysisService } from '../services/analysisService.js';
@@ -17,13 +17,6 @@ let contextStats = {
     group: 0
   }
 };
-
-// Variable pour suivre les cartes de contexte
-const contextMap = new Map([
-  ['guild', guildConversations],
-  ['dm', dmConversations],
-  ['group', groupConversations]
-]);
 
 const CLEANUP_CONFIG = {
   inactivityThreshold: 12,

@@ -1,7 +1,7 @@
 /**
  * Service pour gérer les statistiques d'utilisation
  */
-import { prisma } from '../models/prisma.js';
+import { prisma } from './prisma.js';
 
 /**
  * Enregistre une nouvelle entrée dans les statistiques d'utilisation

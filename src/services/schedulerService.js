@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto'
 import { isGuildEnabled, isChannelTypeEnabled, isSchedulerEnabled, isAnalysisEnabled, isAutoRespondEnabled } from '../utils/configService.js'
 import { analysisService } from './analysisService.js'
 import { taskService } from './taskService.js'
-const { prisma } = await import('../models/prisma.js');
+const { prisma } = await import('./prisma.js');
 
 dotenv.config()
 
