@@ -1,10 +1,10 @@
 /**
- * Modèle de données pour les statistiques d'utilisation
+ * Data model for usage statistics
  */
 import { prisma } from './index.js';
 
 /**
- * Crée une nouvelle entrée de statistiques
+ * Creates a new statistics entry
  */
 export async function createUsageStat(data) {
   return await prisma.usageStat.create({
@@ -18,7 +18,7 @@ export async function createUsageStat(data) {
 }
 
 /**
- * Récupère les statistiques d'un utilisateur
+ * Retrieves statistics for a user
  */
 export async function getUserStats(userId, startDate = null, endDate = null) {
   const whereClause = { userId };
@@ -38,7 +38,7 @@ export async function getUserStats(userId, startDate = null, endDate = null) {
 }
 
 /**
- * Récupère les statistiques d'une guilde
+ * Retrieves statistics for a guild
  */
 export async function getGuildStats(guildId, startDate = null, endDate = null) {
   const whereClause = { guildId };
@@ -58,7 +58,7 @@ export async function getGuildStats(guildId, startDate = null, endDate = null) {
 }
 
 /**
- * Calcule les statistiques agrégées
+ * Calculates aggregated statistics
  */
 export async function getAggregatedStats(period = 'all') {
   let whereClause = {};
