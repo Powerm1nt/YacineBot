@@ -11,6 +11,10 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
+    "docker:dev": "docker-compose -f compose.dev.yml up",
+    "docker:dev:build": "docker-compose -f compose.dev.yml up --build",
+    "docker:prod": "docker-compose -f compose.yml up",
+    "docker:prod:build": "docker-compose -f compose.yml up --build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",

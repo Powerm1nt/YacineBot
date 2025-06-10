@@ -16,3 +16,46 @@
 /node_modules/
 /.env.prod
 /plans/
+# Dépendances
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Variables d'environnement
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Dossiers de build
+dist/
+build/
+
+# Fichiers de couverture de test
+coverage/
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Fichiers d'IDE
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Prisma
+.prisma/
+
+# Docker
+.docker/
+
+# Volumes Docker
+postgres_data/
+postgres_dev_data/

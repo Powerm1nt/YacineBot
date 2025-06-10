@@ -1,6 +1,5 @@
 import dotenv from 'dotenv';
 import { Client } from 'discord.js-selfbot-v13'
-import { createClient } from '@supabase/supabase-js'
 import { demo } from './commands/demo.js'
 import { rename } from './commands/rename.js'
 import { avatar } from './commands/avatar.js'
@@ -19,7 +18,7 @@ import { getCommandMetadata } from './utils/commandUtils.js'
 import { initScheduler } from './services/schedulerService.js'
 import { morpion } from './commands/morpion.js'
 import { moignon } from './commands/moignon.js'
-import { SUPABASE_CONFIG, validateDatabaseConfig, validateSupabaseConfig } from './config/database.js'
+import { DATABASE_CONFIG, validateDatabaseConfig } from './config/database.js'
 import { config } from './commands/config.js'
 import { isSchedulerEnabled } from './utils/configService.js'
 import { context } from './commands/context.js'
@@ -30,13 +29,6 @@ if (!validateDatabaseConfig()) {
   console.error('La configuration de la base de données est incomplète. Vérifiez votre fichier .env');
   process.exit(1);
 }
-
-// Initialisation de Supabase pour la compatibilité avec l'ancien code
-if (!validateSupabaseConfig()) {
-  console.warn('La configuration Supabase est incomplète. Certaines fonctionnalités pourraient ne pas fonctionner.');
-}
-
-export const supabase = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.key);
 
 const BOT_CONFIG = {
   name: process.env.BOT_NAME || 'Yascine',

@@ -1,5 +1,81 @@
 # NiceYomi Bot Discord
+# niceyomi-bot
 
+Un bot Discord qui utilise l'API OpenAI avec Supabase et Prisma pour la persistance des données.
+
+## Configuration Docker
+
+Ce projet utilise Docker pour simplifier le développement et la mise en production.
+
+### Prérequis
+
+- Docker
+- Docker Compose
+
+### Configuration des variables d'environnement
+
+1. Copiez le fichier `.env.example` en `.env` :
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Modifiez le fichier `.env` avec vos propres valeurs :
+   ```bash
+   nano .env
+   ```
+
+Les variables d'environnement définies dans ce fichier seront automatiquement utilisées par Docker Compose.
+
+### Développement
+
+Pour lancer l'environnement de développement :
+
+```bash
+# Première exécution ou après modification du Dockerfile
+yarn docker:dev:build
+
+# Exécutions suivantes
+yarn docker:dev
+```
+
+En mode développement :
+- Tout le répertoire du projet est monté en volume, permettant de modifier n'importe quel fichier sans reconstruire l'image
+- Les node_modules du conteneur sont préservés pour éviter des problèmes de compatibilité entre les systèmes
+- Nodemon redémarre automatiquement l'application lors des modifications
+- Toutes les modifications sont immédiatement disponibles dans le conteneur
+
+### Production
+
+Pour lancer l'environnement de production :
+
+```bash
+# Première exécution ou après modification du Dockerfile
+yarn docker:prod:build
+
+# Exécutions suivantes
+yarn docker:prod
+```
+
+En mode production :
+- Le code est copié dans l'image Docker
+- L'application est exécutée avec PM2 pour une meilleure stabilité
+- Prisma génère automatiquement les clients nécessaires
+- Le fichier `.env` est monté dans le conteneur
+
+### Variables d'environnement
+
+Les variables suivantes peuvent être configurées dans le fichier `.env` :
+
+- `POSTGRES_USER` : Nom d'utilisateur pour PostgreSQL (défaut : postgres)
+- `POSTGRES_PASSWORD` : Mot de passe pour PostgreSQL (défaut : postgres)
+- `POSTGRES_DB` : Nom de la base de données (défaut : app en production, app_dev en développement)
+- `OPENAI_API_KEY` : Clé API pour OpenAI
+- `DISCORD_TOKEN` : Token d'authentification Discord
+- `ENABLE_AUTO_MESSAGES` : Activer/désactiver les messages automatiques
+- `MIN_DELAY_MINUTES`, `MAX_DELAY_MINUTES` : Plage de délai pour les messages automatiques
+- Et plus encore...
+
+Consultez le fichier `.env.example` pour la liste complète des variables disponibles.
 ## Description
 Un bot Discord qui utilise l'API OpenAI Responses pour maintenir des conversations contextuelles, avec une base de données Supabase pour la persistance des données.
 

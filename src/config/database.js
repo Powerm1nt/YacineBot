@@ -11,12 +11,6 @@ export const DATABASE_CONFIG = {
   directUrl: process.env.DIRECT_URL,
 };
 
-// Configuration pour Supabase (pour la compatibilité avec l'ancien code)
-export const SUPABASE_CONFIG = {
-  url: process.env.SUPABASE_URL,
-  key: process.env.SUPABASE_KEY,
-};
-
 // Vérifier que les variables d'environnement nécessaires sont définies
 export function validateDatabaseConfig() {
   const missingVars = [];
@@ -32,17 +26,3 @@ export function validateDatabaseConfig() {
   return true;
 }
 
-// Vérifier que les variables d'environnement pour Supabase sont définies
-export function validateSupabaseConfig() {
-  const missingVars = [];
-
-  if (!SUPABASE_CONFIG.url) missingVars.push('SUPABASE_URL');
-  if (!SUPABASE_CONFIG.key) missingVars.push('SUPABASE_KEY');
-
-  if (missingVars.length > 0) {
-    console.warn(`Variables d'environnement manquantes pour Supabase: ${missingVars.join(', ')}`);
-    return false;
-  }
-
-  return true;
-}

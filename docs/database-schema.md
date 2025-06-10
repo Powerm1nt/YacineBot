@@ -107,5 +107,3 @@ Le projet suit une architecture Modèle-Vue-Contrôleur (MVC) :
 ## Migration depuis l'ancienne structure
 
 Un script de migration (`prisma/migrations/migration_script.sql`) est fourni pour convertir l'ancienne structure de données (avec des tableaux JSON pour les messages) vers la nouvelle structure relationnelle plus robuste.
-
-Le service `supabaseService.js` maintient la compatibilité avec l'ancien code pendant la transition.
