@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # Service pour la base de données
+  postgres:
+    image: postgres:14-alpine
+    container_name: yassinebot-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-yassinebot}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Service pour le bot
+  yassinebot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yassinebot
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-yassinebot}
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      BOT_NAME: ${BOT_NAME:-Yassine}
+      ENABLE_AUTO_MESSAGES: ${ENABLE_AUTO_MESSAGES:-false}
+      MIN_DELAY_MINUTES: ${MIN_DELAY_MINUTES:-120}
+      MAX_DELAY_MINUTES: ${MAX_DELAY_MINUTES:-480}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+
+volumes:
+  postgres-data:

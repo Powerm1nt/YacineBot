@@ -1,5 +1,40 @@
 FROM node:24 as base
+FROM maven:3.8.6-openjdk-17-slim AS build
 
+WORKDIR /app
+
+# Copier les fichiers POM et les sources
+COPY pom.xml .
+COPY src ./src
+
+# Construire le projet
+RUN mvn clean package -DskipTests
+
+# Image finale
+FROM eclipse-temurin:17-jre-alpine
+
+WORKDIR /app
+
+# Créer un utilisateur non-root
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Créer les répertoires nécessaires
+RUN mkdir -p /app/logs
+RUN chown -R appuser:appgroup /app
+
+# Copier le JAR et les dépendances depuis l'étape de build
+COPY --from=build /app/target/*.jar /app/yassinebot.jar
+COPY --from=build /app/target/lib /app/lib
+
+# Copier les scripts
+COPY scripts/restart.sh /app/
+RUN chmod +x /app/*.sh
+
+# Changer l'utilisateur
+USER appuser
+
+# Commande d'entrée
+CMD ["java", "-jar", "yassinebot.jar"]
 WORKDIR /app
 
 RUN corepack enable

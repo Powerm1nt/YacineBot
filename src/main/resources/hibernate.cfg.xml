@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-configuration PUBLIC
+        "-//Hibernate/Hibernate Configuration DTD 3.0//EN"
+        "http://www.hibernate.org/dtd/hibernate-configuration-3.0.dtd">
+<hibernate-configuration>
+    <session-factory>
+        <!-- Paramètres de connexion à la base de données -->
+        <property name="hibernate.connection.driver_class">org.postgresql.Driver</property>
+        <property name="hibernate.connection.url">jdbc:postgresql://${env.DB_HOST:localhost}:${env.DB_PORT:5432}/${env.DB_NAME:yassine_bot}</property>
+        <property name="hibernate.connection.username">${env.DB_USER:postgres}</property>
+        <property name="hibernate.connection.password">${env.DB_PASSWORD:postgres}</property>
+
+        <!-- Dialecte SQL -->
+        <property name="hibernate.dialect">org.hibernate.dialect.PostgreSQLDialect</property>
+
+        <!-- Afficher les requêtes SQL générées -->
+        <property name="hibernate.show_sql">false</property>
+        <property name="hibernate.format_sql">true</property>
+
+        <!-- Gestion du schéma de base de données -->
+        <property name="hibernate.hbm2ddl.auto">update</property>
+
+        <!-- Entités mappées -->
+        <mapping class="works.nuka.yassinebot.models.Conversation"/>
+        <mapping class="works.nuka.yassinebot.models.Message"/>
+        <mapping class="works.nuka.yassinebot.models.GuildPreference"/>
+        <mapping class="works.nuka.yassinebot.models.Task"/>
+        <mapping class="works.nuka.yassinebot.models.TaskExecution"/>
+        <mapping class="works.nuka.yassinebot.models.UsageStat"/>
+        <mapping class="works.nuka.yassinebot.models.HealthCheck"/>
+        <mapping class="works.nuka.yassinebot.models.Config"/>
+    </session-factory>
+</hibernate-configuration>
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-configuration PUBLIC
+        "-//Hibernate/Hibernate Configuration DTD 3.0//EN"
+        "http://www.hibernate.org/dtd/hibernate-configuration-3.0.dtd">
+<hibernate-configuration>
+    <session-factory>
+        <!-- Paramètres de connexion à la base de données -->
+        <property name="hibernate.connection.driver_class">org.postgresql.Driver</property>
+        <property name="hibernate.connection.url">jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:yassinebot}</property>
+        <property name="hibernate.connection.username">${POSTGRES_USER:postgres}</property>
+        <property name="hibernate.connection.password">${POSTGRES_PASSWORD:postgres}</property>
+
+        <!-- Dialecte SQL pour PostgreSQL -->
+        <property name="hibernate.dialect">org.hibernate.dialect.PostgreSQLDialect</property>
+
+        <!-- Afficher les requêtes SQL dans la console (utile pour le développement) -->
+        <property name="hibernate.show_sql">false</property>
+        <property name="hibernate.format_sql">true</property>
+
+        <!-- Comportement de mise à jour du schéma (create au premier lancement, puis update) -->
+        <property name="hibernate.hbm2ddl.auto">update</property>
+
+        <!-- Configuration du pool de connexions -->
+        <property name="hibernate.c3p0.min_size">5</property>
+        <property name="hibernate.c3p0.max_size">20</property>
+        <property name="hibernate.c3p0.timeout">300</property>
+        <property name="hibernate.c3p0.max_statements">50</property>
+        <property name="hibernate.c3p0.idle_test_period">3000</property>
+
+        <!-- Autres paramètres -->
+        <property name="hibernate.current_session_context_class">thread</property>
+
+        <!-- Mappage des entités -->
+        <mapping class="works.nuka.yassinebot.models.GuildPreference"/>
+        <mapping class="works.nuka.yassinebot.models.Conversation"/>
+        <mapping class="works.nuka.yassinebot.models.Message"/>
+        <mapping class="works.nuka.yassinebot.models.UsageStats"/>
+        <mapping class="works.nuka.yassinebot.models.ScheduledTask"/>
+    </session-factory>
+</hibernate-configuration>

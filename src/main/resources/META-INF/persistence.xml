@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<persistence xmlns="http://xmlns.jcp.org/xml/ns/persistence"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/persistence
+             http://xmlns.jcp.org/xml/ns/persistence/persistence_2_2.xsd"
+             version="2.2">
+
+    <persistence-unit name="yassinebot" transaction-type="RESOURCE_LOCAL">
+        <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
+
+        <!-- Entités -->
+        <class>works.nuka.yassinebot.models.GuildPreference</class>
+        <class>works.nuka.yassinebot.models.Conversation</class>
+        <class>works.nuka.yassinebot.models.Message</class>
+        <class>works.nuka.yassinebot.models.UsageStats</class>
+        <class>works.nuka.yassinebot.models.ScheduledTask</class>
+
+        <properties>
+            <!-- Configuration de la connexion à la base de données -->
+            <property name="javax.persistence.jdbc.driver" value="org.postgresql.Driver" />
+            <property name="javax.persistence.jdbc.url" value="jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:yassinebot}" />
+            <property name="javax.persistence.jdbc.user" value="${POSTGRES_USER:postgres}" />
+            <property name="javax.persistence.jdbc.password" value="${POSTGRES_PASSWORD:postgres}" />
+
+            <!-- Propriétés Hibernate -->
+            <property name="hibernate.dialect" value="org.hibernate.dialect.PostgreSQLDialect" />
+            <property name="hibernate.show_sql" value="false" />
+            <property name="hibernate.format_sql" value="true" />
+            <property name="hibernate.hbm2ddl.auto" value="update" />
+
+            <!-- Configuration du pool de connexions -->
+            <property name="hibernate.c3p0.min_size" value="5" />
+            <property name="hibernate.c3p0.max_size" value="20" />
+            <property name="hibernate.c3p0.timeout" value="300" />
+            <property name="hibernate.c3p0.max_statements" value="50" />
+            <property name="hibernate.c3p0.idle_test_period" value="3000" />
+        </properties>
+    </persistence-unit>
+</persistence>
