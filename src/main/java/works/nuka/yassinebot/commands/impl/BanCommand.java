@@ -4,12 +4,15 @@ import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
+import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
+import net.dv8tion.jda.api.exceptions.RateLimitedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import works.nuka.yassinebot.commands.Command;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Commande pour bannir un utilisateur du serveur
@@ -51,13 +54,19 @@ public class BanCommand implements Command {
         }
 
         // Vérifier que l'utilisateur a mentionné quelqu'un
-        if (event.getMessage().getMentionedUsers().isEmpty()) {
+        if (event.getMessage().getMentions().getMembers().isEmpty()) {
             event.getMessage().reply("❌ Vous devez mentionner un utilisateur à bannir.").queue();
             return;
         }
 
+        // Check if the executor has BAN_MEMBERS permission
+        if (!event.getMember().hasPermission(Permission.BAN_MEMBERS)) {
+            event.getMessage().reply("❌ Vous n'avez pas la permission de bannir des utilisateurs.").queue();
+            return;
+        }
+
         // Récupérer l'utilisateur cible
-        User targetUser = event.getMessage().getMentionedUsers().get(0);
+        User targetUser = event.getMessage().getMentions().getUsers().get(0);
         Member targetMember = event.getGuild().getMember(targetUser);
 
         // Vérifier si l'utilisateur est présent dans le serveur
@@ -104,19 +113,30 @@ public class BanCommand implements Command {
             }
         }
 
-        // Exécuter le bannissement
-        final String banReason = reason;
+        final String banReason = reason.length() > 512 ? reason.substring(0, 512) : reason;
         final int finalDelDays = delDays;
-        event.getGuild().ban(targetUser, finalDelDays, banReason)
+
+        event.getGuild().ban(targetUser, finalDelDays, TimeUnit.valueOf(banReason))
                 .queue(success -> {
-                    event.getMessage().reply("✅ **" + targetUser.getAsTag() + "** a été banni du serveur. "
+                    // Use username instead of getAsTag() for future compatibility
+                    String userDisplay = targetUser.getName();
+                    event.getMessage().reply("✅ **" + userDisplay + "** a été banni du serveur. "
                             + (finalDelDays > 0 ? "(messages des " + finalDelDays + " derniers jours supprimés)" : "")
                             + "\nRaison: " + banReason).queue();
                     logger.info("Utilisateur {} banni par {} sur {}, raison: {}", 
-                              targetUser.getId(), event.getAuthor().getId(), 
-                              event.getGuild().getId(), banReason);
+                      targetUser.getId(), event.getAuthor().getId(), 
+                      event.getGuild().getId(), banReason);
                 }, error -> {
-                    event.getMessage().reply("❌ Impossible de bannir cet utilisateur: " + error.getMessage()).queue();
+                    String errorMessage = error.getMessage() != null ? error.getMessage() : "Raison inconnue";
+                    
+                    // Handle specific error types
+                    if (error instanceof RateLimitedException) {
+                        errorMessage = "Trop de bannissements récents, veuillez réessayer plus tard.";
+                    } else if (error instanceof InsufficientPermissionException) {
+                        errorMessage = "Le bot n'a pas les permissions suffisantes pour bannir cet utilisateur.";
+                    }
+                    
+                    event.getMessage().reply("❌ Impossible de bannir cet utilisateur: " + errorMessage).queue();
                     logger.error("Erreur lors du bannissement de l'utilisateur {}", targetUser.getId(), error);
                 });
     }
