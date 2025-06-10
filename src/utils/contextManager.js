@@ -65,6 +65,20 @@ export async function getContextData(message) {
     const guildId = context.type === 'guild' ? message.guild?.id : null;
     const channelId = context.key;
 
+    // Récupérer la conversation complète et les messages récents via conversationService
+    const conversation = await prisma.conversation.findUnique({
+      where: {
+        channelId_guildId: {
+          channelId,
+          guildId: guildId || ""
+        }
+      },
+      select: {
+        lastResponseId: true,
+        updatedAt: true
+      }
+    });
+
     const recentMessages = await conversationService.getRecentMessages(channelId, guildId, 10);
 
     if (recentMessages.length > 0) {
@@ -169,13 +183,35 @@ export async function saveContextResponse(message, responseId) {
     const channelId = context.key;
 
     if (message.content) {
+      // Analyser la pertinence du message de l'utilisateur
+      let relevanceScore = 0.5;
+      let hasKeyInfo = false;
+
+      try {
+        // Récupérer les messages récents pour le contexte
+        const recentMessages = await conversationService.getRecentMessages(channelId, guildId, 3);
+        const contextForAnalysis = recentMessages.length > 0 ? 
+          recentMessages.map(msg => `${msg.userName}: ${msg.content}`).join('\n') : '';
+
+        if (analysisService && typeof analysisService.analyzeMessageRelevance === 'function') {
+          const analysis = await analysisService.analyzeMessageRelevance(message.content, contextForAnalysis);
+          relevanceScore = analysis.relevanceScore;
+          hasKeyInfo = analysis.hasKeyInfo;
+        }
+      } catch (analysisError) {
+        console.error('Erreur lors de l\'analyse du message:', analysisError);
+      }
+
+      // Ajouter le message avec les scores d'analyse
       await conversationService.addMessage(
         channelId,
         message.author.id,
         authorName,
         message.content,
         false,
-        guildId
+        guildId,
+        relevanceScore,
+        hasKeyInfo
       );
     }
 

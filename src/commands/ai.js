@@ -163,10 +163,16 @@ export async function ai (client) {
       const guildId = message.guild?.id || null
       const channelId = context.key
       try {
-        // Analyser la pertinence du message du bot (avec un contexte limité)
-        const analysisResult = await analysisService.analyzeMessageRelevance(
-          response.output_text || '',
-          userInput.substring(0, 200) // Utiliser le début du message de l'utilisateur comme contexte
+          // Récupérer les messages récents pour fournir un meilleur contexte pour l'analyse
+          const recentMessages = await conversationService.getRecentMessages(channelId, guildId, 3);
+          const contextForAnalysis = recentMessages.length > 0 ? 
+            recentMessages.map(msg => `${msg.userName}: ${msg.content}`).join('\n') + '\n' + userInput.substring(0, 200) : 
+            userInput.substring(0, 200);
+
+          // Analyser la pertinence du message du bot avec un contexte plus riche
+          const analysisResult = await analysisService.analyzeMessageRelevance(
+            response.output_text || '',
+            contextForAnalysis
         );
 
         // Stocker le message avec son score de pertinence

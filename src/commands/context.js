@@ -356,7 +356,11 @@ async function readConversationsFromDB(client, message, channelId) {
       channelId = message.channel.id;
     }
 
-    const conversations = await conversationService.getConversationHistory(channelId);
+    // Obtenir l'ID de la guilde si le message provient d'un serveur
+    const guildId = message.guild?.id || null;
+
+    // Utiliser conversationService pour récupérer l'historique avec l'ID de guilde approprié
+    const conversations = await conversationService.getConversationHistory(channelId, guildId);
 
     if (!conversations || conversations.length === 0) {
       return message.reply(`Aucune conversation trouvée dans la base de données pour le canal ${channelId}.`);
@@ -464,6 +468,10 @@ async function readConversationsFromMemory(client, message, contextKeyParam) {
     const contextKeyObj = getContextKey(message);
     const contextData = await getContextData(message);
 
+    // Utiliser conversationService pour obtenir les messages récents en complément des données en mémoire
+    const guildId = message.guild?.id || null;
+    const recentMessages = await conversationService.getRecentMessages(contextKeyObj.key, guildId, 5);
+
     const participants = contextData.participants || [];
     const totalMessages = participants.reduce((sum, p) => sum + (p.messageCount || 0), 0);
 
@@ -497,6 +505,26 @@ async function readConversationsFromMemory(client, message, contextKeyParam) {
     }
 
     response += `**Dernier message:** ${lastMessageDate}\n\n`;
+
+    // Ajouter les messages récents si disponibles
+    if (recentMessages && recentMessages.length > 0) {
+      response += '### 📝 Messages récents en base de données\n';
+      recentMessages.forEach((msg, index) => {
+        try {
+          const msgDate = new Date(msg.createdAt);
+          let dateStr = 'Date inconnue';
+
+          if (!isNaN(msgDate.getTime())) {
+            dateStr = format(msgDate, 'yyyy-MM-dd HH:mm:ss');
+          }
+
+          response += `**${index + 1}.** ${msg.userName} (${dateStr}): ${msg.content ? msg.content.substring(0, 50) : ''}${msg.content && msg.content.length > 50 ? '...' : ''}\n`;
+        } catch (error) {
+          console.error('Erreur lors du formatage du message récent:', error);
+        }
+      });
+      response += '\n';
+    }
 
     // Ajouter les détails des participants
     if (participants.length > 0) {

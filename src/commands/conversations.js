@@ -6,88 +6,152 @@ export const metadata = {
   name: 'conversations',
   description: 'Gérer vos conversations et partages',
   restricted: false,
-  usage: '<action> [utilisateur]'
+  usage: 'conversations'
+};
+
+// Définition des émojis pour les actions
+const EMOJIS = {
+  SHARE: '🔄',
+  LIST: '📋',
+  BACK: '⬅️',
+  CONFIRM: '✅',
+  CANCEL: '❌'
 };
 
 /**
  * Gère les commandes liées aux conversations (partage, accès, etc.)
  */
-export async function conversations(client) {
-  return async function(message, args) {
-    if (!args || args.length === 0) {
-      return message.reply('Usage: /conversations <share|list> [utilisateur]');
-    }
+// Fonctions utilitaires pour les réactions
+async function safeDeleteMessage(message) {
+  try {
+    await message.delete();
+  } catch (error) {}
+}
 
-    const action = args[0].toLowerCase();
-
-    switch (action) {
-      case 'share':
-        await handleShareConversation(message, args.slice(1), client);
-        break;
-      case 'list':
-        await handleListSharedConversations(message);
-        break;
-      default:
-        await message.reply('Action non reconnue. Utilisez share ou list.');
+async function addReactions(message, emojis) {
+  try {
+    for (const emoji of emojis) {
+      await message.react(emoji);
     }
+  } catch (error) {
+    console.error('Erreur lors de l\'ajout des réactions:', error);
+  }
+}
+
+function createReactionCollector(message, filter, time = 60000) {
+  return message.awaitReactions({ filter, max: 1, time });
+}
+
+export async function conversations(client, message, args) {
+  try {
+    await showMainMenu(client, message);
+  } catch (error) {
+    console.error('Erreur lors du traitement de la commande conversations:', error);
+    await message.reply('❌ Une erreur est survenue lors du traitement de la commande. Veuillez réessayer plus tard.');
   }
 }
 
 /**
  * Gère le partage d'une conversation avec un autre utilisateur
  */
-async function handleShareConversation(message, args, client) {
-  if (!args || args.length === 0) {
-    return message.reply('Vous devez mentionner un utilisateur avec qui partager la conversation.');
+async function handleShareConversation(client, message) {
+  const shareMessage = await message.reply('Pour partager cette conversation, mentionnez un utilisateur dans votre réponse.');
+
+  const filter = m => m.author.id === message.author.id && m.mentions.users.size > 0;
+  const collected = await message.channel.awaitMessages({ filter, max: 1, time: 60000 });
+
+  // Supprimer le message d'instruction
+  await safeDeleteMessage(shareMessage);
+
+  if (collected.size === 0) {
+    return message.reply('⏱️ Action annulée - temps écoulé.');
   }
 
-  // Extraire l'ID utilisateur de la mention
-  let userId = null;
-  const mentionMatch = args[0].match(/<@!?(\d+)>/);
-  if (mentionMatch) {
-    userId = mentionMatch[1];
-  }
+  const responseMsg = collected.first();
+  const mentionedUser = responseMsg.mentions.users.first();
 
-  if (!userId) {
-    return message.reply('Veuillez mentionner un utilisateur valide avec @nom.');
+  if (!mentionedUser) {
+    await safeDeleteMessage(responseMsg);
+    return message.reply('❌ Aucun utilisateur mentionné. Action annulée.');
   }
 
   try {
-    // Vérifier que l'utilisateur existe
-    const user = await client.users.fetch(userId).catch(() => null);
-    if (!user) {
-      return message.reply('Utilisateur non trouvé.');
-    }
-
     // Obtenir le contexte de la conversation actuelle
     const context = getContextKey(message);
     const result = await analysisService.shareConversation(
       context.key,
       context.type === 'guild' ? message.guild.id : null,
-      userId
+      mentionedUser.id
     );
 
+    // Supprimer le message de mention
+    await safeDeleteMessage(responseMsg);
+
     if (result) {
-      return message.reply(`Conversation partagée avec ${user.username} ! Ils peuvent la consulter avec /conversations list`);
+      const confirmMessage = await message.reply(`✅ Conversation partagée avec ${mentionedUser.username} ! Ils peuvent la consulter avec la commande conversations.`);
+      setTimeout(() => safeDeleteMessage(confirmMessage), 5000);
+      return showMainMenu(client, message);
     } else {
-      return message.reply('Impossible de partager cette conversation. Essayez à nouveau plus tard.');
+      const errorMsg = await message.reply('❌ Impossible de partager cette conversation. Essayez à nouveau plus tard.');
+      setTimeout(() => safeDeleteMessage(errorMsg), 5000);
+      return showMainMenu(client, message);
     }
   } catch (error) {
     console.error('Erreur lors du partage de la conversation:', error);
-    return message.reply('Une erreur est survenue lors du partage de la conversation.');
+    const errorMsg = await message.reply('❌ Une erreur est survenue lors du partage de la conversation.');
+    setTimeout(() => safeDeleteMessage(errorMsg), 5000);
+    return showMainMenu(client, message);
+  }
+}
+
+/**
+ * Affiche le menu principal pour la gestion des conversations
+ */
+async function showMainMenu(client, message) {
+  const menuMessage = await message.reply(
+    '**📝 Gestion des Conversations**\n\n' +
+    `${EMOJIS.SHARE} - Partager la conversation actuelle\n` +
+    `${EMOJIS.LIST} - Voir les conversations partagées\n\n` +
+    'Cliquez sur une réaction pour continuer...'
+  );
+
+  await addReactions(menuMessage, [EMOJIS.SHARE, EMOJIS.LIST]);
+
+  const filter = (reaction, user) => {
+    return [EMOJIS.SHARE, EMOJIS.LIST].includes(reaction.emoji.name)
+      && user.id === message.author.id;
+  };
+
+  const collected = await createReactionCollector(menuMessage, filter);
+
+  if (collected.size === 0) {
+    return menuMessage.edit('⏱️ Commande annulée - temps écoulé.');
+  }
+
+  const reaction = collected.first();
+
+  await safeDeleteMessage(menuMessage);
+
+  switch (reaction.emoji.name) {
+    case EMOJIS.SHARE:
+      return handleShareConversation(client, message);
+    case EMOJIS.LIST:
+      return handleListSharedConversations(client, message);
   }
 }
 
 /**
  * Affiche les conversations partagées avec l'utilisateur
  */
-async function handleListSharedConversations(message) {
+async function handleListSharedConversations(client, message) {
   try {
     const userId = message.author.id;
     const sharedConversations = await analysisService.getSharedConversations(userId);
 
     if (!sharedConversations || sharedConversations.length === 0) {
-      return message.reply('Aucune conversation n\'a été partagée avec vous.');
+      const noConvsMsg = await message.reply('Aucune conversation n\'a été partagée avec vous.');
+      setTimeout(() => safeDeleteMessage(noConvsMsg), 5000);
+      return showMainMenu(client, message);
     }
 
     // Créer un aperçu des conversations partagées
@@ -116,9 +180,23 @@ async function handleListSharedConversations(message) {
       response += '\n---\n\n';
     }
 
-    return message.reply(response);
+    response += `Cliquez sur ${EMOJIS.BACK} pour revenir au menu principal.`;
+
+    const listMessage = await message.reply(response);
+    await listMessage.react(EMOJIS.BACK);
+
+    const filter = (reaction, user) => {
+      return reaction.emoji.name === EMOJIS.BACK && user.id === message.author.id;
+    };
+
+    await createReactionCollector(listMessage, filter);
+    await safeDeleteMessage(listMessage);
+
+    return showMainMenu(client, message);
   } catch (error) {
     console.error('Erreur lors de la récupération des conversations partagées:', error);
-    return message.reply('Une erreur est survenue lors de la récupération des conversations partagées.');
+    const errorMsg = await message.reply('❌ Une erreur est survenue lors de la récupération des conversations partagées.');
+    setTimeout(() => safeDeleteMessage(errorMsg), 5000);
+    return showMainMenu(client, message);
   }
 }

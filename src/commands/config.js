@@ -4,8 +4,47 @@ import {
   setChannelTypeEnabled,
   setSchedulerEnabled,
   isSchedulerEnabled,
+  setAnalysisEnabled,
+  isAnalysisEnabled,
+  setAutoRespondEnabled,
+  isAutoRespondEnabled,
   defaultConfig
 } from '../utils/configService.js'
+
+// Helper functions for settings not yet implemented in configService
+async function setAutoQuestionEnabled(enabled) {
+  try {
+    const config = await loadConfig();
+    if (!config.scheduler) config.scheduler = {...defaultConfig.scheduler};
+    config.scheduler.autoQuestion = enabled;
+    return saveConfig(config);
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour de l\'état des questions automatiques:', error);
+    return false;
+  }
+}
+
+async function isAutoQuestionEnabled() {
+  const config = await loadConfig();
+  return config.scheduler?.autoQuestion !== false && defaultConfig.scheduler.autoQuestion !== false;
+}
+
+async function setSharingEnabled(enabled) {
+  try {
+    const config = await loadConfig();
+    if (!config.scheduler) config.scheduler = {...defaultConfig.scheduler};
+    config.scheduler.sharingEnabled = enabled;
+    return saveConfig(config);
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour de l\'état du partage de contexte:', error);
+    return false;
+  }
+}
+
+async function isSharingEnabled() {
+  const config = await loadConfig();
+  return config.scheduler?.sharingEnabled !== false && defaultConfig.scheduler.sharingEnabled !== false;
+}
 import { initScheduler, stopScheduler } from '../services/schedulerService.js'
 
 export const metadata = {
@@ -34,7 +73,11 @@ const EMOJIS = {
   GROUP: '👥',
   ENABLE: '✅',
   DISABLE: '⭕',
-  SCHEDULER: '⏰'
+  SCHEDULER: '⏰',
+  ANALYSIS: '🔍',
+  AUTO_RESPOND: '🤖',
+  AUTO_QUESTION: '❓',
+  SHARING: '🔄'
 };
 
 async function safeDeleteMessage(message) {
@@ -51,7 +94,7 @@ async function showTemporaryMessage(client, message, content, delay = 2000) {
   }, delay);
 }
 
-async function handleConfirmationDialog(message, options) {
+  async function handleConfirmationDialog(client, message, options) {
   const {
     title,
     description,
@@ -81,7 +124,12 @@ async function handleConfirmationDialog(message, options) {
   }
 
   const reaction = collected.first();
-  return reaction.emoji.name === confirmEmoji ? onConfirm() : onCancel();
+  try {
+    return reaction.emoji.name === confirmEmoji ? await onConfirm() : await onCancel();
+  } catch (error) {
+    console.error('Erreur lors de l\'exécution du callback:', error);
+    return message.reply('❌ Une erreur est survenue lors de l\'exécution de l\'action.');
+  }
 }
 
 async function addReactions(message, emojis) {
@@ -107,7 +155,11 @@ async function showConfigList(client, message, showFull) {
     configMessage += `▫️ Service de planification: ${config.scheduler.enabled ? '✅ activé' : '⭕ désactivé'}\n`;
     configMessage += `▫️ Serveurs: ${config.scheduler.channelTypes?.guild ? '✅ activés' : '⭕ désactivés'}\n`;
     configMessage += `▫️ Messages privés: ${config.scheduler.channelTypes?.dm ? '✅ activés' : '⭕ désactivés'}\n`;
-    configMessage += `▫️ Groupes: ${config.scheduler.channelTypes?.group ? '✅ activés' : '⭕ désactivés'}\n\n`;
+    configMessage += `▫️ Groupes: ${config.scheduler.channelTypes?.group ? '✅ activés' : '⭕ désactivés'}\n`;
+    configMessage += `▫️ Analyse de pertinence: ${config.scheduler.analysisEnabled !== false ? '✅ activée' : '⭕ désactivée'}\n`;
+    configMessage += `▫️ Réponse automatique: ${config.scheduler.autoRespond !== false ? '✅ activée' : '⭕ désactivée'}\n`;
+    configMessage += `▫️ Questions automatiques: ${config.scheduler.autoQuestion !== false ? '✅ activées' : '⭕ désactivées'}\n`;
+    configMessage += `▫️ Partage de contexte: ${config.scheduler.sharingEnabled !== false ? '✅ activé' : '⭕ désactivé'}\n\n`;
 
     if (showFull) {
       if (config.scheduler.guilds && Object.keys(config.scheduler.guilds).length > 0) {
@@ -142,7 +194,7 @@ async function showConfigList(client, message, showFull) {
 }
 
 async function toggleSchedulerService(client, message, currentValue) {
-  return handleConfirmationDialog(message, {
+  return handleConfirmationDialog(client, message, {
     title: 'Modification du service de planification',
     description: `État actuel: ${currentValue ? '✅ activé' : '⭕ désactivé'}`,
     confirmEmoji: '⭕',
@@ -173,7 +225,7 @@ async function toggleSetting(client, message, settingType, currentValue) {
     group: 'groupes'
   };
 
-  return handleConfirmationDialog(message, {
+  return handleConfirmationDialog(client, message, {
     title: `Modification du paramètre: ${settingNames[settingType]}`,
     description: `État actuel: ${currentValue ? '✅ activé' : '⭕ désactivé'}`,
     cancelEmoji: '⭕',
@@ -199,8 +251,100 @@ async function toggleSetting(client, message, settingType, currentValue) {
   });
 }
 
+async function toggleAnalysisSetting(client, message, currentValue) {
+  return handleConfirmationDialog(client, message, {
+    title: 'Modification de l\'analyse de pertinence',
+    description: `État actuel: ${currentValue ? '✅ activée' : '⭕ désactivée'}`,
+    confirmEmoji: '⭕',
+    cancelEmoji: '✅',
+    onConfirm: async () => {
+      if (currentValue !== false) {
+        await setAnalysisEnabled(false);
+        await showTemporaryMessage(client, message, '✅ L\'analyse de pertinence est maintenant désactivée ⭕');
+      }
+      return showSetMenu(client, message);
+    },
+    onCancel: async () => {
+      if (currentValue !== true) {
+        await setAnalysisEnabled(true);
+        await showTemporaryMessage(client, message, '✅ L\'analyse de pertinence est maintenant activée ✅');
+      }
+      return showSetMenu(client, message);
+    }
+  });
+}
+
+async function toggleAutoRespondSetting(client, message, currentValue) {
+  return handleConfirmationDialog(client, message, {
+    title: 'Modification de la réponse automatique',
+    description: `État actuel: ${currentValue ? '✅ activée' : '⭕ désactivée'}`,
+    confirmEmoji: '⭕',
+    cancelEmoji: '✅',
+    onConfirm: async () => {
+      if (currentValue !== false) {
+        await setAutoRespondEnabled(false);
+        await showTemporaryMessage(client, message, '✅ La réponse automatique est maintenant désactivée ⭕');
+      }
+      return showSetMenu(client, message);
+    },
+    onCancel: async () => {
+      if (currentValue !== true) {
+        await setAutoRespondEnabled(true);
+        await showTemporaryMessage(client, message, '✅ La réponse automatique est maintenant activée ✅');
+      }
+      return showSetMenu(client, message);
+    }
+  });
+}
+
+async function toggleAutoQuestionSetting(client, message, currentValue) {
+  return handleConfirmationDialog(client, message, {
+    title: 'Modification des questions automatiques',
+    description: `État actuel: ${currentValue ? '✅ activées' : '⭕ désactivées'}`,
+    confirmEmoji: '⭕',
+    cancelEmoji: '✅',
+    onConfirm: async () => {
+      if (currentValue !== false) {
+        await setAutoQuestionEnabled(false);
+        await showTemporaryMessage(client, message, '✅ Les questions automatiques sont maintenant désactivées ⭕');
+      }
+      return showSetMenu(client, message);
+    },
+    onCancel: async () => {
+      if (currentValue !== true) {
+        await setAutoQuestionEnabled(true);
+        await showTemporaryMessage(client, message, '✅ Les questions automatiques sont maintenant activées ✅');
+      }
+      return showSetMenu(client, message);
+    }
+  });
+}
+
+async function toggleSharingSetting(client, message, currentValue) {
+  return handleConfirmationDialog(client, message, {
+    title: 'Modification du partage de contexte',
+    description: `État actuel: ${currentValue ? '✅ activé' : '⭕ désactivé'}`,
+    confirmEmoji: '⭕',
+    cancelEmoji: '✅',
+    onConfirm: async () => {
+      if (currentValue !== false) {
+        await setSharingEnabled(false);
+        await showTemporaryMessage(client, message, '✅ Le partage de contexte est maintenant désactivé ⭕');
+      }
+      return showSetMenu(client, message);
+    },
+    onCancel: async () => {
+      if (currentValue !== true) {
+        await setSharingEnabled(true);
+        await showTemporaryMessage(client, message, '✅ Le partage de contexte est maintenant activé ✅');
+      }
+      return showSetMenu(client, message);
+    }
+  });
+}
+
 async function confirmReset(client, message) {
-  return handleConfirmationDialog(message, {
+  return handleConfirmationDialog(client, message, {
     title: '🔄 Réinitialisation de la configuration',
     description: 'Êtes-vous sûr de vouloir réinitialiser toute la configuration aux valeurs par défaut?\n\nCette action ne peut pas être annulée!',
     onConfirm: async () => {
@@ -218,6 +362,10 @@ async function showSetMenu(client, message) {
   const guildEnabled = config.scheduler?.channelTypes?.guild ?? true;
   const dmEnabled = config.scheduler?.channelTypes?.dm ?? true;
   const groupEnabled = config.scheduler?.channelTypes?.group ?? true;
+  const analysisEnabled = await isAnalysisEnabled();
+  const autoRespondEnabled = await isAutoRespondEnabled();
+  const autoQuestionEnabled = await isAutoQuestionEnabled();
+  const sharingEnabled = await isSharingEnabled();
 
   const setMessage = await message.reply(
     '**⚙️ Modification de la configuration**\n\n' +
@@ -225,15 +373,26 @@ async function showSetMenu(client, message) {
     `${EMOJIS.SCHEDULER} Service de planification: ${schedulerServiceEnabled ? '✅ activé' : '⭕ désactivé'}\n` +
     `${EMOJIS.GUILD} Serveurs: ${guildEnabled ? '✅ activés' : '⭕ désactivés'}\n` +
     `${EMOJIS.DM} Messages privés: ${dmEnabled ? '✅ activés' : '⭕ désactivés'}\n` +
-    `${EMOJIS.GROUP} Groupes: ${groupEnabled ? '✅ activés' : '⭕ désactivés'}\n\n` +
+    `${EMOJIS.GROUP} Groupes: ${groupEnabled ? '✅ activés' : '⭕ désactivés'}\n` +
+    `${EMOJIS.ANALYSIS} Analyse de pertinence: ${analysisEnabled ? '✅ activée' : '⭕ désactivée'}\n` +
+    `${EMOJIS.AUTO_RESPOND} Réponse automatique: ${autoRespondEnabled ? '✅ activée' : '⭕ désactivée'}\n` +
+    `${EMOJIS.AUTO_QUESTION} Questions automatiques: ${autoQuestionEnabled ? '✅ activées' : '⭕ désactivées'}\n` +
+    `${EMOJIS.SHARING} Partage de contexte: ${sharingEnabled ? '✅ activé' : '⭕ désactivé'}\n\n` +
     `${EMOJIS.BACK} Retour au menu principal\n\n` +
     'Cliquez sur une réaction pour modifier un paramètre...'
   );
 
-  await addReactions(setMessage, [EMOJIS.SCHEDULER, EMOJIS.GUILD, EMOJIS.DM, EMOJIS.GROUP, EMOJIS.BACK]);
+  const allEmojis = [
+    EMOJIS.SCHEDULER, EMOJIS.GUILD, EMOJIS.DM, EMOJIS.GROUP,
+    EMOJIS.ANALYSIS, EMOJIS.AUTO_RESPOND, 
+    EMOJIS.AUTO_QUESTION, EMOJIS.SHARING, 
+    EMOJIS.BACK
+  ];
+
+  await addReactions(setMessage, allEmojis);
 
   const filter = (reaction, user) => {
-    return [EMOJIS.SCHEDULER, EMOJIS.GUILD, EMOJIS.DM, EMOJIS.GROUP, EMOJIS.BACK].includes(reaction.emoji.name) &&
+    return allEmojis.includes(reaction.emoji.name) &&
            user.id === message.author.id;
   };
 
@@ -256,6 +415,14 @@ async function showSetMenu(client, message) {
       return toggleSetting(client, message, 'dm', dmEnabled);
     case EMOJIS.GROUP:
       return toggleSetting(client, message, 'group', groupEnabled);
+    case EMOJIS.ANALYSIS:
+      return toggleAnalysisSetting(client, message, analysisEnabled);
+    case EMOJIS.AUTO_RESPOND:
+      return toggleAutoRespondSetting(client, message, autoRespondEnabled);
+    case EMOJIS.AUTO_QUESTION:
+      return toggleAutoQuestionSetting(client, message, autoQuestionEnabled);
+    case EMOJIS.SHARING:
+      return toggleSharingSetting(client, message, sharingEnabled);
     case EMOJIS.BACK:
       return showMainMenu(client, message);
   }
@@ -269,10 +436,14 @@ async function showStatus(client, message) {
     let statusMessage = '🤖 **État du bot:**\n\n';
 
     statusMessage += '⚙️ **Configuration:**\n';
-    statusMessage += `▫️ Service de planification: ${config.scheduler?.enableScheduler ? '✅ activé' : '⭕ désactivé'}\n`;
+    statusMessage += `▫️ Service de planification: ${config.scheduler?.enabled ? '✅ activé' : '⭕ désactivé'}\n`;
     statusMessage += `▫️ Serveurs: ${config.scheduler?.channelTypes?.guild ? '✅ activés' : '⭕ désactivés'}\n`;
     statusMessage += `▫️ Messages privés: ${config.scheduler?.channelTypes?.dm ? '✅ activés' : '⭕ désactivés'}\n`;
-    statusMessage += `▫️ Groupes: ${config.scheduler?.channelTypes?.group ? '✅ activés' : '⭕ désactivés'}\n\n`;
+    statusMessage += `▫️ Groupes: ${config.scheduler?.channelTypes?.group ? '✅ activés' : '⭕ désactivés'}\n`;
+    statusMessage += `▫️ Analyse de pertinence: ${config.scheduler?.analysisEnabled !== false ? '✅ activée' : '⭕ désactivée'}\n`;
+    statusMessage += `▫️ Réponse automatique: ${config.scheduler?.autoRespond !== false ? '✅ activée' : '⭕ désactivée'}\n`;
+    statusMessage += `▫️ Questions automatiques: ${config.scheduler?.autoQuestion !== false ? '✅ activées' : '⭕ désactivées'}\n`;
+    statusMessage += `▫️ Partage de contexte: ${config.scheduler?.sharingEnabled !== false ? '✅ activé' : '⭕ désactivé'}\n\n`;
 
     const schedulerStatus = getSchedulerStatus();
     if (schedulerStatus) {

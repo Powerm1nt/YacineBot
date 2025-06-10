@@ -21,6 +21,7 @@ import { moignon } from './commands/moignon.js'
 import { config } from './commands/config.js'
 import { isSchedulerEnabled } from './utils/configService.js'
 import { context } from './commands/context.js'
+import { conversations } from './commands/conversations.js'
 dotenv.config();
 
 if (!process.env.DATABASE_URL) {
@@ -53,6 +54,7 @@ const commands = {
   moignon: async (message, args) => moignon(client, message, args),
   config: async (message, args) => config(client, message, args),
   context: async (message, args) => context(client, message, args),
+  conversations: async (message, args) => conversations(client, message, args),
 };
 
 // Liste des commandes disponibles pour l'importation dynamique dans help.js
