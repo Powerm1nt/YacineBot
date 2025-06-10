@@ -41,7 +41,7 @@ public class CommandListener extends ListenerAdapter {
             String commandName = parts[0].substring(prefix.length());
             String[] args = Arrays.copyOfRange(parts, 1, parts.length);
 
-            logger.info("Commande reçue: {} de {}", commandName, event.getAuthor().getAsTag());
+            logger.info("Commande reçue: {} de {}", commandName, event.getAuthor().getName());
 
             // Exécuter la commande
             commandManager.executeCommand(commandName, event, args);

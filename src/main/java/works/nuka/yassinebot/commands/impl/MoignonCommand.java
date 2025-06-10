@@ -125,7 +125,7 @@ public class MoignonCommand extends ListenerAdapter implements Command {
 
         // Enregistrer l'utilisation de la commande
         usageStatsService.logCommandUsage(challenger.getId(), "moignon", event.getGuild() != null ? event.getGuild().getId() : null);
-        logger.info("Nouvelle partie de moignon créée: {} entre {} et {}", gameId, challenger.getAsTag(), opponent.getAsTag());
+        logger.info("Nouvelle partie de moignon créée: {} entre {} et {}", gameId, challenger.getName(), opponent.getName());
     }
 
     @Override

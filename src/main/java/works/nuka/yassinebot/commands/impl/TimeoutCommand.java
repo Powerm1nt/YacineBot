@@ -105,7 +105,7 @@ public class TimeoutCommand implements Command {
         targetMember.timeoutFor(finalDuration).reason(timeoutReason).queue(
             success -> {
                 String durationStr = formatDuration(finalDuration);
-                event.getMessage().reply("✅ **" + targetMember.getUser().getAsTag() + 
+                event.getMessage().reply("✅ **" + targetMember.getUser().getName() + 
                     "** a été mis en timeout pour " + durationStr + ".\nRaison: " + timeoutReason).queue();
                 logger.info("Utilisateur {} mis en timeout par {} sur {} pour {}, raison: {}", 
                           targetMember.getId(), event.getAuthor().getId(), 

@@ -105,7 +105,7 @@ public class WarnCommand implements Command {
         // Envoyer un message privé à l'utilisateur averti
         targetUser.openPrivateChannel().queue(channel -> {
             channel.sendMessage("⚠️ Vous avez reçu un avertissement sur **" + event.getGuild().getName() + "** par " + 
-                    event.getAuthor().getAsTag() + ".\n**Raison:** " + reason + "\n**Total d'avertissements:** " + warningCount).queue(
+                    event.getAuthor().getName() + ".\n**Raison:** " + reason + "\n**Total d'avertissements:** " + warningCount).queue(
                     success -> {},
                     error -> logger.debug("Impossible d'envoyer un message privé à l'utilisateur (DMs probablement fermés)"));
         });
@@ -120,11 +120,11 @@ public class WarnCommand implements Command {
         List<WarnService.Warning> warnings = warnService.getUserWarnings(event.getGuild().getId(), targetUser.getId());
 
         if (warnings.isEmpty()) {
-            event.getMessage().reply("✅ **" + targetUser.getAsTag() + "** n'a aucun avertissement.").queue();
+            event.getMessage().reply("✅ **" + targetUser.getName() + "** n'a aucun avertissement.").queue();
             return;
         }
 
-        StringBuilder warningsList = new StringBuilder("**Avertissements de " + targetUser.getAsTag() + "** (" + warnings.size() + "):\n\n");
+        StringBuilder warningsList = new StringBuilder("**Avertissements de " + targetUser.getName() + "** (" + warnings.size() + "):\n\n");
         for (int i = 0; i < warnings.size(); i++) {
             WarnService.Warning warning = warnings.get(i);
             String date = warning.timestamp().format(DATE_FORMATTER);

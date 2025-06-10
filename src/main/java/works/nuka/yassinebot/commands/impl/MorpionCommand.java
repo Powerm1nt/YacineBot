@@ -120,7 +120,7 @@ public class MorpionCommand extends ListenerAdapter implements Command {
 
         // Enregistrer l'utilisation de la commande
         usageStatsService.logCommandUsage(challenger.getId(), "morpion", event.getGuild() != null ? event.getGuild().getId() : null);
-        logger.info("Nouvelle partie de morpion créée: {} entre {} et {}", gameId, challenger.getAsTag(), opponent.getAsTag());
+        logger.info("Nouvelle partie de morpion créée: {} entre {} et {}", gameId, challenger.getName(), opponent.getName());
     }
 
     @Override
