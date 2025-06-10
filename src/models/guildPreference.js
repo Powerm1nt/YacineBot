@@ -1,7 +1,7 @@
 /**
  * Modèle de données pour les préférences de guilde
  */
-import { prisma } from './index.js';
+import { prisma } from './prisma.js';
 
 /**
  * Récupère les préférences d'une guilde par son ID

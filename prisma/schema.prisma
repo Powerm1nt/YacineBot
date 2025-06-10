@@ -16,6 +16,10 @@ model Conversation {
   channelId      String    @map("channel_id")
   messages       Message[]
   lastResponseId String?   @map("last_response_id") // ID de la dernière réponse OpenAI (format 'resp_XXX')
+  relevanceScore Float?    @default(0) @map("relevance_score") // Score global de pertinence de la conversation
+  topicSummary   String?   @map("topic_summary") // Résumé des sujets de la conversation
+  isShared       Boolean   @default(false) @map("is_shared") // Indique si la conversation est partagée
+  sharedWith     String[]  @default([]) @map("shared_with") // Liste des IDs utilisateurs avec qui la conversation est partagée
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @default(now()) @map("updated_at")
 
@@ -31,6 +35,8 @@ model Message {
   userName       String       @map("user_name")
   content        String
   isBot          Boolean      @default(false) @map("is_bot")
+  relevanceScore Float?       @default(0) @map("relevance_score") // Score de pertinence du message
+  hasKeyInfo     Boolean      @default(false) @map("has_key_info") // Indique si le message contient des informations clés
   createdAt      DateTime     @default(now()) @map("created_at")
 
   @@map("messages")

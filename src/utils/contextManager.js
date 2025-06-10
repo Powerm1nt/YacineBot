@@ -1,7 +1,8 @@
 import { getContextKey } from './commandUtils.js';
-import { prisma } from '../models/index.js';
+import { prisma } from '../models/prisma.js';
 import { conversationService } from '../services/conversationService.js';
 import { convertBigIntsToStrings } from './jsonUtils.js';
+import { analysisService } from '../services/analysisService.js';
 
 const guildConversations = new Map()
 const dmConversations = new Map()
@@ -366,6 +367,45 @@ export function getContextStats() {
     memoryUsage: process.memoryUsage(),
     config: CLEANUP_CONFIG
   };
+}
+
+/**
+ * Partage une conversation avec un utilisateur spécifié
+ * @param {Object} message - Message Discord pour obtenir le contexte
+ * @param {string} shareWithUserId - ID de l'utilisateur avec qui partager
+ * @returns {Promise<boolean>} - Succès de l'opération
+ */
+export async function shareContextWithUser(message, shareWithUserId) {
+  try {
+    if (!message || !shareWithUserId) return false;
+
+    const context = getContextKey(message);
+    const channelId = context.key;
+    const guildId = context.type === 'guild' ? message.guild?.id : null;
+
+    // Utiliser le service d'analyse pour partager la conversation
+    return await analysisService.shareConversation(channelId, guildId, shareWithUserId);
+  } catch (error) {
+    console.error('Erreur lors du partage du contexte:', error);
+    return false;
+  }
+}
+
+/**
+ * Récupère les conversations partagées avec un utilisateur
+ * @param {string} userId - ID de l'utilisateur
+ * @returns {Promise<Array>} - Liste des conversations partagées
+ */
+export async function getSharedContexts(userId) {
+  try {
+    if (!userId) return [];
+
+    // Utiliser le service d'analyse pour récupérer les conversations partagées
+    return await analysisService.getSharedConversations(userId);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des contextes partagés:', error);
+    return [];
+  }
 }
 
 /**

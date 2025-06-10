@@ -62,7 +62,83 @@ yarn docker:prod:build
 # Exécutions suivantes
 yarn docker:prod
 ```
+# Discord AI Assistant Bot
 
+Un bot Discord intégrant une IA conversationnelle avec analyse et partage de conversations.
+
+## Fonctionnalités
+
+- Interactions IA via OpenAI API (GPT-4.1-mini)
+- Historique des conversations avec contexte
+- Analyse de pertinence des messages et conversations
+- Partage de conversations entre utilisateurs
+- Planification de tâches automatiques
+
+## Configuration
+
+### Variables d'environnement
+
+Créez un fichier `.env` à la racine du projet avec les variables suivantes :
+
+```
+OPENAI_API_KEY=your_openai_api_key
+CLIENT_TOKEN=your_discord_bot_token
+CLIENT_ID=your_discord_bot_id
+BOT_NAME=Yascine
+DATABASE_URL=postgresql://user:password@localhost:5432/bot_db
+```
+
+## Installation
+
+```bash
+# Installation des dépendances
+yarn install
+
+# Générer le client Prisma
+yarn prisma:generate
+
+# Appliquer les migrations de base de données
+yarn prisma:migrate
+```
+
+## Lancement
+
+```bash
+# Mode développement
+yarn dev
+
+# Mode production
+yarn start
+```
+
+## Commandes disponibles
+
+- `/ai <message>` - Interagir avec l'assistant IA
+- `/reset` - Réinitialiser la conversation en cours
+- `/conversations share <@utilisateur>` - Partager une conversation avec un utilisateur
+- `/conversations list` - Voir les conversations partagées avec vous
+- `/help` - Afficher l'aide
+
+## Scripts utiles
+
+- `yarn analyze:conversations` - Analyser les conversations existantes pour calculer leur pertinence
+
+## Docker
+
+Le projet peut être déployé avec Docker :
+
+```bash
+# Construction de l'image
+docker build -t discord-ai-bot --target production .
+
+# Lancement du conteneur
+docker run -d --name discord-bot --env-file .env discord-ai-bot
+```
+
+## Base de données
+
+- Les migrations de base de données sont exécutées automatiquement au démarrage
+- Le schéma Prisma définit toutes les tables et relations
 En mode production :
 - Le code est copié dans l'image Docker
 - L'application est exécutée avec PM2 pour une meilleure stabilité

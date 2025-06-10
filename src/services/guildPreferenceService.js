@@ -1,7 +1,7 @@
 /**
  * Service pour gérer les préférences de guilde
  */
-import { prisma } from '../models/index.js';
+import { prisma } from '../models/prisma.js';
 
 /**
  * Récupère les préférences d'une guilde

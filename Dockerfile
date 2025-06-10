@@ -4,11 +4,14 @@ WORKDIR /app
 
 RUN corepack enable
 
+# Installer les dépendances globales
 RUN npm install -g pm2
 
+# Copier les fichiers de dépendances
 COPY package.json yarn.lock ./
 
-RUN yarn install
+# Installation des dépendances
+RUN yarn install --frozen-lockfile
 
 # -----------------------------------------------
 # Development build
@@ -16,7 +19,13 @@ RUN yarn install
 FROM base as development
 ENV NODE_ENV=development
 
-CMD ["yarn", "dev"]
+# Copier le code source
+COPY . .
+
+# Ne pas générer le client Prisma pendant le build pour éviter l'erreur DATABASE_URL
+
+# Exécuter les migrations au démarrage puis lancer l'application
+CMD ["sh", "-c", "yarn db:deploy && yarn dev"]
 
 # -----------------------------------------------
 # Production build
@@ -24,18 +33,11 @@ CMD ["yarn", "dev"]
 FROM base as production
 ENV NODE_ENV=production
 
+# Copier le code source
 COPY . .
 
-RUN yarn prisma:generate
+# Générer le client Prisma pendant le build
+RUN yarn db:deploy
 
-RUN echo '#!/bin/sh\n\
-if [ -n "$DATABASE_URL" ]; then\n\
-  echo "Running Prisma migrations..."\n\
-  yarn prisma:migrate || echo "Migrations skipped or already applied"\n\
-fi\n\
-\n\
-# Start the application with PM2\n\
-pm2-runtime start src/app.js --name app' > /app/startup.sh \
-  && chmod +x /app/startup.sh
-
-CMD ["/app/startup.sh"]
+# Exécuter les migrations au démarrage puis lancer l'application
+CMD ["sh", "-c", "yarn db:deploy && pm2-runtime start src/app.js --name app"]

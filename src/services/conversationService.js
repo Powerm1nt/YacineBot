@@ -1,7 +1,7 @@
 /**
  * Service pour gérer les conversations
  */
-import { prisma } from '../models/index.js';
+import { prisma } from '../models/prisma.js';
 
 /**
  * Récupère l'historique de conversation pour un canal
@@ -43,9 +43,11 @@ export async function getConversationHistory(channelId, guildId = null) {
  * @param {string} content - Contenu du message
  * @param {boolean} isBot - Si le message est d'un bot
  * @param {string} guildId - ID de la guilde (facultatif pour les DMs)
+ * @param {number} relevanceScore - Score de pertinence du message (0-1)
+ * @param {boolean} hasKeyInfo - Si le message contient des informations clés
  * @returns {Promise<Object>} - Message ajouté
  */
-export async function addMessage(channelId, userId, userName, content, isBot = false, guildId = null) {
+export async function addMessage(channelId, userId, userName, content, isBot = false, guildId = null, relevanceScore = 0, hasKeyInfo = false) {
   try {
     // Chercher ou créer la conversation avec upsert pour éviter les erreurs de contrainte unique
     const conversation = await prisma.conversation.upsert({
@@ -66,14 +68,16 @@ export async function addMessage(channelId, userId, userName, content, isBot = f
       }
     });
 
-    // Ajouter le message
+    // Ajouter le message avec les scores de pertinence
     return await prisma.message.create({
       data: {
         conversationId: conversation.id,
         userId,
         userName,
         content,
-        isBot
+        isBot,
+        relevanceScore,
+        hasKeyInfo
       }
     });
   } catch (error) {

@@ -15,6 +15,11 @@
     "docker:dev:build": "docker-compose -f compose.dev.yml up --build",
     "docker:prod": "docker-compose -f compose.yml up",
     "docker:prod:build": "docker-compose -f compose.yml up --build",
+    "analyze:conversations": "node src/scripts/analyze-existing-conversations.js",
+    "db:backup": "bash scripts/backup-database.sh",
+    "db:deploy": "npx prisma migrate deploy && npx prisma generate",
+    "db:restore": "bash scripts/restore-database.sh",
+    "db:install-tools": "bash scripts/install-postgres-tools.sh",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",

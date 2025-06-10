@@ -1,7 +1,7 @@
 /**
  * Service pour gérer la persistance des tâches planifiées
  */
-import { prisma } from '../models/index.js';
+import { prisma } from '../models/prisma.js';
 
 /**
  * Sauvegarde une tâche planifiée dans la base de données

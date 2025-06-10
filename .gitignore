@@ -40,6 +40,11 @@ build/
 # Fichiers de couverture de test
 coverage/
 
+# Database backups
+backups/
+*.sql
+*.sql.gz
+
 # Fichiers système
 .DS_Store
 Thumbs.db

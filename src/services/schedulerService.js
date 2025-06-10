@@ -3,9 +3,10 @@ import { OpenAI } from 'openai/client.mjs'
 import { format, addMinutes, getHours } from 'date-fns'
 import dotenv from 'dotenv'
 import { randomUUID } from 'crypto'
-import { isGuildEnabled, isChannelTypeEnabled, isSchedulerEnabled } from '../utils/configService.js'
+import { isGuildEnabled, isChannelTypeEnabled, isSchedulerEnabled, isAnalysisEnabled, isAutoRespondEnabled } from '../utils/configService.js'
+import { analysisService } from './analysisService.js'
 import { taskService } from './taskService.js'
-const { prisma } = await import('../models/index.js');
+const { prisma } = await import('../models/prisma.js');
 
 dotenv.config()
 
@@ -297,7 +298,12 @@ export async function initScheduler (client) {
 
       // Recréer les tâches avec de nouveaux délais
       for (let i = 0; i < savedTasks.length; i++) {
-        await createRandomTask(client, savedTasks[i].taskNumber);
+        // Vérifier le type de tâche
+        if (savedTasks[i].data && savedTasks[i].data.type === 'analysis') {
+          await createAnalysisTask(client, savedTasks[i].taskNumber);
+        } else {
+          await createRandomTask(client, savedTasks[i].taskNumber);
+        }
       }
     } else {
       // Aucune tâche trouvée, créer un nombre aléatoire de nouvelles tâches
@@ -307,6 +313,10 @@ export async function initScheduler (client) {
       for (let i = 0; i < taskCount; i++) {
         await createRandomTask(client, i + 1);
       }
+
+      // Ajouter également une tâche d'analyse
+      console.log('Ajout d\'une tâche d\'analyse de conversation...');
+      await createAnalysisTask(client, taskCount + 1);
     }
   } catch (error) {
     console.error('Erreur lors de l\'initialisation du planificateur:', error);
@@ -318,6 +328,222 @@ export async function initScheduler (client) {
  * @param {Object} client - Client Discord
  * @param {number} taskNumber - Numéro de la tâche (pour identification)
  */
+/**
+ * Crée une tâche d'analyse et de réponse aux conversations récentes
+ * @param {Object} client - Client Discord
+ * @param {number} taskNumber - Numéro de la tâche
+ */
+async function createAnalysisTask(client, taskNumber) {
+  // Générer un identifiant unique pour cette tâche
+  const taskId = `analysis-task-${taskNumber}-${randomUUID().substring(0, 8)}`;
+
+  // Créer la tâche asynchrone
+  const task = new AsyncTask(
+    taskId,
+    async () => {
+      try {
+        // Vérifier si l'analyse est activée
+        const analysisEnabled = await isAnalysisEnabled();
+        const autoRespondEnabled = await isAutoRespondEnabled();
+
+        if (!analysisEnabled) {
+          console.log('Tâche d\'analyse ignorée - L\'analyse est désactivée');
+          return;
+        }
+
+        // Vérifier si nous sommes dans les heures actives
+        if (!isActiveHour()) {
+          console.log(`Tâche d'analyse ignorée - Hors des heures actives (${formatDate(new Date(), 'HH:mm')})`);
+          return;
+        }
+
+        // Récupérer les conversations récemment actives
+        const recentConversations = await prisma.conversation.findMany({
+          where: {
+            updatedAt: {
+              gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // Dernières 24 heures
+            }
+          },
+          orderBy: {
+            updatedAt: 'desc'
+          },
+          take: 5,
+          include: {
+            messages: {
+              orderBy: {
+                createdAt: 'desc'
+              },
+              take: 20
+            }
+          }
+        });
+
+        if (recentConversations.length === 0) {
+          console.log('Aucune conversation récente à analyser');
+          return;
+        }
+
+        // Sélectionner une conversation au hasard parmi les récentes
+        const randomIndex = Math.floor(Math.random() * recentConversations.length);
+        const selectedConversation = recentConversations[randomIndex];
+
+        // Analyser la pertinence de la conversation
+        const analysis = await analysisService.analyzeConversationRelevance(selectedConversation.messages);
+
+        // Mettre à jour le score de pertinence de la conversation
+        await prisma.conversation.update({
+          where: { id: selectedConversation.id },
+          data: {
+            relevanceScore: analysis.relevanceScore,
+            topicSummary: analysis.topicSummary,
+            updatedAt: new Date()
+          }
+        });
+
+        // Si la réponse automatique est activée et que la conversation est pertinente
+        if (autoRespondEnabled && analysis.relevanceScore >= 0.6) {
+          // Trouver le canal correspondant
+          const channel = await client.channels.fetch(selectedConversation.channelId).catch(() => null);
+
+          if (channel) {
+            // Générer une réponse ou une question basée sur le sujet
+            const shouldAskQuestion = Math.random() > 0.5; // 50% de chance de poser une question
+
+            let messageContent;
+            if (shouldAskQuestion) {
+              // Générer une question sur le sujet
+              const question = await generateFollowUpQuestion(selectedConversation.messages, analysis.topicSummary);
+              messageContent = question;
+            } else {
+              // Générer un commentaire sur le sujet
+              const comment = await generateTopicComment(selectedConversation.messages, analysis.topicSummary);
+              messageContent = comment;
+            }
+
+            // Vérifier si le message a du contenu
+            if (messageContent && messageContent.trim() !== '') {
+              // Délai aléatoire pour sembler plus naturel
+              await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 3000) + 1000));
+
+              // Simuler l'écriture
+              await channel.sendTyping().catch(console.error);
+
+              // Délai calculé en fonction de la longueur du message
+              const typingDelay = messageContent.length * 30 + Math.floor(Math.random() * 2000);
+              await new Promise(resolve => setTimeout(resolve, typingDelay));
+
+              // Envoyer le message
+              await channel.send(messageContent);
+
+              console.log(`Message automatique envoyé dans ${selectedConversation.channelId} sur le sujet: ${analysis.topicSummary}`);
+            }
+          }
+        }
+
+        console.log(`Conversation ${selectedConversation.id} analysée, score: ${analysis.relevanceScore}, sujet: ${analysis.topicSummary}`);
+      } catch (error) {
+        console.error('Erreur lors de l\'exécution de la tâche d\'analyse:', error);
+      }
+    },
+    (err) => {
+      console.error('Erreur dans la tâche d\'analyse:', err);
+    }
+  );
+
+  // Générer un délai aléatoire plus long pour l'analyse (30-60 minutes)
+  const analysisDelay = 30 * 60 * 1000 + Math.floor(Math.random() * 30 * 60 * 1000);
+  const nextExecutionTime = addMinutes(new Date(), Math.floor(analysisDelay / 60000));
+
+  console.log(`[Tâche d'analyse ${taskNumber}] Planifiée pour ${formatDate(nextExecutionTime, 'HH:mm:ss')}`);
+
+  // Créer un job pour l'analyse
+  const job = new SimpleIntervalJob(
+    { milliseconds: analysisDelay, runImmediately: false },
+    task,
+    taskId
+  );
+
+  // Ajouter le job au planificateur
+  scheduler.addSimpleIntervalJob(job);
+
+  // Enregistrer la tâche dans la base de données
+  try {
+    await taskService.saveTask(taskId, taskNumber, nextExecutionTime, null, 'analysis');
+  } catch (error) {
+    console.warn(`Erreur lors de l'enregistrement de la tâche d'analyse ${taskId}:`, error.message);
+  }
+}
+
+/**
+ * Génère une question de suivi basée sur la conversation
+ * @param {Array} messages - Messages de la conversation
+ * @param {string} topicSummary - Résumé du sujet
+ * @returns {Promise<string>} - Question générée
+ */
+async function generateFollowUpQuestion(messages, topicSummary) {
+  try {
+    const systemInstructions = `Tu es un assistant Discord amical et curieux. Génère une question de suivi naturelle et engageante basée sur la conversation récente.
+
+La question doit:
+- Être liée au sujet principal: "${topicSummary}"
+- Sembler naturelle dans le flux de la conversation
+- Encourager plus de discussion
+- Être courte et directe (max 1-2 phrases)
+- Éviter d'être trop formelle ou académique
+
+Ne pas inclure d'introduction comme "Alors," ou "Au fait,". Donne simplement la question.`;
+
+    // Préparer les derniers messages comme contexte
+    const recentMessages = messages.slice(-10).map(msg => `${msg.userName}: ${msg.content}`).join('\n');
+
+    const response = await openai.responses.create({
+      model: 'gpt-4.1-mini',
+      input: `Conversation récente:\n${recentMessages}\n\nSujet principal: ${topicSummary}`,
+      instructions: systemInstructions,
+    });
+
+    return response.output_text || 'Qu\'en pensez-vous?';
+  } catch (error) {
+    console.error('Erreur lors de la génération de question de suivi:', error);
+    return 'Des réflexions sur ce sujet?';
+  }
+}
+
+/**
+ * Génère un commentaire sur le sujet de la conversation
+ * @param {Array} messages - Messages de la conversation
+ * @param {string} topicSummary - Résumé du sujet
+ * @returns {Promise<string>} - Commentaire généré
+ */
+async function generateTopicComment(messages, topicSummary) {
+  try {
+    const systemInstructions = `Tu es un assistant Discord amical et attentionné. Génère un commentaire naturel et pertinent basé sur la conversation récente.
+
+Le commentaire doit:
+- Être lié au sujet principal: "${topicSummary}"
+- Ajouter de la valeur à la conversation
+- Sembler naturel et conversationnel
+- Être court et direct (1-2 phrases)
+- Éviter d'être trop formel ou académique
+
+Ne pas inclure d'introduction comme "Je pense que" ou "À mon avis". Donne simplement le commentaire direct.`;
+
+    // Préparer les derniers messages comme contexte
+    const recentMessages = messages.slice(-10).map(msg => `${msg.userName}: ${msg.content}`).join('\n');
+
+    const response = await openai.responses.create({
+      model: 'gpt-4.1-mini',
+      input: `Conversation récente:\n${recentMessages}\n\nSujet principal: ${topicSummary}`,
+      instructions: systemInstructions,
+    });
+
+    return response.output_text || 'Intéressant.';
+  } catch (error) {
+    console.error('Erreur lors de la génération de commentaire:', error);
+    return 'Très intéressant.';
+  }
+}
+
 async function createRandomTask (client, taskNumber) {
   // Générer un identifiant unique pour cette tâche
   const taskId = `random-question-task-${taskNumber}-${randomUUID().substring(0, 8)}`

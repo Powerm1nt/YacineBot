@@ -9,28 +9,42 @@ services:
       - "3000:3000"
     env_file:
       - .env
-#    environment:
-#      - NODE_ENV=development
-#      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-app_dev}
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-app_dev}
     volumes:
       - .:/app
       - /app/node_modules
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    networks:
+      - app_dev_network
 
   db:
     image: postgres:16
     env_file:
       - .env
-#    environment:
-#      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-#      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-#      - POSTGRES_DB=${POSTGRES_DB:-app_dev}
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-app_dev}
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    networks:
+      - app_dev_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_dev_data:
     driver: local
+
+networks:
+  app_dev_network:
+    driver: bridge

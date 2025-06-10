@@ -14,7 +14,9 @@ import {
   getLastResponseId,
 } from '../utils/contextManager.js'
 import { conversationService } from '../services/conversationService.js'
+import { analysisService } from '../services/analysisService.js'
 import { convertBigIntsToStrings } from '../utils/jsonUtils.js'
+import { isSchedulerEnabled } from '../utils/configService.js'
 
 import dotenv from 'dotenv'
 dotenv.config()
@@ -161,6 +163,29 @@ export async function ai (client) {
       const guildId = message.guild?.id || null
       const channelId = context.key
       try {
+        // Analyser la pertinence du message du bot (avec un contexte limité)
+        const analysisResult = await analysisService.analyzeMessageRelevance(
+          response.output_text || '',
+          userInput.substring(0, 200) // Utiliser le début du message de l'utilisateur comme contexte
+        );
+
+        // Stocker le message avec son score de pertinence
+        await conversationService.addMessage(
+          channelId,
+          client.user.id,
+          BOT_NAME,
+          response.output_text || '',
+          true,
+          guildId,
+          analysisResult.relevanceScore,
+          analysisResult.hasKeyInfo
+        );
+
+        // Mettre à jour le score global de la conversation
+        await analysisService.updateConversationRelevance(channelId, guildId);
+      } catch (error) {
+        console.error('Erreur lors de l\'enregistrement de la réponse dans la base de données:', error);
+        // Enregistrer quand même le message sans analyse en cas d'erreur
         await conversationService.addMessage(
           channelId,
           client.user.id,
@@ -168,9 +193,7 @@ export async function ai (client) {
           response.output_text || '',
           true,
           guildId
-        )
-      } catch (error) {
-        console.error('Erreur lors de l\'enregistrement de la réponse dans la base de données:', error)
+        );
       }
 
       let responseText = response.output_text || ''

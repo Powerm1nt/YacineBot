@@ -11,7 +11,11 @@ export const defaultConfig = {
       guild: true,
       dm: true,
       group: true
-    }
+    },
+    analysisEnabled: true,  // Active l'analyse de pertinence des messages
+    autoRespond: true,      // Permet de répondre automatiquement aux messages pertinents
+    autoQuestion: true,     // Permet de poser des questions sur les sujets de la conversation
+    sharingEnabled: true    // Active le partage de contexte
   }
 };
 
@@ -136,4 +140,66 @@ export async function isSchedulerEnabled() {
   }
 
   return defaultConfig.scheduler.enabled;
+}
+
+/**
+ * Vérifie si l'analyse de pertinence est activée
+ * @returns {Promise<boolean>} - true si l'analyse est activée
+ */
+export async function isAnalysisEnabled() {
+  const config = await loadConfig();
+  return config.scheduler?.analysisEnabled !== false && defaultConfig.scheduler.analysisEnabled !== false;
+}
+
+/**
+ * Active ou désactive l'analyse de pertinence
+ * @param {boolean} enabled - État de l'analyse
+ * @returns {Promise<boolean>} - Succès de l'opération
+ */
+export async function setAnalysisEnabled(enabled) {
+  try {
+    const config = await loadConfig();
+
+    if (!config.scheduler) {
+      config.scheduler = defaultConfig.scheduler;
+    }
+
+    config.scheduler.analysisEnabled = enabled;
+
+    return saveConfig(config);
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour de l\'état de l\'analyse:', error);
+    return false;
+  }
+}
+
+/**
+ * Vérifie si la réponse automatique est activée
+ * @returns {Promise<boolean>} - true si la réponse automatique est activée
+ */
+export async function isAutoRespondEnabled() {
+  const config = await loadConfig();
+  return config.scheduler?.autoRespond !== false && defaultConfig.scheduler.autoRespond !== false;
+}
+
+/**
+ * Active ou désactive la réponse automatique
+ * @param {boolean} enabled - État de la réponse automatique
+ * @returns {Promise<boolean>} - Succès de l'opération
+ */
+export async function setAutoRespondEnabled(enabled) {
+  try {
+    const config = await loadConfig();
+
+    if (!config.scheduler) {
+      config.scheduler = defaultConfig.scheduler;
+    }
+
+    config.scheduler.autoRespond = enabled;
+
+    return saveConfig(config);
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour de l\'état de la réponse automatique:', error);
+    return false;
+  }
 }

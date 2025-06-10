@@ -1,4 +1,4 @@
-import { prisma } from './index.js';
+import { prisma } from './prisma.js';
 
 /**
  * Modèle de données pour les conversations
