@@ -1,11 +1,10 @@
 package works.nuka.yassinebot.services;
 
-import eu.mihosoft.toad.scheduler.ToadScheduler;
-import eu.mihosoft.toad.scheduler.Job;
-import eu.mihosoft.toad.scheduler.simple.SimpleScheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import works.nuka.yassinebot.models.Task;
+import works.nuka.yassinebot.scheduler.SimpleJob;
+import works.nuka.yassinebot.scheduler.SimpleScheduler;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -19,7 +18,7 @@ public class SchedulerService {
     private static final Logger logger = LoggerFactory.getLogger(SchedulerService.class);
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
 
-    private final ToadScheduler scheduler;
+    private final SimpleScheduler scheduler;
     private final TaskService taskService;
 
     public SchedulerService(TaskService taskService) {
@@ -33,7 +32,7 @@ public class SchedulerService {
      */
     public void start() {
         // Vérifier les tâches toutes les minutes
-        Job job = Job.builder()
+        SimpleJob job = SimpleJob.builder()
                 .name("task-checker")
                 .interval(1, TimeUnit.MINUTES)
                 .execute(this::checkTasks)
