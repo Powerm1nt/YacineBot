@@ -1,12 +1,8 @@
 import { stopScheduler, initScheduler, getSchedulerStatus, getNextChannel, getTaskByNumber, setDefaultChannelType, CHANNEL_TYPES, getTargetingStats, setTaskChannelType } from '../services/schedulerService.js';
 
-// Importer la fonction formatDelay depuis schedulerService.js
 import { formatDelay } from '../services/schedulerService.js';
 import { sendLongMessage, checkAndRegenerateTasks } from '../utils/messageUtils.js';
-import { handleConfigCommand } from '../utils/configHandler.js';
-
-
-// Métadonnées de la commande
+import { isValueTrue } from '../commands/config.js';
 export const metadata = {
   name: 'scheduler',
   description: 'Gère le planificateur de tâches automatiques',
@@ -14,12 +10,6 @@ export const metadata = {
   usage: '<start|stop|status|stats|restart|config>'
 };
 
-/**
- * Commande pour gérer le planificateur de tâches
- * @param {Object} client - Client Discord
- * @param {Object} message - Message Discord
- * @param {Array} args - Arguments de la commande
- */
 export async function scheduler(client, message, args) {
   if (!args.length) {
     message.reply('❌ Utilisation : scheduler <start|stop|status|stats|restart|config>');
@@ -47,12 +37,10 @@ export async function scheduler(client, message, args) {
         return;
       }
 
-      // Vérifier s'il n'y a plus de tâches actives et les régénérer si nécessaire
       if (statsStatus.tasks.length === 0) {
         const regenerated = checkAndRegenerateTasks(client);
         if (regenerated) {
           message.reply('⚠️ Aucune tâche active détectée. Le planificateur a été automatiquement redémarré avec de nouvelles tâches.');
-          // Rafraîchir le statut après la régénération
           const refreshedStatus = getSchedulerStatus();
           statsStatus.tasks = refreshedStatus.tasks;
           statsStatus.taskCount = refreshedStatus.taskCount;
@@ -63,10 +51,8 @@ export async function scheduler(client, message, args) {
         }
       }
 
-      // Créer un rapport de statistiques
       let statsMessage = `📈 **Statistiques du planificateur**\n\n`;
 
-      // Distribution des délais
       const delays = statsStatus.tasks.map(t => t.timeLeftMs);
       const minTaskDelay = Math.min(...delays);
       const maxTaskDelay = Math.max(...delays);
@@ -77,13 +63,11 @@ export async function scheduler(client, message, args) {
       statsMessage += `▫️ Maximum: **${formatDelay(maxTaskDelay)}**\n`;
       statsMessage += `▫️ Moyenne: **${formatDelay(avgDelay)}**\n\n`;
 
-      // Configuration
       statsMessage += `⚙️ **Configuration:**\n`;
       statsMessage += `▫️ Plage de délai: **${statsStatus.config.minDelay}** à **${statsStatus.config.maxDelay}**\n`;
       statsMessage += `▫️ Tâches configurées: **${statsStatus.config.minTasks}** à **${statsStatus.config.maxTasks}**\n`;
       statsMessage += `▫️ Tâches actives: **${statsStatus.taskCount}**\n\n`;
 
-      // Statistiques détaillées sur les cibles
       const targetingStats = getTargetingStats();
 
       statsMessage += `📊 **Distribution des canaux:**\n`;
@@ -92,7 +76,6 @@ export async function scheduler(client, message, args) {
       statsMessage += `▫️ Groupes: **${targetingStats.channels.group.count}** tâches\n`;
       statsMessage += `▫️ En attente d'attribution: **${targetingStats.channels.pending}** tâches\n\n`;
 
-      // Ajouter les serveurs les plus ciblés s'il y en a
       if (targetingStats.guilds.count > 0) {
         const guildEntries = Object.entries(targetingStats.guilds.names);
         if (guildEntries.length > 0) {
@@ -104,7 +87,6 @@ export async function scheduler(client, message, args) {
         }
       }
 
-      // Ajouter les utilisateurs les plus ciblés s'il y en a
       if (targetingStats.users.count > 0) {
         const userEntries = Object.entries(targetingStats.users.names);
         if (userEntries.length > 0) {
@@ -116,12 +98,10 @@ export async function scheduler(client, message, args) {
         }
       }
 
-      // Prochaine exécution
       if (statsStatus.nextTask) {
         statsMessage += `⏰ **Prochaine exécution dans:** ${statsStatus.nextTask.timeLeft}\n`;
       }
 
-      // Utiliser sendLongMessage pour éviter l'erreur de limite de caractères
       await sendLongMessage(message.channel, statsMessage, { reply: message.reply.bind(message) });
       break;
 
@@ -133,7 +113,6 @@ export async function scheduler(client, message, args) {
     case 'status':
       const status = getSchedulerStatus();
 
-      // Prévisualiser le prochain canal si pas déjà disponible
       if (!status.nextChannel) {
         getNextChannel(client);
       }
@@ -143,12 +122,10 @@ export async function scheduler(client, message, args) {
         return;
       }
 
-      // Vérifier s'il n'y a plus de tâches actives et les régénérer si nécessaire
       if (status.tasks.length === 0) {
         const regenerated = checkAndRegenerateTasks(client);
         if (regenerated) {
           message.reply('⚠️ Aucune tâche active détectée. Le planificateur a été automatiquement redémarré avec de nouvelles tâches.');
-          // Rafraîchir le statut après la régénération
           const refreshedStatus = getSchedulerStatus();
           status.tasks = refreshedStatus.tasks;
           status.taskCount = refreshedStatus.taskCount;
@@ -156,7 +133,6 @@ export async function scheduler(client, message, args) {
         }
       }
 
-      // Construire le message complet
       let statusMessage = `📊 **État du planificateur**\n\n`;
       statusMessage += `⏰ Heure actuelle: **${status.currentTime}** (${status.timezone})\n`;
       statusMessage += `🔄 **${status.taskCount}** tâche(s) active(s)\n`;
@@ -164,11 +140,9 @@ export async function scheduler(client, message, args) {
       statusMessage += `⏱️ Délai configuré: **${status.config.minDelay}** - **${status.config.maxDelay}**\n`;
       statusMessage += `🔢 Tâches configurées: **${status.config.minTasks}** - **${status.config.maxTasks}**\n\n`;
 
-      // Ajouter les informations sur la prochaine exécution et le canal prévisualisé
       if (status.nextTask) {
         statusMessage += `⏰ **Prochaine exécution**: Tâche #${status.nextTask.number} dans **${status.nextTask.timeLeft}** (${status.nextTask.nextExecution})\n`;
 
-        // Ajouter l'information sur le canal prévisualisé
         if (status.nextChannel) {
           let channelInfo = '';
 
@@ -191,13 +165,11 @@ export async function scheduler(client, message, args) {
         }
       }
 
-      // Ajouter la liste des tâches planifiées
       if (status.tasks.length > 0) {
         statusMessage += `**Toutes les tâches planifiées:**\n`;
         status.tasks.forEach(task => {
           let targetInfo = "";
 
-          // Ajouter des informations sur la cible si disponibles
           if (task.targetChannel) {
             switch (task.targetChannel.type) {
               case 'guild':
@@ -220,7 +192,6 @@ export async function scheduler(client, message, args) {
         });
       }
 
-      // Utiliser la fonction sendLongMessage pour envoyer le message complet en plusieurs parties si nécessaire
       try {
         await sendLongMessage(message.channel, statusMessage, { reply: message.reply.bind(message) });
       } catch (error) {
@@ -231,9 +202,10 @@ export async function scheduler(client, message, args) {
 
     case 'config':
       try {
-        await handleConfigCommand(client, message, args.slice(1));
+        const { config } = await import('../commands/config.js');
+        await config(client, message, args.slice(1));
       } catch (error) {
-        console.error('Erreur lors de la configuration:', error);
+        console.error('Erreur lors de la redirection vers la configuration:', error);
         message.channel.send('❌ Une erreur est survenue lors de la configuration.');
       }
       break;

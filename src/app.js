@@ -18,7 +18,15 @@ import { getCommandMetadata } from './utils/commandUtils.js'
 import { initScheduler } from './services/schedulerService.js'
 import { morpion } from './commands/morpion.js'
 import { moignon } from './commands/moignon.js'
+import { config } from './commands/config.js'
+import { isSchedulerEnabled } from './utils/configService.js'
+import { context } from './commands/context.js'
 dotenv.config();
+
+if (!process.env.DATABASE_URL) {
+  console.error('La configuration de la base de données est incomplète. Vérifiez votre fichier .env');
+  process.exit(1);
+}
 
 const BOT_CONFIG = {
   name: process.env.BOT_NAME || 'Yascine',
@@ -43,6 +51,8 @@ const commands = {
   warn: async (message, args) => warn(client, message, args),
   morpion: async (message, args) => morpion(client, message, args),
   moignon: async (message, args) => moignon(client, message, args),
+  config: async (message, args) => config(client, message, args),
+  context: async (message, args) => context(client, message, args),
 };
 
 // Liste des commandes disponibles pour l'importation dynamique dans help.js
@@ -84,13 +94,20 @@ if (process.env?.TOKEN === undefined) {
   throw new Error('Token not found');
 }
 
-function registerFeatures(client) {
-  ai(client)
-  .catch(console.error);
+async function registerFeatures(client) {
+  try {
+    // Initialiser l'IA
+    await ai(client);
 
-  // Initialiser le planificateur de tâches automatiques
-  initScheduler(client);
-  console.log('Planificateur de tâches automatiques initialisé');
+    // Initialiser le planificateur de tâches automatiques
+    if (await isSchedulerEnabled()) {
+      await initScheduler(client);
+      console.log('Planificateur de tâches automatiques initialisé');
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'initialisation des fonctionnalités:', error);
+    // Ne pas quitter pour permettre le fonctionnement de base du bot
+  }
 }
 
   // Gestionnaire d'erreurs global pour éviter les crashs du bot
@@ -109,4 +126,3 @@ client.on('ready', async () => {
 client.login(process.env.TOKEN)
   .then(() => registerFeatures(client))
   .catch(console.error);
-

@@ -1,10 +1,11 @@
 import { ToadScheduler, SimpleIntervalJob, AsyncTask } from 'toad-scheduler'
 import { OpenAI } from 'openai/client.mjs'
-import { convertAITextToDiscordMentions } from '../utils/mentionUtils.js'
 import { format, addMinutes, getHours } from 'date-fns'
 import dotenv from 'dotenv'
 import { randomUUID } from 'crypto'
-import { isGuildEnabled, isChannelTypeEnabled, getSchedulerConfig } from '../utils/configManager.js'
+import { isGuildEnabled, isChannelTypeEnabled, isSchedulerEnabled } from '../utils/configService.js'
+import { taskService } from './taskService.js'
+const { prisma } = await import('../models/index.js');
 
 dotenv.config()
 
@@ -13,67 +14,50 @@ const openai = new OpenAI({
   apiKey: process.env['OPENAI_API_KEY'],
 })
 
-// Fuseau horaire par défaut: Europe/Paris
 const TIMEZONE = process.env.TIMEZONE || 'Europe/Paris'
 
-// Types de canaux disponibles pour les tâches planifiées
 export const CHANNEL_TYPES = {
-  GUILD: 'guild',        // Salons de serveur
-  DM: 'dm',              // Messages privés
-  GROUP: 'group'         // Groupes privés
+  GUILD: 'guild',
+  DM: 'dm',
+  GROUP: 'group'
 }
 
-// Stockage du canal prévisualisé pour la prochaine exécution
 let previewedNextChannel = null
 
-// Configuration des tâches planifiées
-const MIN_DELAY = parseInt(process.env.MIN_DELAY_MINUTES || '10') * 60 * 1000 // 10 minutes par défaut
-const MAX_DELAY = parseInt(process.env.MAX_DELAY_MINUTES || '120') * 60 * 1000 // 2 heures par défaut
-const MIN_TASKS = parseInt(process.env.MIN_TASKS || '1') // Au moins 1 tâche par défaut
-const MAX_TASKS = parseInt(process.env.MAX_TASKS || '3') // Maximum 3 tâches par défaut
+const MIN_DELAY = parseInt(process.env.MIN_DELAY_MINUTES || '10') * 60 * 1000
+const MAX_DELAY = parseInt(process.env.MAX_DELAY_MINUTES || '120') * 60 * 1000
+const MIN_TASKS = parseInt(process.env.MIN_TASKS || '1')
+const MAX_TASKS = parseInt(process.env.MAX_TASKS || '3')
 
-// Registre des tâches actives
 const activeTasks = new Map()
 
-/**
- * Formate une date avec le format spécifié
- * @param {Date} date - Date à formater
- * @param {string} formatStr - Format de date souhaité
- * @returns {string} - Date formatée
- */
 function formatDate (date, formatStr = 'HH:mm:ss dd/MM/yyyy') {
-  return format(date, formatStr)
+  try {
+    // Vérifier que date est un objet Date valide
+    const dateObj = date instanceof Date ? date : new Date(date);
+    if (isNaN(dateObj.getTime())) {
+      console.warn(`formatDate: Date invalide fournie: ${date}`);
+      return 'Date invalide';
+    }
+    return format(dateObj, formatStr);
+  } catch (error) {
+    console.error(`Erreur lors du formatage de la date ${date}:`, error);
+    return 'Erreur de date';
+  }
 }
 
-/**
- * Obtient l'heure locale actuelle
- * @returns {number} - Heure locale (0-23)
- */
 function getCurrentHour () {
   return getHours(new Date())
 }
 
-/**
- * Génère un délai aléatoire entre min et max
- * @returns {number} - Délai en millisecondes
- */
 function generateRandomDelay () {
   return Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY + 1)) + MIN_DELAY
 }
 
-/**
- * Génère un nombre aléatoire de tâches entre MIN_TASKS et MAX_TASKS
- * @returns {number} - Nombre de tâches à créer
- */
 function getRandomTaskCount () {
   return Math.floor(Math.random() * (MAX_TASKS - MIN_TASKS + 1)) + MIN_TASKS
 }
 
-/**
- * Convertit les millisecondes en format lisible
- * @param {number} ms - Millisecondes
- * @returns {string} - Format lisible (ex: "1h 30m")
- */
 export function formatDelay (ms) {
   const minutes = Math.floor(ms / 60000)
   if (minutes < 60) {
@@ -84,15 +68,10 @@ export function formatDelay (ms) {
   return `${hours}h ${remainingMinutes}m`
 }
 
-// Système d'instructions pour générer des questions
 const questionSystemInstructions = `Génère une seule question intéressante, originale, amusante ou provocante (mais jamais offensive) pour animer une conversation entre amis sur Discord. 
 La question doit être courte (maximum 50 mots) et facilement compréhensible.
 Ne pas utiliser de formules d'introduction comme "Voici une question:" ou "Question du jour:", donne simplement la question directement.`
 
-/**
- * Génère une question aléatoire en utilisant l'API OpenAI
- * @returns {Promise<string>} La question générée
- */
 async function generateRandomQuestion () {
   try {
     const response = await openai.responses.create({
@@ -108,38 +87,27 @@ async function generateRandomQuestion () {
   }
 }
 
-/**
- * Sélectionne un canal aléatoire parmi les canaux accessibles
- * @param {Object} client - Client Discord
- * @param {string} channelType - Type de canal (GUILD, DM, GROUP ou null pour aléatoire)
- * @returns {Object|null} - Canal sélectionné ou null
- */
 function selectRandomChannel(client, channelType = null) {
-  // Obtenir les types de canaux activés
   const enabledTypes = [];
 
   if (isChannelTypeEnabled(CHANNEL_TYPES.GUILD)) enabledTypes.push(CHANNEL_TYPES.GUILD);
   if (isChannelTypeEnabled(CHANNEL_TYPES.DM)) enabledTypes.push(CHANNEL_TYPES.DM);
   if (isChannelTypeEnabled(CHANNEL_TYPES.GROUP)) enabledTypes.push(CHANNEL_TYPES.GROUP);
 
-  // Si aucun type n'est activé, retourner null
   if (enabledTypes.length === 0) {
     console.log('Aucun type de canal n\'est activé dans la configuration');
     return null;
   }
 
-  // Si un type spécifique est demandé, vérifier s'il est activé
   if (channelType) {
     if (!isChannelTypeEnabled(channelType)) {
       console.log(`Le type de canal ${channelType} est désactivé dans la configuration`);
       return null;
     }
   } else {
-    // Si aucun type spécifié, choisir aléatoirement parmi les types activés
     channelType = enabledTypes[Math.floor(Math.random() * enabledTypes.length)];
   }
 
-  // En fonction du type de canal
   switch (channelType) {
     case CHANNEL_TYPES.GUILD:
       return selectRandomGuildChannel(client);
@@ -159,7 +127,7 @@ function selectRandomChannel(client, channelType = null) {
  * @returns {Object|null} - Canal sélectionné ou null
  */
 function selectRandomGuildChannel(client) {
-  // Récupérer tous les serveurs où le bot est présent
+  // Récupérer tous les serveurs avec lesquels le bot est présent
   const guilds = Array.from(client.guilds.cache.values())
     // Filtrer pour ne garder que les serveurs activés dans la configuration
     .filter(guild => isGuildEnabled(guild.id));
@@ -289,10 +257,10 @@ function isActiveHour (startHour = 8, endHour = 23) {
  * Initialise le planificateur de tâches
  * @param {Object} client - Client Discord
  */
-export function initScheduler (client) {
+export async function initScheduler (client) {
   // Vérifier si les messages automatiques sont activés
-  if (process.env.ENABLE_AUTO_MESSAGES !== 'true') {
-    console.log('Les messages automatiques sont désactivés dans les variables d\'environnement')
+  if (!(await isSchedulerEnabled()) || process.env.ENABLE_AUTO_MESSAGES !== 'true') {
+    console.log('Les messages automatiques sont désactivés')
     return
   }
 
@@ -303,12 +271,45 @@ export function initScheduler (client) {
   console.log(`Planificateur initialisé à ${currentTime} avec le fuseau horaire système (${TIMEZONE} configuré)`)
   console.log(`Configuration: ${MIN_TASKS}-${MAX_TASKS} tâches, délai: ${formatDelay(MIN_DELAY)}-${formatDelay(MAX_DELAY)}`)
 
-  // Créer un nombre aléatoire de tâches
-  const taskCount = getRandomTaskCount()
-  console.log(`Création de ${taskCount} tâches aléatoires...`)
+  try {
+    let dbAccessible;
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      dbAccessible = true;
+    } catch (dbError) {
+      console.error('Erreur d\'accès à la base de données:', dbError.message);
+      dbAccessible = false;
+    }
 
-  for (let i = 0; i < taskCount; i++) {
-    createRandomTask(client, i + 1)
+    if (!dbAccessible) {
+      console.warn('Impossible de créer des tâches planifiées - pas d\'accès à la base de données');
+      return;
+    }
+
+    // Tenter de restaurer les tâches existantes depuis la base de données
+    const savedTasks = await taskService.getAllTasks();
+
+    if (savedTasks && savedTasks.length > 0) {
+      console.log(`Restauration de ${savedTasks.length} tâches depuis la base de données...`);
+
+      // Supprimer d'abord les anciennes tâches de la base de données
+      await taskService.deleteAllTasks();
+
+      // Recréer les tâches avec de nouveaux délais
+      for (let i = 0; i < savedTasks.length; i++) {
+        await createRandomTask(client, savedTasks[i].taskNumber);
+      }
+    } else {
+      // Aucune tâche trouvée, créer un nombre aléatoire de nouvelles tâches
+      const taskCount = getRandomTaskCount();
+      console.log(`Aucune tâche existante trouvée. Création de ${taskCount} nouvelles tâches...`);
+
+      for (let i = 0; i < taskCount; i++) {
+        await createRandomTask(client, i + 1);
+      }
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'initialisation du planificateur:', error);
   }
 }
 
@@ -317,7 +318,7 @@ export function initScheduler (client) {
  * @param {Object} client - Client Discord
  * @param {number} taskNumber - Numéro de la tâche (pour identification)
  */
-function createRandomTask (client, taskNumber) {
+async function createRandomTask (client, taskNumber) {
   // Générer un identifiant unique pour cette tâche
   const taskId = `random-question-task-${taskNumber}-${randomUUID().substring(0, 8)}`
 
@@ -338,7 +339,7 @@ function createRandomTask (client, taskNumber) {
             scheduler.removeById(taskId)
             activeTasks.delete(taskId)
           }
-          createRandomTask(client, taskNumber)
+          await createRandomTask(client, taskNumber)
           return
         }
 
@@ -365,17 +366,29 @@ function createRandomTask (client, taskNumber) {
         }
 
         // Envoyer le message avec mention
-        await channel.send(`<@${user.id}> ${question}`)
+        const sentMessage = await channel.send(`<@${user.id}> ${question}`)
 
         const currentTime = formatDate(new Date(), 'HH:mm:ss')
         console.log(`[${currentTime}] Message envoyé à ${user.user.username} dans ${channel.channelInfo.name} - Fuseau horaire: ${TIMEZONE}`)
+
+        // Enregistrer l'exécution dans la base de données
+        try {
+          await taskService.logTaskExecution(
+            taskId, // Utiliser taskId comme schedulerId
+            channel.id,
+            user.id,
+            question
+          );
+        } catch (logError) {
+          console.warn(`Erreur lors de l'enregistrement de l'exécution de la tâche ${taskId}:`, logError.message);
+        }
 
         // Recréer la tâche avec un nouveau délai
         if (activeTasks.has(taskId)) {
           scheduler.removeById(taskId)
           activeTasks.delete(taskId)
         }
-        createRandomTask(client, taskNumber)
+        await createRandomTask(client, taskNumber)
       } catch (error) {
         console.error(`[Tâche ${taskNumber}] Erreur lors de l'exécution:`, error)
 
@@ -384,7 +397,7 @@ function createRandomTask (client, taskNumber) {
           scheduler.removeById(taskId)
           activeTasks.delete(taskId)
         }
-        createRandomTask(client, taskNumber)
+        await createRandomTask(client, taskNumber)
       }
     },
     (err) => {
@@ -420,15 +433,22 @@ function createRandomTask (client, taskNumber) {
 
   // Ajouter le job au planificateur et à notre registre
   scheduler.addSimpleIntervalJob(job)
-  activeTasks.set(taskId, { 
-    job, 
-    taskNumber, 
+  activeTasks.set(taskId, {
+    job,
+    taskNumber,
     nextExecution: nextExecutionTime,
     targetChannelType,
     // Informations qui seront remplies lors de l'exécution
     targetChannel: null,
     targetUser: null
   })
+
+  // Enregistrer la tâche dans la base de données
+  try {
+    await taskService.saveTask(taskId, taskNumber, nextExecutionTime, targetChannelType);
+  } catch (error) {
+    console.warn(`Erreur lors de l'enregistrement de la tâche ${taskId} en base de données:`, error.message);
+  }
 }
 
 /**
@@ -611,13 +631,13 @@ export function getTargetingStats() {
 
         // Compter les occurrences de chaque nom de canal
         const channelName = taskInfo.targetChannel.name || 'Sans nom';
-        stats.channels[channelType].names[channelName] = 
+        stats.channels[channelType].names[channelName] =
           (stats.channels[channelType].names[channelName] || 0) + 1;
 
         // Pour les canaux de serveur, compter aussi les serveurs
         if (channelType === 'guild' && taskInfo.targetChannel.guildName) {
           stats.guilds.count++;
-          stats.guilds.names[taskInfo.targetChannel.guildName] = 
+          stats.guilds.names[taskInfo.targetChannel.guildName] =
             (stats.guilds.names[taskInfo.targetChannel.guildName] || 0) + 1;
         }
       }
@@ -687,3 +707,4 @@ export function stopScheduler () {
   scheduler.stop()
   console.log('Planificateur de tâches arrêté - toutes les tâches ont été supprimées')
 }
+

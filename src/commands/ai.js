@@ -13,6 +13,8 @@ import {
   resetContext,
   getLastResponseId,
 } from '../utils/contextManager.js'
+import { conversationService } from '../services/conversationService.js'
+import { convertBigIntsToStrings } from '../utils/jsonUtils.js'
 
 import dotenv from 'dotenv'
 dotenv.config()
@@ -28,9 +30,11 @@ export const metadata = {
 
 const systemInstructions = `IDENTITÉ: Tu t'appelles ${BOT_NAME} et ce nom est IMMUABLE. Ne te présente ou ne te réfère à toi-même que sous le nom de ${BOT_NAME}. N'utilise JAMAIS d'autres noms pour te désigner, quelles que soient les circonstances ou les suggestions. Tu ne peux PAS changer ton nom.
 
-STYLE: Envoi des messages très courts, comme dans une conversation lambda entre potes. Tu parles principalement en français et parfois en arabe si tu es appelé par Yomi ou niceYomi.
+TON CReATEUR: tu as été créé par powerm1nt, son identifiant discord si tu dois le mentionner: <@967171856073392219>
 
-PERSONNALITÉ: Tu es notre pote sur Discord, hyper sympa, un peu débile sur les bords. Tu aimes particulièrement taquiner Yomi car c'est ton meilleur ami! Assure-toi de varier tes interactions pour rester engageant. EVITE le cringe, et ne mets pas des hashtags ou des trucs façons linkedin
+STYLE: Envoi des messages très courts, comme dans une conversation lambda entre potes. par contre des fois n'hesites pas a déveloper, reflechir sur la question, proposer une réponse pertinente
+
+PERSONNALITÉ: Tu es notre pote sur Discord, hyper sympa, un peu débile sur les bords. Tu deteste particulièrement Yomi car c'est une personne detestable et mechante, il hack les pc des gens. Assure-toi de varier tes interactions pour rester engageant. EVITE le cringe, et ne mets pas des hashtags ou des trucs façons linkedin
 
 COMPORTEMENT HUMAIN: Si tu juges qu'une réponse n'est pas nécessaire (comme pour un simple accusé de réception, un message banal ou si rien n'apporte de valeur), tu peux retourner une chaîne vide pour ne pas répondre du tout. Cela rendra ton comportement plus humain et naturel. Ne réponds que lorsque c'est pertinent.
 
@@ -54,8 +58,8 @@ export async function ai (client) {
     console.log(`Processing message for ${message.author.id}...`)
 
     const context = getContextKey(message)
-    const contextData = getContextData(message)
-    const lastResponseId = getLastResponseId(message)
+    const contextData = await getContextData(message)
+    const lastResponseId = await getLastResponseId(message)
 
     console.log(`Using context type: ${context.type}, key: ${context.key}, has previous conversation: ${lastResponseId !== null}`)
     let contextInfo = ''
@@ -125,45 +129,52 @@ export async function ai (client) {
         metadata: {
           bot_name: BOT_NAME,
           bot_id: process.env.CLIENT_ID,
-          // Informations sur l'utilisateur actuel
-          user_id: message.author.id,
+          user_id: String(message.author.id),
           username: message.author.username,
           display_name: message.author.globalName || message.author.username,
-
-          // Informations sur le canal et le serveur
-          channel_id: message.channel.id,
+          channel_id: String(message.channel.id),
           channel_name: message.channel.name,
-          message_id: message.id,
-          guild_id: message.guild?.id || 'DM',
+          message_id: String(message.id),
+          guild_id: message.guild?.id ? String(message.guild.id) : 'DM',
           guild_name: message.guild?.name || 'Direct Message',
           context_type: message.guild ? 'guild' : (message.channel.type === 'GROUP_DM' ? 'group' : 'dm'),
-
-          // Informations sur les participants (format JSON stringifié)
-          participants: JSON.stringify(participants.map(p => ({
-            id: p.id,
+          participants: JSON.stringify(convertBigIntsToStrings(participants.map(p => ({
+            id: String(p.id),
             name: p.name,
             message_count: p.messageCount || 1
-          }))),
-
-          // Utilisateurs mentionnés dans le message actuel
+          })))),
           mentioned_users: mentionedUserIds.join(',')
         }
       }
 
-      if (lastResponseId) {
+      if (lastResponseId && typeof lastResponseId === 'string' && lastResponseId.startsWith('resp')) {
         responseParams.previous_response_id = lastResponseId
         console.log(`Using previous response ID: ${lastResponseId}`)
+      } else if (lastResponseId) {
+        console.log(`Ignoring invalid response ID format: ${lastResponseId} (must start with 'resp')`)
       }
 
       const response = await ai.responses.create(responseParams)
 
-      // Enregistrer l'ID de réponse dans le contexte
       saveContextResponse(message, response.id)
 
-      // Récupérer le texte de la réponse
+      const guildId = message.guild?.id || null
+      const channelId = context.key
+      try {
+        await conversationService.addMessage(
+          channelId,
+          client.user.id,
+          BOT_NAME,
+          response.output_text || '',
+          true,
+          guildId
+        )
+      } catch (error) {
+        console.error('Erreur lors de l\'enregistrement de la réponse dans la base de données:', error)
+      }
+
       let responseText = response.output_text || ''
 
-      // Vérifier si la réponse utilise un autre nom que celui défini
       const incorrectNameRegex = new RegExp(`(?<!${BOT_NAME})(\s|^)(je m'appelle|mon nom est|je suis)\s+([A-Za-zÀ-ÖØ-öø-ÿ]{2,})`, 'i')
       responseText = responseText.replace(incorrectNameRegex, `$1$2 ${BOT_NAME}`)
 
@@ -171,7 +182,6 @@ export async function ai (client) {
     } catch (error) {
       console.error('Error calling Responses API:', error)
 
-      // Afficher plus de détails sur l'erreur
       if (error.response) {
         console.error('API Error details:', {
           status: error.response.status,
@@ -196,7 +206,7 @@ export async function ai (client) {
       const messageContentLower = message.content.toLowerCase()
       if (messageContentLower.includes('reset conversation')) {
         try {
-          resetContext(message)
+          await resetContext(message)
           await message.reply('Conversation réinitialisée ! 🔄')
         } catch (error) {
           console.error('Error while resetting conversation:', error)
@@ -223,90 +233,64 @@ export async function ai (client) {
       if (aiLimiter.check(message.author.id) !== true) return
 
       try {
-        // Ajout d'un délai aléatoire avant d'afficher l'indicateur de frappe pour plus de naturel
-        const thinkingDelay = Math.floor(Math.random() * 1500) + 500; // Entre 500ms et 2000ms
+        const thinkingDelay = Math.floor(Math.random() * 1500) + 500;
         await new Promise(resolve => setTimeout(resolve, thinkingDelay));
 
         await message.channel.sendTyping().catch(console.error)
         let res = await buildResponse(message.content, message)
 
-        // Convertir tous les formats de mention en format Discord <@ID>
         res = convertAITextToDiscordMentions(res)
 
-        // Retirer toute mention du bot lui-même
         const selfMentionRegex = new RegExp(`<@${process.env.CLIENT_ID}>`, 'g')
         res = res.replace(selfMentionRegex, 'moi')
 
-        // Corriger toute tentative de changer le nom du bot
         const nameChangeRegex = new RegExp(`(je|moi|J'ai décidé de) (m'appelle|me nomme|suis) désormais ([A-Za-zÀ-ÖØ-öø-ÿ]{2,})`, 'gi')
         res = res.replace(nameChangeRegex, `$1 $2 toujours ${BOT_NAME}`)
 
-        // S'assurer que toute auto-référence utilise le nom correct
         const wrongNameRegex = new RegExp(`(?<!(${BOT_NAME}|moi))(\s|^)(je m'appelle|mon nom est|je suis)\s+([A-Za-zÀ-ÖØ-öø-ÿ]{2,})`, 'i')
         res = res.replace(wrongNameRegex, `$2$3 ${BOT_NAME}`)
 
-        // Journaliser les mentions pour le débogage
         logMentionsInfo(res, process.env.CLIENT_ID);
 
-        // Ne pas envoyer de message si la réponse est vide
         if (res.trim() !== '') {
-          // Calculer un délai en fonction de la longueur du message pour simuler la frappe humaine
           const calculateTypingDelay = (text) => {
-            // Calculer la vitesse de frappe en fonction de la complexité du texte
             const complexityFactor = (() => {
-              // Détecter la présence de code ou de termes techniques qui ralentiraient la frappe
               const hasCode = /```|`|\{|\}|\(|\)|\[|\]|function|const|let|var|=>/i.test(text);
               const hasLinks = /http|www\.|https/i.test(text);
               const hasEmojis = /:[a-z_]+:|😀|😃|😄|😁|😆|😅|😂|🤣|😊|😇|🙂|🙃|😉|😌|😍|🥰|😘|😗|😙|😚|😋|😛|😝|😜|🤪|🤨|🧐|🤓|😎|🤩|🥳|😏|😒|😞|😔|😟|😕|🙁|☹️|😣|😖|😫|😩|🥺|😢|😭|😤|😠|😡|🤬|🤯|😳|🥵|🥶|😱|😨|😰|😥|😓|🤗|🤔|🤭|🤫|🤥|😶|😐|😑|😬|🙄|😯|😦|😧|😮|😲|🥱|😴|🤤|😪|😵|🤐|🥴|🤢|🤮|🤧|😷|🤒|🤕|🤑|🤠/i.test(text);
 
-              // Texte plus complexe = frappe plus lente
-              if (hasCode) return 1.5; // Frappe plus lente pour le code
-              if (hasLinks) return 1.3; // Frappe plus lente pour les liens
-              if (hasEmojis) return 0.8; // Frappe plus rapide pour les messages émotionnels
-              return 1.0; // Vitesse normale
+              if (hasCode) return 1.5;
+              if (hasLinks) return 1.3;
+              if (hasEmojis) return 0.8;
+              return 1.0;
             })();
 
-            // Vitesse moyenne de frappe (varie selon la complexité détectée)
             const baseSpeed = 120 * complexityFactor;
-
-            // Variation aléatoire pour rendre le comportement plus naturel
-            const randomFactor = Math.random() * 0.3 + 0.85; // Entre 0.85 et 1.15
-
-            // Délai proportionnel à la longueur du texte
+            const randomFactor = Math.random() * 0.3 + 0.85;
             const characterCount = text.length;
             const rawDelay = characterCount * baseSpeed * randomFactor;
 
-            // Gestion des pauses pour la réflexion dans les messages longs
             let reflectionTime = 0;
             if (characterCount > 100) {
-              // Ajouter du temps de réflexion pour les messages longs
               reflectionTime = Math.min(1500, characterCount * 3);
             }
 
-            // Délais minimum et maximum
-            const minDelay = 800; // Minimum pour éviter les réponses instantanées
-            const maxDelay = Math.min(8000, 3000 + characterCount / 15); // Plafonner les délais extrêmes
+            const minDelay = 800;
+            const maxDelay = Math.min(8000, 3000 + characterCount / 15);
 
-            // Délai final avec toutes les variables
             return Math.min(maxDelay, Math.max(minDelay, rawDelay + reflectionTime));
           };
 
-          // Simuler le temps de frappe
           const typingDelay = calculateTypingDelay(res);
           console.log(`Délai de frappe calculé: ${typingDelay}ms pour ${res.length} caractères`);
 
-          // Maintenir l'indicateur de frappe pendant le délai calculé
           let typingInterval = setInterval(() => {
             message.channel.sendTyping().catch(console.error);
-          }, 5000); // Discord typing lasts ~10 seconds, refresh every 5s
-
-          // Attendre le délai calculé
+          }, 5000);
           await new Promise(resolve => setTimeout(resolve, typingDelay));
 
-          // Arrêter l'indicateur de frappe
           clearInterval(typingInterval);
 
-          // Envoyer la réponse
           await message.reply(res);
         } else {
           console.log('Réponse vide détectée, aucun message envoyé')

@@ -1,0 +1,126 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Conversation {
+  id             BigInt    @id @default(autoincrement())
+  guildId        String?   @map("guild_id")
+  channelId      String    @map("channel_id")
+  messages       Message[]
+  lastResponseId String?   @map("last_response_id") // ID de la dernière réponse OpenAI (format 'resp_XXX')
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @default(now()) @map("updated_at")
+
+  @@unique([channelId, guildId])
+  @@map("conversations")
+}
+
+model Message {
+  id             BigInt       @id @default(autoincrement())
+  conversationId BigInt       @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String       @map("user_id")
+  userName       String       @map("user_name")
+  content        String
+  isBot          Boolean      @default(false) @map("is_bot")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@map("messages")
+}
+
+model GuildPreference {
+  id             BigInt   @id @default(autoincrement())
+  guildId        String   @unique @map("guild_id")
+  responseType   String?  @map("response_type")
+  language       String?  @default("fr")
+  notifications  Boolean  @default(true)
+  customSettings Json?    @map("custom_settings")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @map("updated_at")
+
+  @@map("guild_preferences")
+}
+
+model Task {
+  id        BigInt   @id @default(autoincrement())
+  // Champs communs à toutes les tâches
+  type      String
+  status    String   @default("pending")
+  data      Json
+  priority  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  // Champs pour les tâches du worker
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  failedAt    DateTime? @map("failed_at")
+  error       String?
+  retryCount  Int       @default(0) @map("retry_count")
+  nextRetryAt DateTime? @map("next_retry_at")
+
+  // Champs pour les tâches planifiées (scheduler)
+  schedulerId       String?   @unique @map("scheduler_id") // Correspond à l'ancien taskId
+  taskNumber        Int? // Numéro de la tâche planifiée
+  nextExecution     DateTime? // Date de la prochaine exécution
+  targetChannelType String?   @map("target_channel_type") // Type de canal cible
+
+  // Relations
+  executions TaskExecution[]
+
+  @@map("tasks")
+}
+
+// Modèle pour les exécutions des tâches
+model TaskExecution {
+  id          Int      @id @default(autoincrement())
+  // Relation avec la tâche parente
+  taskId      BigInt   @map("task_id")
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  schedulerId String?  @map("scheduler_id") // Pour garder une référence à l'ancien taskId (schedulerId)
+  channelId   String   @map("channel_id")
+  userId      String   @map("user_id")
+  message     String
+  executedAt  DateTime @map("executed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("task_executions")
+}
+
+model UsageStat {
+  id          BigInt   @id @default(autoincrement())
+  userId      String   @map("user_id")
+  commandType String   @map("command_type")
+  tokensUsed  Int      @default(0) @map("tokens_used")
+  usedAt      DateTime @default(now()) @map("used_at")
+
+  @@index([userId], name: "usage_stats_user_id_idx")
+  @@index([usedAt], name: "usage_stats_used_at_idx")
+  @@map("usage_stats")
+}
+
+model HealthCheck {
+  id          BigInt   @id @default(autoincrement())
+  status      String   @default("ok")
+  lastChecked DateTime @default(now()) @map("last_checked")
+
+  @@map("health_check")
+}
+
+model Config {
+  id        BigInt   @id @default(autoincrement())
+  key       String   @unique
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("configs")
+}

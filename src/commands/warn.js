@@ -1,7 +1,7 @@
 import { commandLimiter } from '../utils/rateLimit.js';
 import fs from 'fs';
 import path from 'path';
-import { loadConfig, saveConfig } from '../utils/configManager.js';
+import { loadConfig, saveConfig } from '../utils/configService.js';
 
 export const metadata = {
   name: 'warn',
@@ -32,9 +32,13 @@ function loadWarnings() {
     const data = fs.readFileSync(warningsFilePath, 'utf8');
     const warnings = JSON.parse(data);
 
-    // Synchroniser avec configManager au premier chargement
+    // Synchroniser avec la base de données au premier chargement
     // mais avec un traitement différé pour éviter de ralentir le démarrage
-    setTimeout(() => synchronizeWarnings(), 5000);
+    setTimeout(() => {
+      (async () => {
+        await synchronizeWarnings();
+      })();
+    }, 5000);
 
     return warnings;
   } catch (error) {
@@ -54,16 +58,16 @@ function saveWarnings(warnings) {
 }
 
 /**
- * Synchronise les avertissements entre le stockage local et configManager
+ * Synchronise les avertissements entre le stockage local et la base de données
  */
-function synchronizeWarnings() {
+async function synchronizeWarnings() {
   const localWarnings = loadWarnings();
-  const config = loadConfig();
+  const config = await loadConfig();
 
   // S'assurer que la structure existe dans la config
   if (!config.warnings) config.warnings = {};
 
-  // Fusionner les données locales avec celles de configManager
+  // Fusionner les données locales avec celles de la base de données
   for (const guildId in localWarnings) {
     if (!config.warnings[guildId]) config.warnings[guildId] = {};
 
@@ -83,27 +87,29 @@ function synchronizeWarnings() {
   }
 
   // Sauvegarder la configuration mise à jour
-  saveConfig(config);
+  await saveConfig(config);
 }
 
-function addWarning(guildId, userId, moderatorId, reason) {
-  // Charger les données via configManager
-  const config = loadConfig();
+async function addWarning(guildId, userId, moderatorId, reason) {
+  // Charger les données via configService
+  const config = await loadConfig();
 
   // S'assurer que la structure warnings existe
   if (!config.warnings) config.warnings = {};
   if (!config.warnings[guildId]) config.warnings[guildId] = {};
   if (!config.warnings[guildId][userId]) config.warnings[guildId][userId] = [];
 
+  const timestamp = Date.now();
+
   // Ajouter le nouvel avertissement
   config.warnings[guildId][userId].push({
     moderatorId,
     reason,
-    timestamp: Date.now()
+    timestamp
   });
 
-  // Sauvegarder via configManager
-  saveConfig(config);
+  // Sauvegarder via configService
+  await saveConfig(config);
 
   // Également sauvegarder dans le système de fichiers local pour compatibilité
   const warnings = loadWarnings();
@@ -112,16 +118,16 @@ function addWarning(guildId, userId, moderatorId, reason) {
   warnings[guildId][userId].push({
     moderatorId,
     reason,
-    timestamp: Date.now()
+    timestamp
   });
   saveWarnings(warnings);
 
   return config.warnings[guildId][userId].length;
 }
 
-function getUserWarnings(guildId, userId) {
-  // Vérifier d'abord dans configManager
-  const config = loadConfig();
+async function getUserWarnings(guildId, userId) {
+  // Vérifier d'abord dans la base de données
+  const config = await loadConfig();
 
   if (config.warnings && config.warnings[guildId] && config.warnings[guildId][userId]) {
     return config.warnings[guildId][userId];
@@ -135,10 +141,10 @@ function getUserWarnings(guildId, userId) {
 /**
  * Récupère tous les avertissements du serveur
  * @param {string} guildId - ID du serveur
- * @returns {Object} - Tous les avertissements du serveur
+ * @returns {Promise<Object>} - Tous les avertissements du serveur
  */
-export function getGuildWarnings(guildId) {
-  const config = loadConfig();
+export async function getGuildWarnings(guildId) {
+  const config = await loadConfig();
   if (config.warnings && config.warnings[guildId]) {
     return config.warnings[guildId];
   }
@@ -165,7 +171,7 @@ export async function warn(client, message, args) {
 
   if (args[0] === 'list' && message.mentions.users.size) {
     const target = message.mentions.users.first();
-    const warnings = getUserWarnings(message.guild.id, target.id);
+    const warnings = await getUserWarnings(message.guild.id, target.id);
 
     if (warnings.length === 0) {
       return message.reply(`✅ **${target.tag}** n'a aucun avertissement.`);
@@ -194,7 +200,7 @@ export async function warn(client, message, args) {
   }
 
   const reason = args.slice(1).join(' ') || 'Aucune raison fournie';
-  const warningCount = addWarning(message.guild.id, target.id, message.author.id, reason);
+  const warningCount = await addWarning(message.guild.id, target.id, message.author.id, reason);
 
   message.reply(`✅ **${target.user.tag}** a reçu un avertissement (${warningCount} au total). Raison: ${reason}`);
 
