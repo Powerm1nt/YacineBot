@@ -12,6 +12,7 @@ import works.nuka.yassinebot.commands.Command;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -60,13 +61,13 @@ public class BanCommand implements Command {
         }
 
         // Check if the executor has BAN_MEMBERS permission
-        if (!event.getMember().hasPermission(Permission.BAN_MEMBERS)) {
+        if (!Objects.requireNonNull(event.getMember()).hasPermission(Permission.BAN_MEMBERS)) {
             event.getMessage().reply("❌ Vous n'avez pas la permission de bannir des utilisateurs.").queue();
             return;
         }
 
         // Récupérer l'utilisateur cible
-        User targetUser = event.getMessage().getMentions().getUsers().get(0);
+        User targetUser = event.getMessage().getMentions().getUsers().getFirst();
         Member targetMember = event.getGuild().getMember(targetUser);
 
         // Vérifier si l'utilisateur est présent dans le serveur

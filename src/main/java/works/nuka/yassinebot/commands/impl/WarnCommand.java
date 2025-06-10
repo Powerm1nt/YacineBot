@@ -59,18 +59,18 @@ public class WarnCommand implements Command {
         }
 
         // Gestion de la commande "list"
-        if (args[0].equalsIgnoreCase("list") && args.length > 1 && event.getMessage().getMentionedUsers().size() > 0) {
+        if (args[0].equalsIgnoreCase("list") && args.length > 1 && !event.getMessage().getMentions().getUsers().isEmpty()) {
             handleListWarnings(event);
             return;
         }
 
         // Gestion de l'avertissement
-        if (event.getMessage().getMentionedUsers().isEmpty()) {
+        if (event.getMessage().getMentions().getUsers().isEmpty()) {
             event.getMessage().reply("❌ Vous devez mentionner un utilisateur à avertir.").queue();
             return;
         }
 
-        User targetUser = event.getMessage().getMentionedUsers().get(0);
+        User targetUser = event.getMessage().getMentions().getUsers().getFirst();
         Member targetMember = event.getGuild().getMember(targetUser);
 
         if (targetMember == null) {
@@ -84,10 +84,12 @@ public class WarnCommand implements Command {
         }
 
         // Extraire la raison (tout après la mention)
-        String reason = "Aucune raison fournie";
+        String reason;
         if (args.length > 1) {
             List<String> reasonArgs = Arrays.asList(args).subList(1, args.length);
             reason = String.join(" ", reasonArgs);
+        } else {
+            reason = "Aucune raison fournie";
         }
 
         // Ajouter l'avertissement
@@ -98,7 +100,7 @@ public class WarnCommand implements Command {
                 reason
         );
 
-        event.getMessage().reply("✅ **" + targetUser.getAsTag() + "** a reçu un avertissement (" + warningCount + " au total). Raison: " + reason).queue();
+        event.getMessage().reply("✅ **" + targetUser.getName() + "** a reçu un avertissement (" + warningCount + " au total). Raison: " + reason).queue();
 
         // Envoyer un message privé à l'utilisateur averti
         targetUser.openPrivateChannel().queue(channel -> {
@@ -114,7 +116,7 @@ public class WarnCommand implements Command {
      * @param event événement de message
      */
     private void handleListWarnings(MessageReceivedEvent event) {
-        User targetUser = event.getMessage().getMentionedUsers().get(0);
+        User targetUser = event.getMessage().getMentions().getUsers().getFirst();
         List<WarnService.Warning> warnings = warnService.getUserWarnings(event.getGuild().getId(), targetUser.getId());
 
         if (warnings.isEmpty()) {
