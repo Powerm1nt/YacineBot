@@ -13,61 +13,52 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'yarn'
-
       - name: Create .env file
         run: |
           echo "${{ secrets.ENV }}" > .env
           echo ".env file created successfully"
-          # Affiche les variables sans leurs valeurs pour vérification (sécurisé)
+          # Display variables without their values for verification (secure)
           grep -o '^[^=]*=' .env | sort
 
-      - name: Install dependencies
+      - name: Install Docker dependencies if needed
         run: |
-          yarn install --frozen-lockfile
-
-      - name: Create PM2 ecosystem file
-        run: |
-          cat > ecosystem.config.cjs << EOF
-          module.exports = {
-            apps: [{
-              name: "bot",
-              script: "yarn",
-              args: "run start",
-              watch: false,
-              autorestart: true,
-              max_restarts: 10,
-              min_uptime: "5s",
-              max_memory_restart: "1G",
-              error_file: "logs/err.log",
-              out_file: "logs/out.log",
-              merge_logs: true,
-              time: true,
-              env: {
-                NODE_ENV: "production"
-              }
-            }]
-          }
-          EOF
-
-      - name: Configure and Start PM2 service
-        run: |
-          if pm2 list | grep -q "bot"; then
-            pm2 delete bot
+          if ! command -v docker &> /dev/null || ! command -v docker-compose &> /dev/null; then
+            echo "Installing Docker and Docker Compose..."
+            sudo apt-get update
+            sudo apt-get install -y docker.io docker-compose
+            sudo systemctl enable docker
+            sudo systemctl start docker
+            sudo usermod -aG docker $USER
+          else
+            echo "Docker and Docker Compose are already installed"
+            docker --version
+            docker-compose --version
           fi
-          pm2 start ecosystem.config.cjs
-          pm2 startup
-          pm2 save
 
-      - name: Check PM2 status and logs
+      - name: Build and start Docker containers
         run: |
-          pm2 status
-          echo "Errors :"
-          tail -n 5 logs/err.log || true
-          echo "Output :"
-          tail -n 5 logs/out.log || true
+          # Stop existing containers if they exist
+          docker-compose -f compose.yml down || true
+
+          # Build and start containers in detached mode
+          docker-compose -f compose.yml up -d --build
+
+          # Verify containers are running
+          docker-compose -f compose.yml ps
+
+      - name: Run database migrations if needed
+        run: |
+          # Wait for database to be ready
+          sleep 5
+
+          # Execute Prisma migrations
+          docker-compose -f compose.yml exec -T app yarn prisma:migrate || echo "No migrations to execute"
+
+      - name: Check container logs
+        run: |
+          echo "=== Application container logs ===" 
+          docker-compose -f compose.yml logs --tail=50 app
+
+          echo "\n=== Container status ===" 
+          docker-compose -f compose.yml ps
 

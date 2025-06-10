@@ -46,7 +46,7 @@ En mode développement :
 
 ### Production
 
-Pour lancer l'environnement de production :
+Pour lancer l'environnement de production manuellement :
 
 ```bash
 # Première exécution ou après modification du Dockerfile
@@ -60,7 +60,19 @@ En mode production :
 - Le code est copié dans l'image Docker
 - L'application est exécutée avec PM2 pour une meilleure stabilité
 - Prisma génère automatiquement les clients nécessaires
+- Les migrations de base de données sont exécutées automatiquement au démarrage
 - Le fichier `.env` est monté dans le conteneur
+
+### Déploiement automatique
+
+Ce projet est configuré avec GitHub Actions pour un déploiement automatique :
+
+1. Chaque push sur la branche `main` déclenche un déploiement
+2. Le workflow crée un fichier `.env` à partir des secrets GitHub
+3. Docker et Docker Compose sont utilisés pour construire et exécuter l'application
+4. Les migrations Prisma sont exécutées automatiquement
+
+Vous pouvez également déclencher manuellement un déploiement depuis l'onglet Actions de GitHub.
 
 ### Variables d'environnement
 

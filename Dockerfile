@@ -11,7 +11,7 @@ COPY package.json yarn.lock ./
 RUN yarn install
 
 # -----------------------------------------------
-# Build de développement
+# Development build
 # -----------------------------------------------
 FROM base as development
 ENV NODE_ENV=development
@@ -19,7 +19,7 @@ ENV NODE_ENV=development
 CMD ["yarn", "dev"]
 
 # -----------------------------------------------
-# Build de production
+# Production build
 # -----------------------------------------------
 FROM base as production
 ENV NODE_ENV=production
@@ -28,4 +28,14 @@ COPY . .
 
 RUN yarn prisma:generate
 
-CMD ["pm2-runtime", "start", "src/app.js", "--name", "app"]
+RUN echo '#!/bin/sh\n\
+if [ -n "$DATABASE_URL" ]; then\n\
+  echo "Running Prisma migrations..."\n\
+  yarn prisma:migrate || echo "Migrations skipped or already applied"\n\
+fi\n\
+\n\
+# Start the application with PM2\n\
+pm2-runtime start src/app.js --name app' > /app/startup.sh \
+  && chmod +x /app/startup.sh
+
+CMD ["/app/startup.sh"]
