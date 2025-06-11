@@ -22,6 +22,7 @@ import { config } from './commands/config.js'
 import { isSchedulerEnabled } from './utils/configService.js'
 import { context } from './commands/context.js'
 import { conversations } from './commands/conversations.js'
+import { statusService } from './services/statusService.js';
 dotenv.config();
 
 if (!process.env.DATABASE_URL) {
@@ -106,6 +107,10 @@ async function registerFeatures(client) {
       await initScheduler(client);
       console.log('Planificateur de tâches automatiques initialisé');
     }
+
+    // Initialiser le service de gestion du statut
+    await statusService.initStatusService(client);
+    console.log('Service de gestion du statut initialisé');
   } catch (error) {
     console.error('Erreur lors de l\'initialisation des fonctionnalités:', error);
     // Ne pas quitter pour permettre le fonctionnement de base du bot

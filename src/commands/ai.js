@@ -127,6 +127,9 @@ export async function ai (client) {
     try {
       const participants = contextData.participants || []
 
+      // Limiter la taille des participants pour éviter l'erreur de taille de métadonnées
+      const limitedParticipants = limitParticipantsSize(participants, 400);
+
       const responseParams = {
         model: 'gpt-4.1-mini',
         input: userInput,
@@ -143,10 +146,10 @@ export async function ai (client) {
           guild_id: message.guild?.id ? String(message.guild.id) : 'DM',
           guild_name: message.guild?.name || 'Direct Message',
           context_type: message.guild ? 'guild' : (message.channel.type === 'GROUP_DM' ? 'group' : 'dm'),
-          participants: JSON.stringify(convertBigIntsToStrings(participants.map(p => ({
+          participants: JSON.stringify(convertBigIntsToStrings(limitedParticipants.map(p => ({
             id: String(p.id),
-            name: p.name,
-            message_count: p.messageCount || 1
+            name: String(p.name).substring(0, 15), // Limiter davantage la longueur des noms
+            count: p.messageCount || 1
           })))),
           mentioned_users: mentionedUserIds.join(',')
         }
