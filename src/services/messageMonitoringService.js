@@ -8,6 +8,15 @@ import { taskService } from './taskService.js';
 import { randomUUID } from 'crypto';
 import { prisma } from './prisma.js';
 
+// Système d'instructions pour le service de surveillance des messages
+const systemPrompt = `
+Règle importante concernant les conversations entre utilisateurs :
+Quand un utilisateur répond à un autre utilisateur (et non à toi), sois plus prudent dans ton niveau d'engagement.
+Dans ces cas, évite de trop t'imposer dans leur conversation ou de détourner le sujet.
+Si la conversation semble privée ou si ton intervention n'est pas clairement nécessaire, préfère rester discret.
+Utilise un ton plus neutre et n'interviens que si tu peux apporter une réelle valeur ajoutée ou clarification.
+`;
+
 const scheduler = new ToadScheduler();
 const pendingResponses = new Map();
 
@@ -135,8 +144,22 @@ export async function monitorMessage(message, client, buildResponseFn) {
           // Marquer le canal comme étant en train d'écrire
           await message.channel.sendTyping().catch(console.error);
 
-          // Construire et envoyer la réponse
-          const response = await buildResponseFn(messageInfo.content, message);
+          // Vérifier si le message est une réponse à un autre utilisateur
+          let additionalContext = '';
+          if (message.reference) {
+            try {
+              const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
+              if (repliedMessage && repliedMessage.author.id !== client.user.id && repliedMessage.author.id !== message.author.id) {
+                console.log(`[MessageMonitoring] Message ${messageId} est une réponse à un autre utilisateur - Utilisation des instructions spéciales`);
+                additionalContext = systemPrompt;
+              }
+            } catch (replyError) {
+              console.error(`[MessageMonitoring] Erreur lors de la récupération du message référencé:`, replyError);
+            }
+          }
+
+          // Construire et envoyer la réponse avec contexte additionnel si nécessaire
+          const response = await buildResponseFn(messageInfo.content, message, additionalContext);
           if (response && response.trim() !== '' && response !== "' '' '") {
             await message.reply(response);
           } else {

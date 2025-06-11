@@ -106,7 +106,7 @@ export async function ai (client) {
     apiKey: process.env['OPENAI_API_KEY'],
   })
 
-  const buildResponse = async (input, message) => {
+      const buildResponse = async (input, message, additionalInstructions = '') => {
     if (!message || !message.author || !message.author.id) {
       console.error('Error: invalid message or author')
       throw new Error('message is invalid')
@@ -189,10 +189,15 @@ export async function ai (client) {
       // Limiter la taille des participants pour éviter l'erreur de taille de métadonnées
       const limitedParticipants = limitParticipantsSize(participants, 400);
 
-      const responseParams = {
+              // Créer les instructions du système avec les instructions additionnelles si présentes
+              const fullSystemInstructions = additionalInstructions ? 
+        `${systemInstructions}\n\n${additionalInstructions}` : 
+        systemInstructions;
+
+              const responseParams = {
         model: 'gpt-4.1-mini',
         input: userInput,
-        instructions: systemInstructions,
+        instructions: fullSystemInstructions,
         metadata: {
           bot_name: BOT_NAME,
           bot_id: process.env.CLIENT_ID,

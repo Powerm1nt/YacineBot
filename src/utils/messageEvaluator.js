@@ -12,11 +12,20 @@ import { conversationService } from '../services/conversationService.js';
  * @param {boolean} isReply - Si le message est une réponse à un message du bot
  * @returns {Promise<boolean>} - Si le message mérite une réponse immédiate
  */
-export async function shouldRespondImmediately(content, isDirectMention, isDM, isReply) {
-  console.log(`[MessageEvaluator] Évaluation immédiate - Mention: ${isDirectMention}, DM: ${isDM}, Réponse: ${isReply}, Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`); 
+  export async function shouldRespondImmediately(content, isDirectMention, isDM, isReply, isReplyBetweenUsers = false) {
+  console.log(`[MessageEvaluator] Évaluation immédiate - Mention: ${isDirectMention}, DM: ${isDM}, Réponse: ${isReply}, Réponse entre utilisateurs: ${isReplyBetweenUsers}, Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`); 
 
   // Répondre toujours aux mentions directes, DMs et réponses à nos messages
   if (isDirectMention || isDM || isReply) {
+    // Si c'est une réponse entre utilisateurs, être plus prudent
+    if (isReplyBetweenUsers && !isDirectMention && !isDM) {
+      console.log('[MessageEvaluator] Réponse entre utilisateurs détectée - Évaluation plus stricte requise');
+      // Dans ce cas, vérifier si le contenu semble nécessiter une intervention
+      if (!content.includes('?') && !content.toLowerCase().includes('help') && !content.toLowerCase().includes('aide')) {
+        console.log('[MessageEvaluator] Réponse entre utilisateurs ne nécessitant pas d\'intervention immédiate');
+        return false;
+      }
+    }
     console.log('[MessageEvaluator] Réponse immédiate requise - Mention directe, DM ou réponse détectée');
     return true;
   }
