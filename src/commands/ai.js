@@ -93,7 +93,7 @@ STYLE: Envoi des messages très courts, comme dans une conversation lambda entre
 
 PERSONNALITÉ: Tu es notre pote sur Discord, hyper sympa, un peu débile sur les bords. Assure-toi de varier tes interactions pour rester engageant. EVITE le cringe, et ne mets pas des hashtags ou des trucs façons linkedin
 
-COMPORTEMENT HUMAIN: ne réponds pas si c'est des propos incorrectes, par exemple a la place de répondre Désolé, "je peux pas répondre à ce genre de questions", tu ne réponds pas. Si tu juges qu'une réponse n'est pas nécessaire (comme pour un simple accusé de réception, un message banal ou si rien n'apporte de valeur), tu peux retourner une chaîne vide pour ne pas répondre du tout. Cela rendra ton comportement plus humain et naturel. Ne réponds que lorsque c'est pertinent.
+COMPORTEMENT HUMAIN: tu peux utiliser les reactions de discord, si on te le demande, tu dis que tu peux le faire. ne réponds pas si c'est des propos incorrectes, par exemple a la place de répondre Désolé, "je peux pas répondre à ce genre de questions", tu ne réponds pas. Si tu juges qu'une réponse n'est pas nécessaire (comme pour un simple accusé de réception, un message banal ou si rien n'apporte de valeur), tu peux retourner une chaîne vide pour ne pas répondre du tout. Cela rendra ton comportement plus humain et naturel. Ne réponds que lorsque c'est pertinent.
 
 CONSIGNE CRUCIALE POUR LES MENTIONS: Pour mentionner quelqu'un, tu DOIS extraire son ID numérique du texte (format "nom (ID: 123456789)") et utiliser UNIQUEMENT le format <@ID> (par exemple <@123456789>). N'utilise JAMAIS d'autres formats comme @nom ou @ID.
 
@@ -110,6 +110,12 @@ export async function ai (client) {
     if (!message || !message.author || !message.author.id) {
       console.error('Error: invalid message or author')
       throw new Error('message is invalid')
+    }
+
+    // Vérification précoce d'un input vide ou invalide
+    if (!input || input.trim() === '' || input.trim() === "' '' '") {
+      console.log(`[AI] Input vide ou invalide, abandon de la génération de réponse`);
+      return '';
     }
 
     console.log(`[AI] Traitement du message ${message.id} de l'utilisateur ${message.author.id}...`)
@@ -217,7 +223,12 @@ export async function ai (client) {
 
       const response = await ai.responses.create(responseParams)
 
-      saveContextResponse(message, response.id)
+      // Ne sauvegarder le contexte que si la réponse est valide
+      if (response.output_text && response.output_text.trim() !== '' && response.output_text.trim() !== "' '' '") {
+        saveContextResponse(message, response.id)
+      } else {
+        console.log(`[AI] Réponse invalide détectée, le contexte n'est pas sauvegardé`);
+      }
 
       const guildId = message.guild?.id || null
       const channelId = context.key
@@ -439,7 +450,7 @@ export async function ai (client) {
 
         logMentionsInfo(res, process.env.CLIENT_ID);
 
-        if (res.trim() !== '') {
+                  if (res.trim() !== '' && res.trim() !== "' '' '") {
           const calculateTypingDelay = (text) => {
             const complexityFactor = (() => {
               const hasCode = /```|`|\{|\}|\(|\)|\[|\]|function|const|let|var|=>/i.test(text);
@@ -478,9 +489,14 @@ export async function ai (client) {
 
           clearInterval(typingInterval);
 
-          console.log(`[AI] Envoi de la réponse au message ${message.id} - Longueur: ${res.length} caractères`);
-          await message.reply(res);
-          console.log(`[AI] Réponse envoyée avec succès au message ${message.id}`);
+          const trimmedResponse = res.trim();
+          if (trimmedResponse !== '' && trimmedResponse !== "' '' '") {
+            console.log(`[AI] Envoi de la réponse au message ${message.id} - Longueur: ${res.length} caractères`);
+            await message.reply(res);
+            console.log(`[AI] Réponse envoyée avec succès au message ${message.id}`);
+          } else {
+            console.log(`[AI] Réponse vide ou invalide détectée ("${trimmedResponse}"), aucun message envoyé`);
+          }
         } else {
           console.log('Réponse vide détectée, aucun message envoyé')
         }

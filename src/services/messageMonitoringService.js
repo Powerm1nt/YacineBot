@@ -122,8 +122,10 @@ export async function monitorMessage(message, client, buildResponseFn) {
 
           // Construire et envoyer la réponse
           const response = await buildResponseFn(messageInfo.content, message);
-          if (response && response.trim() !== '') {
+          if (response && response.trim() !== '' && response !== "' '' '") {
             await message.reply(response);
+          } else {
+            console.log(`[MessageMonitoring] Réponse vide ou invalide détectée, aucun message envoyé`);
           }
         } else {
           console.log(`Message ${messageId} ignoré après analyse différée (score: ${evaluationResult.relevanceScore})`);

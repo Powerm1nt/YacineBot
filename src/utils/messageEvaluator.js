@@ -47,6 +47,12 @@ export async function shouldRespondImmediately(content, isDirectMention, isDM, i
  */
 export async function evaluateMessageRelevance(channelId, guildId, content) {
   try {
+    // Vérification du contenu vide ou invalide
+    if (!content || content.trim() === '' || content.trim() === "' '' '") {
+      console.log(`[MessageEvaluator] Contenu vide ou invalide, message ignoré`);
+      return { relevanceScore: 0, hasKeyInfo: false, shouldRespond: false };
+    }
+
     console.log(`[MessageEvaluator] Début d'évaluation de pertinence - Canal: ${channelId}, Serveur: ${guildId || 'DM'}, Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`); 
 
     const recentMessages = await conversationService.getRecentMessages(channelId, guildId, 5);
