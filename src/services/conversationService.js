@@ -99,9 +99,10 @@ export async function getConversationHistory(channelId, guildId = null) {
  * @param {number} relevanceScore - Score de pertinence du message (0-1)
  * @param {boolean} hasKeyInfo - Si le message contient des informations clés
  * @param {boolean} isAnalyzed - Si le message a déjà été analysé
+ * @param {string} channelName - Nom du canal Discord (facultatif)
  * @returns {Promise<Object>} - Message ajouté
  */
-export async function addMessage(channelId, userId, userName, content, isBot = false, guildId = null, relevanceScore = 0, hasKeyInfo = false, isAnalyzed = false) {
+export async function addMessage(channelId, userId, userName, content, isBot = false, guildId = null, relevanceScore = 0, hasKeyInfo = false, isAnalyzed = false, channelName = null) {
   try {
     // Enregistrer l'activité de conversation
     registerConversationActivity(channelId, guildId);
@@ -116,14 +117,21 @@ export async function addMessage(channelId, userId, userName, content, isBot = f
       },
       update: {
         updatedAt: new Date()
+        // Ne pas mettre à jour le nom du canal ici car il n'est pas reconnu comme argument
       },
       create: {
         channelId,
         guildId: guildId || "",
+        // Ne pas essayer de définir channelName lors de la création
         createdAt: new Date(),
         updatedAt: new Date()
       }
     });
+
+    // Si un nom de canal est fourni, le mettre à jour séparément après la création de la conversation
+    if (channelName) {
+      await setChannelName(channelId, guildId, channelName);
+    }
 
     // Ajouter le message avec les scores de pertinence
     return await prisma.message.create({
@@ -201,11 +209,55 @@ export async function getRecentMessages(channelId, guildId = null, limit = 10) {
   }
 }
 
+// Helper to update channel name for a conversation
+async function updateChannelName(channelId, guildId, channelName) {
+  if (!channelName) return null;
+
+  try {
+    return await prisma.conversation.update({
+      where: {
+        channelId_guildId: {
+          channelId,
+          guildId: guildId || ""
+        }
+      },
+      data: {
+        channelName
+      }
+    });
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour du nom du canal:', error);
+    return null;
+  }
+}
+
+/**
+ * Mise à jour du nom de canal pour une conversation existante
+ * Séparé de l'upsert pour éviter les erreurs de validation Prisma
+ * @param {string} channelId - ID du canal Discord
+ * @param {string} guildId - ID de la guilde (facultatif)
+ * @param {string} channelName - Nom du canal à mettre à jour
+ * @returns {Promise<Object|null>} - Conversation mise à jour ou null en cas d'erreur
+ */
+async function setChannelName(channelId, guildId, channelName) {
+  if (!channelName) return null;
+
+  try {
+    console.log(`[ConversationService] Mise à jour du nom de canal pour ${channelId} avec ${channelName}`);
+    return await updateChannelName(channelId, guildId, channelName);
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour du nom du canal:', error);
+    return null;
+  }
+}
+
 export const conversationService = {
   getConversationHistory,
   addMessage,
   deleteConversationHistory,
   getRecentMessages,
   isActiveConversation,
-  registerConversationActivity
+  registerConversationActivity,
+  updateChannelName,
+  setChannelName
 };

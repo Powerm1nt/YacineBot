@@ -248,7 +248,8 @@ export async function saveContextResponse(message, responseId) {
         false,
         guildId,
         relevanceScore,
-        hasKeyInfo
+        hasKeyInfo,
+        false // isAnalyzed parameter (default false)
       );
     }
 

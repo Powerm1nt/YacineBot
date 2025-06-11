@@ -27,7 +27,7 @@ export const CHANNEL_TYPES = {
 let previewedNextChannel = null
 
 const MIN_DELAY = parseFloat(process.env.MIN_DELAY_MINUTES || '0.2') * 60 * 1000
-const MAX_DELAY = parseFloat(process.env.MAX_DELAY_MINUTES || '5') * 60 * 1000
+const MAX_DELAY = parseFloat(process.env.MAX_DELAY_MINUTES || '2') * 60 * 1000
 
 const activeTasks = new Map()
 

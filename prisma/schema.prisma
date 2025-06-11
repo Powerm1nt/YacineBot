@@ -14,6 +14,7 @@ model Conversation {
   id             BigInt    @id @default(autoincrement())
   guildId        String?   @map("guild_id")
   channelId      String    @map("channel_id")
+  channelName    String?   @map("channel_name") // Nom du canal pour les analyses de pertinence
   messages       Message[]
   lastResponseId String?   @map("last_response_id") // ID de la dernière réponse OpenAI (format 'resp_XXX')
   relevanceScore Float?    @default(0) @map("relevance_score") // Score global de pertinence de la conversation
