@@ -12,6 +12,7 @@ import {
   saveContextResponse,
   resetContext,
   getLastResponseId,
+  limitParticipantsSize
 } from '../utils/contextManager.js'
 import { conversationService } from '../services/conversationService.js'
 import { analysisService } from '../services/analysisService.js'

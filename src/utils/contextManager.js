@@ -34,6 +34,50 @@ setInterval(() => {
   updateContextStats();
 }, CLEANUP_CONFIG.cleanupInterval * 60 * 60 * 1000);
 
+/**
+ * Utility function to limit the size of participants data
+ * @param {Array} participants - List of participants
+ * @param {number} maxSize - Maximum size in characters
+ * @returns {Array} - Filtered list of participants
+ */
+export function limitParticipantsSize(participants, maxSize = 450) {
+  if (!participants || !Array.isArray(participants)) {
+    return [];
+  }
+
+  // Sort by message count (most active first)
+  const sortedParticipants = [...participants].sort((a, b) => 
+    (b.messageCount || 1) - (a.messageCount || 1)
+  );
+
+  const result = [];
+  let jsonSize = 0;
+
+  // Add participants one by one until approaching the limit
+  for (const p of sortedParticipants) {
+    // Create simplified participant object
+    const participant = {
+      id: p.id,
+      name: String(p.name).substring(0, 20), // Limit name length
+      messageCount: p.messageCount || 1
+    };
+
+    // Calculate size with this participant added
+    const testArr = [...result, participant];
+    const testSize = JSON.stringify(testArr).length;
+
+    if (testSize > maxSize) {
+      break; // Stop adding if we exceed the limit
+    }
+
+    result.push(participant);
+    jsonSize = testSize;
+  }
+
+  console.log(`Optimized participants: ${result.length}/${participants.length} included, size: ${jsonSize} chars`);
+  return result;
+}
+
 export async function getContextData(message) {
   const context = getContextKey(message)
   let contextData = null;
