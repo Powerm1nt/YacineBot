@@ -10,11 +10,20 @@ import { prisma } from './prisma.js';
 
 // Système d'instructions pour le service de surveillance des messages
 const systemPrompt = `
-Règle importante concernant les conversations entre utilisateurs :
-Quand un utilisateur répond à un autre utilisateur (et non à toi), sois plus prudent dans ton niveau d'engagement.
-Dans ces cas, évite de trop t'imposer dans leur conversation ou de détourner le sujet.
-Si la conversation semble privée ou si ton intervention n'est pas clairement nécessaire, préfère rester discret.
-Utilise un ton plus neutre et n'interviens que si tu peux apporter une réelle valeur ajoutée ou clarification.
+Règle CRUCIALE concernant les conversations entre utilisateurs :
+Quand un utilisateur répond à un autre utilisateur (et non à toi), tu dois être EXTRÊMEMENT prudent dans ton niveau d'engagement.
+
+RÈGLES D'ENGAGEMENT STRICTES:
+1. N'interviens PAS dans les conversations entre utilisateurs sauf si tu es explicitement mentionné ou si une aide est clairement demandée.
+2. Si la conversation semble privée ou si ton intervention n'est pas explicitement sollicitée, reste totalement en retrait.
+3. Si tu dois répondre, utilise un ton neutre et concis, en te limitant strictement au sujet de la question posée.
+4. Évite absolument de détourner le sujet de leur conversation ou de proposer des informations non demandées.
+5. Privilégie l'absence de réponse en cas de doute sur la nécessité de ton intervention.
+
+EXCEPTION IMPORTANTE:
+Si un utilisateur parle de toi (Yassine) dans une conversation, même sans te mentionner directement, tu peux répondre poliment. C'est une exception à la règle générale de non-intervention.
+
+Tu es là pour assister uniquement quand on te le demande explicitement, pas pour t'insérer dans toutes les conversations.
 `;
 
 const scheduler = new ToadScheduler();
@@ -44,10 +53,10 @@ export async function monitorMessage(message, client, buildResponseFn) {
   // Importer analysisService pour vérifier si un délai d'attente est actif
   const { analysisService } = await import('./analysisService.js');
 
-  // Planifier l'analyse du message avec un délai entre 1 et 5 minutes
+  // Planifier l'analyse du message avec un délai entre 30 secondes et 3 minutes
   // ou plus si un délai d'attente est actif sur ce canal
-  const MIN_DELAY_MS = 60 * 1000;  // 1 minute en ms
-  const MAX_DELAY_MS = 5 * 60 * 1000;  // 5 minutes en ms
+  const MIN_DELAY_MS = 10 * 1000;  // 30 secondes en ms
+  const MAX_DELAY_MS = 2 * 60 * 1000;  // 3 minutes en ms
   let delayInMs = Math.floor(MIN_DELAY_MS + Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS));
 
   // Si un délai d'attente est actif, ajouter un délai supplémentaire
@@ -61,6 +70,20 @@ export async function monitorMessage(message, client, buildResponseFn) {
 
   const scheduledTime = new Date(Date.now() + delayInMs);
 
+  // Vérifier si le message est une réponse entre utilisateurs
+  let isReplyBetweenUsers = false;
+  if (message.reference) {
+    try {
+      const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
+      if (repliedMessage && repliedMessage.author.id !== client.user.id && repliedMessage.author.id !== message.author.id) {
+        isReplyBetweenUsers = true;
+        console.log(`[MessageMonitoring] Message ${messageId} identifié comme réponse entre utilisateurs`);
+      }
+    } catch (replyError) {
+      console.error(`[MessageMonitoring] Erreur lors de la vérification du message référencé:`, replyError);
+    }
+  }
+
   // Enregistrer l'information sur le message en attente
   pendingResponses.set(messageId, {
     message,
@@ -68,7 +91,8 @@ export async function monitorMessage(message, client, buildResponseFn) {
     userId,
     guildId,
     scheduledTime,
-    content: message.content
+    content: message.content,
+    isReplyBetweenUsers
   });
 
   console.log(`Message ${messageId} planifié pour analyse dans ${(delayInMs / 60000).toFixed(1)} minutes à ${format(scheduledTime, 'HH:mm:ss')}`);
@@ -85,6 +109,9 @@ export async function monitorMessage(message, client, buildResponseFn) {
 
         console.log(`[MessageMonitoring] Début de l'évaluation du message ${messageId} dans le canal ${channelId}`);
         console.log(`[MessageMonitoring] Analyse du message de ${messageInfo.userId} - "${messageInfo.content.substring(0, 30)}..."`);
+
+        // Initialiser le flag pour les réponses entre utilisateurs
+        let isReplyBetweenUsers = false;
 
         // Marquer le message comme analysé dans la base de données
         try {
@@ -132,7 +159,8 @@ export async function monitorMessage(message, client, buildResponseFn) {
         const evaluationResult = await messageEvaluator.evaluateMessageRelevance(
           channelId,
           guildId,
-          messageInfo.content
+          messageInfo.content,
+          isReplyBetweenUsers || false // Passer le flag pour indiquer si c'est une réponse entre utilisateurs
         );
 
         console.log(`[MessageMonitoring] Résultat d'évaluation - ID: ${messageId}, Score: ${evaluationResult.relevanceScore.toFixed(2)}, InfoClé: ${evaluationResult.hasKeyInfo}, Répondre: ${evaluationResult.shouldRespond}`);
@@ -146,12 +174,36 @@ export async function monitorMessage(message, client, buildResponseFn) {
 
           // Vérifier si le message est une réponse à un autre utilisateur
           let additionalContext = '';
+          isReplyBetweenUsers = messageInfo.isReplyBetweenUsers || false;
           if (message.reference) {
             try {
               const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
-              if (repliedMessage && repliedMessage.author.id !== client.user.id && repliedMessage.author.id !== message.author.id) {
-                console.log(`[MessageMonitoring] Message ${messageId} est une réponse à un autre utilisateur - Utilisation des instructions spéciales`);
-                additionalContext = systemPrompt;
+              if (repliedMessage) {
+                // Vérifier si c'est une réponse entre utilisateurs (pas au bot)
+                if (repliedMessage.author.id !== client.user.id && repliedMessage.author.id !== message.author.id) {
+                  console.log(`[MessageMonitoring] Message ${messageId} est une réponse à un autre utilisateur - Utilisation des instructions spéciales`);
+                  additionalContext = systemPrompt;
+                  isReplyBetweenUsers = true;
+
+                  // Pour les conversations entre utilisateurs, on vérifie quand même la pertinence
+                  // mais on favorise la réponse si le score est suffisant
+                  const { messageEvaluator } = await import('../utils/messageEvaluator.js');
+
+                  // On vérifie d'abord avec shouldRespondImmediately pour les cas évidents
+                  const shouldRespondImmediate = await messageEvaluator.shouldRespondImmediately(
+                    messageInfo.content, false, false, false, true
+                  );
+
+                  // Si c'est un cas évident de non-réponse et que le score de pertinence est très faible, on annule
+                  // Seuil abaissé pour permettre plus de réponses
+                  if (!shouldRespondImmediate && evaluationResult.relevanceScore < 0.4) {
+                    console.log(`[MessageMonitoring] Conversation entre utilisateurs avec score très faible (${evaluationResult.relevanceScore.toFixed(2)}) - Analyse annulée`);
+                    pendingResponses.delete(messageId);
+                    return;
+                  }
+
+                  console.log(`[MessageMonitoring] Conversation entre utilisateurs avec score pertinent (${evaluationResult.relevanceScore.toFixed(2)}) - Intervention jugée appropriée`);
+                }
               }
             } catch (replyError) {
               console.error(`[MessageMonitoring] Erreur lors de la récupération du message référencé:`, replyError);
@@ -246,8 +298,8 @@ async function createScheduledTask(client, channelId, guildId, relevanceScore, t
   try {
     console.log(`[MessageMonitoring] Tentative de création de tâche planifiée - Canal: ${channelId}, Serveur: ${guildId || 'DM'}, Score: ${relevanceScore.toFixed(2)}, Sujet: "${topicSummary}"`); 
 
-    // Ne créer une tâche que si le score de pertinence est suffisant
-    if (relevanceScore < 0.7) {
+    // Ne créer une tâche que si le score de pertinence est suffisant (seuil abaissé)
+    if (relevanceScore < 0.3) {
       console.log(`[MessageMonitoring] Score de pertinence insuffisant (${relevanceScore.toFixed(2)}) pour créer une tâche planifiée pour la conversation dans ${channelId}`);
       return false;
     }
@@ -256,9 +308,9 @@ async function createScheduledTask(client, channelId, guildId, relevanceScore, t
     const taskId = `conversation-task-${randomUUID().substring(0, 8)}`;
     console.log(`[MessageMonitoring] Création d'une nouvelle tâche: ${taskId}`);
 
-    // Utiliser un délai aléatoire entre 1 et 5 minutes (60 000 à 300 000 ms)
-    const MIN_DELAY_MS = 10 * 1000;  // 1 minute en ms
-    const MAX_DELAY_MS = 5 * 60 * 1000;  // 5 minutes en ms
+    // Utiliser un délai aléatoire plus court (5 à 120 secondes)
+    const MIN_DELAY_MS = 5 * 1000;  // 5 secondes en ms
+    const MAX_DELAY_MS = 1 * 60 * 1000;  // 2 minutes en ms
     const delayInMs = Math.floor(MIN_DELAY_MS + Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS));
     const scheduledTime = new Date(Date.now() + delayInMs);
 

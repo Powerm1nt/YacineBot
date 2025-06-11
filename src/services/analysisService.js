@@ -17,7 +17,7 @@ const ai = new OpenAI({
  * Délai d'attente entre les analyses de messages groupés (en ms)
  * Permet d'éviter de suralimenter les conversations avec trop de réponses rapides
  */
-const MESSAGE_BATCH_DELAY = 10000; // 10 secondes
+const MESSAGE_BATCH_DELAY = 5000; // 5 secondes
 const messageBatchTimers = new Map(); // Pour suivre les délais par canal
 
 /**
@@ -64,9 +64,9 @@ export function startMessageBatchDelay(channelId, guildId = null) {
  * @param {string} contextInfo - Informations de contexte (optionnel)
  * @returns {Promise<Object>} - Résultat d'analyse avec score et hasKeyInfo
  */
-  export async function analyzeMessageRelevance(content, contextInfo = '', isFromBot = false) {
+  export async function analyzeMessageRelevance(content, contextInfo = '', isFromBot = false, channelName = '') {
   try {
-    console.log(`[AnalysisService] Analyse de pertinence demandée - Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}", Contexte: ${contextInfo ? 'Fourni' : 'Non fourni'}, Bot: ${isFromBot}`);
+    console.log(`[AnalysisService] Analyse de pertinence demandée - Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}", Contexte: ${contextInfo ? 'Fourni' : 'Non fourni'}, Bot: ${isFromBot}, Canal: ${channelName || 'Non spécifié'}`);
 
     if (!content || content.trim() === '') {
       console.log('[AnalysisService] Contenu vide, retour score zéro');
@@ -76,7 +76,26 @@ export function startMessageBatchDelay(channelId, guildId = null) {
     // Si le message provient d'un bot, ne pas analyser pour économiser des appels API
     if (isFromBot) {
       console.log('[AnalysisService] Message provenant d\'un bot, analyse ignorée');
-      return { relevanceScore: 0.3, hasKeyInfo: false }; // Score par défaut pour les bots
+      return { relevanceScore: 0.5, hasKeyInfo: true }; // Score par défaut plus élevé pour les bots avec indicateur d'information clé
+    }
+
+    // Ajuster le score initial en fonction du canal
+    let channelRelevanceModifier = 0.2; // Bonus par défaut pour tous les canaux
+    if (channelName) {
+      const channelNameLower = channelName.toLowerCase();
+      // Canaux où on est plus susceptible de vouloir participer
+      if (channelNameLower.includes('général') || channelNameLower.includes('general') || 
+          channelNameLower.includes('discussion') || channelNameLower.includes('chat') ||
+          channelNameLower.includes('meme') || channelNameLower.includes('fun') ||
+          channelNameLower.includes('social') || channelNameLower.includes('random')) {
+        channelRelevanceModifier = 0.4; // Beaucoup plus susceptible de répondre
+      }
+      // Canaux où on est moins susceptible de vouloir participer
+      else if (channelNameLower.includes('admin') || channelNameLower.includes('mod') || 
+               channelNameLower.includes('annonce') || channelNameLower.includes('règle') ||
+               channelNameLower.includes('important')) {
+        channelRelevanceModifier = 0; // Neutre pour ces canaux
+      }
     }
 
     const systemInstructions = `Tu es un système d'analyse de pertinence de messages. 
@@ -85,6 +104,7 @@ export function startMessageBatchDelay(channelId, guildId = null) {
 1. Pertinence dans la conversation
 2. Informations utiles ou importantes contenues dans le message
 3. Potentiel d'apporter de la valeur à la conversation
+4. Adéquation au canal dans lequel le message est posté (si spécifié)
 
 Réponds UNIQUEMENT au format JSON brut (sans formatage markdown, sans bloc de code) avec deux propriétés:
 - relevanceScore: un nombre entre 0 et 1 (0 = non pertinent, 1 = très pertinent)
@@ -94,9 +114,11 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
 
     console.log('[AnalysisService] Envoi de la demande d\'analyse à l\'API OpenAI');
 
+    const channelContext = channelName ? `Canal: #${channelName}\n` : '';
+
     const response = await ai.responses.create({
-      model: 'gpt-4.1-mini',
-      input: `${contextInfo ? 'Contexte: ' + contextInfo + '\n\n' : ''}Message à analyser: ${content}`,
+      model: 'gpt-4.1-nano',
+      input: `${channelContext}${contextInfo ? 'Contexte: ' + contextInfo + '\n\n' : ''}Message à analyser: ${content}`,
       instructions: systemInstructions,
     });
 
@@ -111,7 +133,14 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
       return { relevanceScore: 0.5, hasKeyInfo: false };
     }
 
-    console.log(`[AnalysisService] Analyse complétée - Score: ${result.relevanceScore.toFixed(2)}, InfoClé: ${result.hasKeyInfo}`);
+    // Appliquer le modificateur basé sur le canal si présent
+    if (channelRelevanceModifier && result.relevanceScore) {
+      const adjustedScore = Math.min(1, Math.max(0, result.relevanceScore + channelRelevanceModifier));
+      console.log(`[AnalysisService] Score ajusté pour le canal #${channelName}: ${result.relevanceScore.toFixed(2)} -> ${adjustedScore.toFixed(2)}`);
+      result.relevanceScore = adjustedScore;
+    }
+
+    console.log(`[AnalysisService] Analyse complétée - Score final: ${result.relevanceScore.toFixed(2)}, InfoClé: ${result.hasKeyInfo}`);
     return result;
   } catch (error) {
     console.error('Erreur lors de l\'analyse de pertinence:', error);
@@ -150,7 +179,7 @@ Analyse la conversation fournie et réponds UNIQUEMENT au format JSON brut (sans
 IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, renvoie uniquement l'objet JSON brut.`;
 
     const response = await ai.responses.create({
-      model: 'gpt-4.1-mini',
+      model: 'gpt-4.1-nano',
       input: `Conversation à analyser:\n${messageContent}`,
       instructions: systemInstructions,
     });
@@ -224,9 +253,9 @@ export async function updateConversationRelevance(channelId, guildId = null, cli
     });
 
     // Si le client est fourni et que le service de surveillance des messages est disponible,
-    // créer une tâche planifiée si la conversation est pertinente
-    if (client && analysis.relevanceScore >= 0.7) {
-      console.log(`[AnalysisService] Score de pertinence élevé (${analysis.relevanceScore.toFixed(2)}) - Tentative de création de tâche planifiée`);
+    // créer une tâche planifiée si la conversation est pertinente (seuil fortement abaissé)
+    if (client && analysis.relevanceScore >= 0.2) {
+      console.log(`[AnalysisService] Score de pertinence suffisant (${analysis.relevanceScore.toFixed(2)}) - Tentative de création de tâche planifiée`);
       try {
         const { messageMonitoringService } = await import('./messageMonitoringService.js');
         const taskCreated = await messageMonitoringService.createScheduledTask(

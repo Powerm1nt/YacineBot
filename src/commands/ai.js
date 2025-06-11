@@ -19,6 +19,7 @@ import { analysisService } from '../services/analysisService.js'
 import { convertBigIntsToStrings } from '../utils/jsonUtils.js'
 import { isSchedulerEnabled } from '../utils/configService.js'
 import { messageMonitoringService } from '../services/messageMonitoringService.js'
+import { messageEvaluator } from '../utils/messageEvaluator.js'
 
 import dotenv from 'dotenv'
 dotenv.config()
@@ -94,6 +95,8 @@ STYLE: Envoi des messages très courts, comme dans une conversation lambda entre
 PERSONNALITÉ: Tu es notre pote sur Discord, hyper sympa, un peu débile sur les bords. Assure-toi de varier tes interactions pour rester engageant. EVITE le cringe, et ne mets pas des hashtags ou des trucs façons linkedin
 
 COMPORTEMENT HUMAIN: tu peux utiliser les reactions de discord, si on te le demande, tu dis que tu peux le faire. ne réponds pas si c'est des propos incorrectes, par exemple a la place de répondre Désolé, "je peux pas répondre à ce genre de questions", tu ne réponds pas. Si tu juges qu'une réponse n'est pas nécessaire (comme pour un simple accusé de réception, un message banal ou si rien n'apporte de valeur), tu peux retourner une chaîne vide pour ne pas répondre du tout. Cela rendra ton comportement plus humain et naturel. Ne réponds que lorsque c'est pertinent.
+
+CONTEXTE DE SALON: Adapte tes réponses au contexte du salon. Si tu es dans un salon spécifique comme #général, #jeux, #tech, etc., ajuste ton comportement en conséquence. Certains salons peuvent nécessiter des réponses plus professionnelles, d'autres plus décontractées.
 
 CONSIGNE CRUCIALE POUR LES MENTIONS: Pour mentionner quelqu'un, tu DOIS extraire son ID numérique du texte (format "nom (ID: 123456789)") et utiliser UNIQUEMENT le format <@ID> (par exemple <@123456789>). N'utilise JAMAIS d'autres formats comme @nom ou @ID.
 
@@ -247,7 +250,9 @@ export async function ai (client) {
           // Analyser la pertinence du message du bot avec un contexte plus riche
           const analysisResult = await analysisService.analyzeMessageRelevance(
             response.output_text || '',
-            contextForAnalysis
+            contextForAnalysis,
+            true, // Message du bot
+            message.channel?.name || ''
         );
 
         // Stocker le message avec son score de pertinence
@@ -344,6 +349,21 @@ export async function ai (client) {
       }
 
       const isDM = !message.guild && message.channel.type === 'DM'
+      // Vérifier si c'est une réponse entre utilisateurs
+      let isReplyBetweenUsers = false;
+      if (message.reference) {
+        try {
+          const referencedMessage = await message.channel.messages.fetch(message.reference.messageId);
+          // Si c'est une réponse à un autre utilisateur et pas au bot
+          if (referencedMessage.author.id !== client.user.id && referencedMessage.author.id !== message.author.id) {
+            isReplyBetweenUsers = true;
+            console.log(`[AI] Message détecté comme réponse entre utilisateurs`);
+          }
+        } catch (error) {
+          console.error('Erreur lors de la vérification du message référencé:', error);
+        }
+      }
+
       // Vérifier si nous devons répondre à ce message
       const shouldRespond = isDirectMention || isReply || isDM
 
@@ -372,7 +392,8 @@ export async function ai (client) {
           guildId,
           0, // Score de pertinence par défaut
           false, // Pas d'info clé par défaut
-          false // Message pas encore analysé
+          false, // Message pas encore analysé
+          message.channel?.name || null // Nom du canal
         )
 
         // Si le planificateur est activé, ajouter le message à la surveillance
@@ -395,6 +416,38 @@ export async function ai (client) {
         }
 
         return
+      }
+
+      // Si c'est une réponse entre utilisateurs, on vérifie la pertinence
+      // mais on est plus enclin à intervenir selon la demande
+      if (isReplyBetweenUsers) {
+        // Vérifier d'abord si c'est un cas évident d'intervention nécessaire
+        const shouldIntervene = await messageEvaluator.shouldRespondImmediately(
+          message.content, isDirectMention, isDM, isReply, true
+        );
+
+        if (shouldIntervene) {
+          console.log(`[AI] Intervention dans une conversation entre utilisateurs jugée appropriée`);
+        } else {
+          // Faire une analyse de pertinence rapide pour décider
+          try {
+            const quickAnalysis = await analysisService.analyzeMessageRelevance(
+              message.content, "", false, message.channel?.name || ''
+            );
+
+            // Si le score de pertinence est modéré ou élevé, intervenir quand même
+            if (quickAnalysis.relevanceScore >= 0.5) {
+              console.log(`[AI] Conversation entre utilisateurs avec score pertinent (${quickAnalysis.relevanceScore.toFixed(2)}) - Intervention jugée appropriée`);
+            } else {
+              console.log(`[AI] Message ignoré car conversation entre utilisateurs avec score faible (${quickAnalysis.relevanceScore.toFixed(2)})`);
+              return;
+            }
+          } catch (analysisError) {
+            console.error('Erreur lors de l\'analyse rapide de pertinence:', analysisError);
+            // En cas d'erreur d'analyse, on intervient par défaut
+            console.log(`[AI] Intervention par défaut suite à une erreur d'analyse`);
+          }
+        }
       }
 
       // Parfois, pour des messages très simples, répondre juste avec une réaction
