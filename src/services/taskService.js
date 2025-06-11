@@ -145,51 +145,6 @@ export async function deleteTasksByType(taskType) {
   }
 }
 
-/**
- * Enregistre l'exécution d'une tâche
- * @param {string} schedulerId - ID du scheduler (ancien taskId)
- * @param {string} channelId - ID du canal où le message a été envoyé
- * @param {string} userId - ID de l'utilisateur ciblé
- * @param {string} message - Message envoyé
- * @returns {Promise<Object>} L'exécution enregistrée
- */
-export async function logTaskExecution(schedulerId, channelId, userId, message) {
-  try {
-    console.log(`[TaskService] Enregistrement d'exécution de tâche - Scheduler ID: ${schedulerId}, Canal: ${channelId}, Utilisateur: ${userId}`);
-
-    // Rechercher d'abord la tâche par son schedulerId
-    const task = await prisma.task.findUnique({
-      where: { schedulerId }
-    });
-
-    if (!task) {
-      console.warn(`[TaskService] Aucune tâche trouvée avec schedulerId: ${schedulerId}`);
-      return null;
-    }
-
-    console.log(`[TaskService] Tâche trouvée - ID BDD: ${task.id}, Type: ${task.type}`);
-
-    // Créer l'exécution liée à la tâche
-    const execution = await prisma.taskExecution.create({
-      data: {
-        taskId: task.id,
-        schedulerId,
-        channelId,
-        userId,
-        message,
-        executedAt: new Date()
-      }
-    });
-
-    console.log(`[TaskService] Exécution enregistrée avec succès - ID: ${execution.id}`);
-    return execution;
-  } catch (error) {
-    console.error('Erreur lors de l\'enregistrement de l\'exécution de la tâche:', error);
-    // Ne pas propager l'erreur pour ne pas interrompre l'exécution de la tâche
-    return null;
-  }
-}
-
 // Exporter un objet pour les imports nommés
 export const taskService = {
   saveTask,
@@ -197,6 +152,5 @@ export const taskService = {
   getTasksByType,
   deleteTask,
   deleteAllTasks,
-  deleteTasksByType,
-  logTaskExecution
+  deleteTasksByType
 };

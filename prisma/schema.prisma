@@ -80,26 +80,7 @@ model Task {
   nextExecution     DateTime? // Date de la prochaine exécution
   targetChannelType String?   @map("target_channel_type") // Type de canal cible
 
-  // Relations
-  executions TaskExecution[]
-
   @@map("tasks")
-}
-
-// Modèle pour les exécutions des tâches
-model TaskExecution {
-  id          Int      @id @default(autoincrement())
-  // Relation avec la tâche parente
-  taskId      BigInt   @map("task_id")
-  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  schedulerId String?  @map("scheduler_id") // Pour garder une référence à l'ancien taskId (schedulerId)
-  channelId   String   @map("channel_id")
-  userId      String   @map("user_id")
-  message     String
-  executedAt  DateTime @map("executed_at")
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  @@map("task_executions")
 }
 
 model UsageStat {

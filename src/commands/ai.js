@@ -40,7 +40,7 @@ STYLE: Envoi des messages très courts, comme dans une conversation lambda entre
 
 PERSONNALITÉ: Tu es notre pote sur Discord, hyper sympa, un peu débile sur les bords. Assure-toi de varier tes interactions pour rester engageant. EVITE le cringe, et ne mets pas des hashtags ou des trucs façons linkedin
 
-COMPORTEMENT HUMAIN: Si tu juges qu'une réponse n'est pas nécessaire (comme pour un simple accusé de réception, un message banal ou si rien n'apporte de valeur), tu peux retourner une chaîne vide pour ne pas répondre du tout. Cela rendra ton comportement plus humain et naturel. Ne réponds que lorsque c'est pertinent.
+COMPORTEMENT HUMAIN: ne réponds pas si c'est des propos incorrectes, par exemple a la place de répondre Désolé, "je peux pas répondre à ce genre de questions", tu ne réponds pas. Si tu juges qu'une réponse n'est pas nécessaire (comme pour un simple accusé de réception, un message banal ou si rien n'apporte de valeur), tu peux retourner une chaîne vide pour ne pas répondre du tout. Cela rendra ton comportement plus humain et naturel. Ne réponds que lorsque c'est pertinent.
 
 CONSIGNE CRUCIALE POUR LES MENTIONS: Pour mentionner quelqu'un, tu DOIS extraire son ID numérique du texte (format "nom (ID: 123456789)") et utiliser UNIQUEMENT le format <@ID> (par exemple <@123456789>). N'utilise JAMAIS d'autres formats comme @nom ou @ID.
 
@@ -350,24 +350,24 @@ export async function ai (client) {
               const hasLinks = /http|www\.|https/i.test(text);
               const hasEmojis = /:[a-z_]+:|😀|😃|😄|😁|😆|😅|😂|🤣|😊|😇|🙂|🙃|😉|😌|😍|🥰|😘|😗|😙|😚|😋|😛|😝|😜|🤪|🤨|🧐|🤓|😎|🤩|🥳|😏|😒|😞|😔|😟|😕|🙁|☹️|😣|😖|😫|😩|🥺|😢|😭|😤|😠|😡|🤬|🤯|😳|🥵|🥶|😱|😨|😰|😥|😓|🤗|🤔|🤭|🤫|🤥|😶|😐|😑|😬|🙄|😯|😦|😧|😮|😲|🥱|😴|🤤|😪|😵|🤐|🥴|🤢|🤮|🤧|😷|🤒|🤕|🤑|🤠/i.test(text);
 
-              if (hasCode) return 1.5;
-              if (hasLinks) return 1.3;
-              if (hasEmojis) return 0.8;
-              return 1.0;
+              if (hasCode) return 2.1;
+              if (hasLinks) return 1.7;
+              if (hasEmojis) return 1.5;
+              return 1.8;
             })();
 
-            const baseSpeed = 120 * complexityFactor;
-            const randomFactor = Math.random() * 0.3 + 0.85;
+            const baseSpeed = 150 * complexityFactor;
+            const randomFactor = Math.random() * 0.4 + 0.9;
             const characterCount = text.length;
-            const rawDelay = characterCount * baseSpeed * randomFactor;
+            const rawDelay = characterCount * baseSpeed * randomFactor * 3;
 
             let reflectionTime = 0;
             if (characterCount > 100) {
-              reflectionTime = Math.min(1500, characterCount * 3);
+              reflectionTime = Math.min(2000, characterCount * 4);
             }
 
-            const minDelay = 800;
-            const maxDelay = Math.min(8000, 3000 + characterCount / 15);
+            const minDelay = 1200;
+            const maxDelay = Math.min(10000, 4000 + characterCount / 10);
 
             return Math.min(maxDelay, Math.max(minDelay, rawDelay + reflectionTime));
           };
