@@ -287,37 +287,17 @@ export async function initScheduler (client) {
       return;
     }
 
-    // Tenter de restaurer les tâches existantes depuis la base de données
-    const savedTasks = await taskService.getAllTasks();
+    // Supprimer les tâches expirées dans la base de données
+    await cleanupExpiredTasks();
 
-    if (savedTasks && savedTasks.length > 0) {
-      console.log(`Restauration de ${savedTasks.length} tâches depuis la base de données...`);
+    // Restaurer les tâches non expirées
+    await restorePendingTasks(client);
 
-      // Supprimer d'abord les anciennes tâches de la base de données
-      await taskService.deleteAllTasks();
+    // Créer uniquement une tâche d'analyse
+    console.log('Ajout d\'une tâche d\'analyse de conversation...');
+    await createAnalysisTask(client, 1);
 
-      // Recréer les tâches avec de nouveaux délais
-      for (let i = 0; i < savedTasks.length; i++) {
-        // Vérifier le type de tâche
-        if (savedTasks[i].data && savedTasks[i].data.type === 'analysis') {
-          await createAnalysisTask(client, savedTasks[i].taskNumber);
-        } else {
-          await createRandomTask(client, savedTasks[i].taskNumber);
-        }
-      }
-    } else {
-      // Aucune tâche trouvée, créer un nombre aléatoire de nouvelles tâches
-      const taskCount = getRandomTaskCount();
-      console.log(`Aucune tâche existante trouvée. Création de ${taskCount} nouvelles tâches...`);
-
-      for (let i = 0; i < taskCount; i++) {
-        await createRandomTask(client, i + 1);
-      }
-
-      // Ajouter également une tâche d'analyse
-      console.log('Ajout d\'une tâche d\'analyse de conversation...');
-      await createAnalysisTask(client, taskCount + 1);
-    }
+    console.log('Initialisation du planificateur terminée. Les tâches de message seront créées par le service d\'analyse si nécessaire.');
   } catch (error) {
     console.error('Erreur lors de l\'initialisation du planificateur:', error);
   }
@@ -355,6 +335,65 @@ async function createAnalysisTask(client, taskNumber) {
         if (!isActiveHour()) {
           console.log(`Tâche d'analyse ignorée - Hors des heures actives (${formatDate(new Date(), 'HH:mm')})`);
           return;
+        }
+
+        // Récupérer aussi les tâches de conversation planifiées
+        const pendingTasks = await taskService.getTasksByType('conversation');
+        if (pendingTasks && pendingTasks.length > 0) {
+          console.log(`Traitement de ${pendingTasks.length} tâches de conversation planifiées...`);
+
+          for (const task of pendingTasks) {
+            if (task.data && task.data.channelId) {
+              try {
+                const channel = await client.channels.fetch(task.data.channelId).catch(() => null);
+
+                if (channel) {
+                  // Générer une réponse ou une question basée sur le sujet stocké
+                  const topicSummary = task.data.topicSummary || 'conversation en cours';
+                  const shouldAskQuestion = Math.random() > 0.5; // 50% de chance de poser une question
+
+                  let messageContent;
+                  if (shouldAskQuestion) {
+                    // Récupérer les messages récents pour le contexte
+                    const recentMessages = await conversationService.getRecentMessages(
+                      task.data.channelId, 
+                      task.data.guildId || null,
+                      10
+                    );
+
+                    // Générer une question sur le sujet
+                    messageContent = await generateFollowUpQuestion(recentMessages, topicSummary);
+                  } else {
+                    // Générer un commentaire sur le sujet
+                    messageContent = await generateTopicComment([], topicSummary);
+                  }
+
+                  // Vérifier si le message a du contenu
+                  if (messageContent && messageContent.trim() !== '') {
+                    // Simuler l'écriture
+                    await channel.sendTyping().catch(console.error);
+
+                    // Délai calculé en fonction de la longueur du message
+                    const typingDelay = messageContent.length * 30 + Math.floor(Math.random() * 2000);
+                    await new Promise(resolve => setTimeout(resolve, typingDelay));
+
+                    // Envoyer le message
+                    await channel.send(messageContent);
+
+                    console.log(`Message de suivi envoyé dans ${task.data.channelId} sur le sujet: ${topicSummary}`);
+                  }
+                }
+
+                // Supprimer la tâche une fois traitée
+                await taskService.deleteTask(task.schedulerId);
+
+              } catch (taskError) {
+                console.error(`Erreur lors du traitement de la tâche de conversation ${task.schedulerId}:`, taskError);
+                // Supprimer la tâche en cas d'erreur pour éviter les tentatives répétées
+                await taskService.deleteTask(task.schedulerId);
+              }
+            }
+          }
         }
 
         // Récupérer les conversations récemment actives
@@ -932,5 +971,77 @@ export function stopScheduler () {
   // Arrêter complètement le planificateur pour être sûr
   scheduler.stop()
   console.log('Planificateur de tâches arrêté - toutes les tâches ont été supprimées')
+}
+
+/**
+ * Nettoie les tâches expirées dans la base de données
+ * @returns {Promise<void>}
+ */
+async function cleanupExpiredTasks() {
+  try {
+    const now = new Date();
+    const result = await prisma.task.deleteMany({
+      where: {
+        type: 'scheduler',
+        nextExecution: {
+          lt: now // Supprime les tâches dont la date d'exécution est passée
+        }
+      }
+    });
+
+    console.log(`${result.count} tâches expirées supprimées de la base de données`);
+  } catch (error) {
+    console.error('Erreur lors du nettoyage des tâches expirées:', error);
+  }
+}
+
+/**
+ * Restaure les tâches non expirées depuis la base de données
+ * @param {Object} client - Client Discord
+ * @returns {Promise<void>}
+ */
+async function restorePendingTasks(client) {
+  try {
+    const now = new Date();
+
+    // Récupérer toutes les tâches non expirées
+    const pendingTasks = await prisma.task.findMany({
+      where: {
+        type: 'scheduler',
+        nextExecution: {
+          gte: now // Seulement les tâches dont la date d'exécution est future
+        }
+      }
+    });
+
+    if (pendingTasks.length === 0) {
+      console.log('Aucune tâche en attente à restaurer');
+      return;
+    }
+
+    console.log(`Restauration de ${pendingTasks.length} tâches en attente...`);
+
+    for (const task of pendingTasks) {
+      try {
+        // Recréer la tâche dans le planificateur en fonction de son type
+        if (task.schedulerId.includes('analysis-task')) {
+          // Recréer la tâche d'analyse
+          await createAnalysisTask(client, task.taskNumber || 1);
+        } else if (task.schedulerId.includes('random-question-task')) {
+          // Recréer la tâche de question aléatoire
+          await createRandomTask(client, task.taskNumber || 1);
+        } else if (task.schedulerId.includes('conversation-task')) {
+          // Les tâches de conversation sont gérées par messageMonitoringService
+          console.log(`Tâche de conversation ${task.schedulerId} restaurée, sera traitée par l'analyseur`);
+        }
+      } catch (taskError) {
+        console.error(`Erreur lors de la restauration de la tâche ${task.schedulerId}:`, taskError);
+      }
+    }
+
+    console.log('Restauration des tâches terminée');
+  } catch (error) {
+    console.error('Erreur lors de la restauration des tâches en attente:', error);
+  }
 }
 

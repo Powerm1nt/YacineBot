@@ -112,9 +112,10 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
  * Met à jour le score de pertinence d'une conversation existante
  * @param {string} channelId - ID du canal
  * @param {string} guildId - ID de la guilde (optionnel)
+ * @param {Object} client - Client Discord (optionnel, pour créer des tâches planifiées)
  * @returns {Promise<Object>} - Résultat de la mise à jour
  */
-export async function updateConversationRelevance(channelId, guildId = null) {
+export async function updateConversationRelevance(channelId, guildId = null, client = null) {
   try {
     // Récupérer la conversation et ses messages
     const conversation = await prisma.conversation.findUnique({
@@ -140,7 +141,8 @@ export async function updateConversationRelevance(channelId, guildId = null) {
     // Analyser la conversation
     const analysis = await analyzeConversationRelevance(conversation.messages);
 
-    return await prisma.conversation.update({
+    // Mettre à jour la conversation dans la base de données
+    const updatedConversation = await prisma.conversation.update({
       where: { id: conversation.id },
       data: {
         relevanceScore: analysis.relevanceScore,
@@ -148,6 +150,25 @@ export async function updateConversationRelevance(channelId, guildId = null) {
         updatedAt: new Date()
       }
     });
+
+    // Si le client est fourni et que le service de surveillance des messages est disponible,
+    // créer une tâche planifiée si la conversation est pertinente
+    if (client && analysis.relevanceScore >= 0.7) {
+      try {
+        const { messageMonitoringService } = await import('./messageMonitoringService.js');
+        await messageMonitoringService.createScheduledTask(
+          client,
+          channelId,
+          guildId,
+          analysis.relevanceScore,
+          analysis.topicSummary
+        );
+      } catch (taskError) {
+        console.error('Erreur lors de la création d\'une tâche planifiée pour la conversation:', taskError);
+      }
+    }
+
+    return updatedConversation;
   } catch (error) {
     console.error('Erreur lors de la mise à jour de la pertinence de la conversation:', error);
     return null;

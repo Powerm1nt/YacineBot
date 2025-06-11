@@ -4,6 +4,8 @@
 import { messageEvaluator } from '../utils/messageEvaluator.js';
 import { ToadScheduler, SimpleIntervalJob, AsyncTask } from 'toad-scheduler';
 import { format } from 'date-fns';
+import { taskService } from './taskService.js';
+import { randomUUID } from 'crypto';
 
 const scheduler = new ToadScheduler();
 const pendingResponses = new Map();
@@ -125,8 +127,55 @@ export function shutdown() {
   pendingResponses.clear();
 }
 
+/**
+ * Crée une tâche planifiée pour une conversation pertinente
+ * @param {Object} client - Client Discord
+ * @param {string} channelId - ID du canal
+ * @param {string} guildId - ID de la guilde (optionnel)
+ * @param {number} relevanceScore - Score de pertinence de la conversation
+ * @param {string} topicSummary - Résumé du sujet de conversation
+ * @returns {Promise<boolean>} - Succès de la création de tâche
+ */
+async function createScheduledTask(client, channelId, guildId, relevanceScore, topicSummary) {
+  try {
+    // Ne créer une tâche que si le score de pertinence est suffisant
+    if (relevanceScore < 0.7) {
+      console.log(`Score de pertinence insuffisant (${relevanceScore}) pour créer une tâche planifiée pour la conversation dans ${channelId}`);
+      return false;
+    }
+
+    // Générer un identifiant unique pour cette tâche
+    const taskId = `conversation-task-${randomUUID().substring(0, 8)}`;
+
+    // Calculer un délai aléatoire (entre 30 et 120 minutes)
+    const delayInMinutes = Math.floor(Math.random() * 90) + 30;
+    const scheduledTime = new Date(Date.now() + delayInMinutes * 60 * 1000);
+
+    // Enregistrer la tâche dans la base de données
+    await taskService.saveTask(
+      taskId, 
+      0, 
+      scheduledTime, 
+      null, 
+      'conversation', 
+      {
+        channelId,
+        guildId: guildId || "",
+        topicSummary
+      }
+    );
+
+    console.log(`Nouvelle tâche de conversation (${taskId}) créée pour le canal ${channelId} dans ${delayInMinutes} minutes`);
+    return true;
+  } catch (error) {
+    console.error('Erreur lors de la création d\'une tâche planifiée:', error);
+    return false;
+  }
+}
+
 export const messageMonitoringService = {
   monitorMessage,
   stopMonitoring,
-  shutdown
+  shutdown,
+  createScheduledTask
 };

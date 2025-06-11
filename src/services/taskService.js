@@ -9,9 +9,11 @@ import { prisma } from './prisma.js';
  * @param {number} taskNumber - Numéro de la tâche
  * @param {Date} nextExecution - Date de la prochaine exécution
  * @param {string} targetChannelType - Type de canal cible (guild, dm, group)
+ * @param {string} type - Type de tâche (scheduler par défaut)
+ * @param {Object} data - Données supplémentaires de la tâche
  * @returns {Promise<Object>} La tâche créée
  */
-export async function saveTask(schedulerId, taskNumber, nextExecution, targetChannelType = null) {
+export async function saveTask(schedulerId, taskNumber, nextExecution, targetChannelType = null, type = 'scheduler', data = {}) {
   try {
     return await prisma.task.upsert({
       where: { schedulerId },
@@ -19,12 +21,14 @@ export async function saveTask(schedulerId, taskNumber, nextExecution, targetCha
         taskNumber,
         nextExecution,
         targetChannelType,
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        type,
+        data
       },
       create: {
-        type: 'scheduler',
+        type,
         status: 'pending',
-        data: {},
+        data,
         schedulerId,
         taskNumber,
         nextExecution,
@@ -51,6 +55,24 @@ export async function getAllTasks() {
     });
   } catch (error) {
     console.error('Erreur lors de la récupération des tâches:', error);
+    return [];
+  }
+}
+
+/**
+ * Récupère les tâches par type spécifique
+ * @param {string} taskType - Type de tâche à récupérer (ex: 'conversation', 'analysis')
+ * @returns {Promise<Array>} Liste des tâches correspondant au type
+ */
+export async function getTasksByType(taskType) {
+  try {
+    return await prisma.task.findMany({
+      where: { 
+        schedulerId: { contains: taskType }
+      }
+    });
+  } catch (error) {
+    console.error(`Erreur lors de la récupération des tâches de type ${taskType}:`, error);
     return [];
   }
 }
@@ -133,6 +155,7 @@ export async function logTaskExecution(schedulerId, channelId, userId, message) 
 export const taskService = {
   saveTask,
   getAllTasks,
+  getTasksByType,
   deleteTask,
   deleteAllTasks,
   logTaskExecution

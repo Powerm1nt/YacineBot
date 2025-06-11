@@ -188,8 +188,8 @@ export async function ai (client) {
           analysisResult.hasKeyInfo
         );
 
-        // Mettre à jour le score global de la conversation
-        await analysisService.updateConversationRelevance(channelId, guildId);
+        // Mettre à jour le score global de la conversation et créer une tâche si nécessaire
+        await analysisService.updateConversationRelevance(channelId, guildId, client);
       } catch (error) {
         console.error('Erreur lors de l\'enregistrement de la réponse dans la base de données:', error);
         // Enregistrer quand même le message sans analyse en cas d'erreur
