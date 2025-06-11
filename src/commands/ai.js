@@ -98,6 +98,8 @@ COMPORTEMENT HUMAIN: tu peux utiliser les reactions de discord, si on te le dema
 
 CONTEXTE DE SALON: Adapte tes réponses au contexte du salon. Si tu es dans un salon spécifique comme #général, #jeux, #tech, etc., ajuste ton comportement en conséquence. Certains salons peuvent nécessiter des réponses plus professionnelles, d'autres plus décontractées.
 
+INFORMATIONS SUR TON STATUT DISCORD: Quand tu es sur un serveur Discord, prends en compte tes rôles et permissions. Si on te demande tes rôles ou permissions, consulte les informations contextuelles du message pour voir dans quel serveur tu es, puis explique les privilèges qui te sont accordés par tes rôles. Tu peux lire et répondre aux messages dans les canaux auxquels tu as accès. Si tu as des rôles d'administrateur ou de modérateur, tu dois indiquer que tu as ces privilèges mais que tu ne les utilises que sous instructions explicites des administrateurs du serveur.
+
 CONSIGNE CRUCIALE POUR LES MENTIONS: Pour mentionner quelqu'un, tu DOIS extraire son ID numérique du texte (format "nom (ID: 123456789)") et utiliser UNIQUEMENT le format <@ID> (par exemple <@123456789>). N'utilise JAMAIS d'autres formats comme @nom ou @ID.
 
 INTERDICTION ABSOLUE: Tu ne dois JAMAIS te mentionner toi-même avec ton ID ${process.env.CLIENT_ID}.
@@ -147,9 +149,58 @@ export async function ai (client) {
     contextInfo += `[Message sent by ${authorDisplayName}] `
 
     if (message.guild) {
-      contextInfo += `[In channel #${message.channel.name} of server ${message.guild.name}] `
+      // Récupérer les rôles du bot dans ce serveur
+      let botRoles = "";
+      try {
+        const botMember = await message.guild.members.fetch(client.user.id);
+        if (botMember && botMember.roles.cache.size > 0) {
+          const roleNames = botMember.roles.cache
+            .filter(role => role.name !== '@everyone')
+            .map(role => role.name)
+            .join(', ');
+          if (roleNames) {
+            botRoles = `[Bot roles in this server: ${roleNames}] `;
+          }
+          // Vérifier si le bot est administrateur
+          const isAdmin = botMember.permissions.has('ADMINISTRATOR');
+          if (isAdmin) {
+            botRoles += `[Bot has ADMINISTRATOR permission] `;
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching bot roles:', error);
+      }
+      // Vérifier les permissions du bot dans ce canal
+      let channelPerms = "";
+      try {
+        const botPermissions = message.channel.permissionsFor(client.user.id);
+        if (botPermissions) {
+          // Liste des permissions importantes à vérifier
+          const keyPermissions = [
+            { flag: 'SEND_MESSAGES', name: 'Send Messages' },
+            { flag: 'READ_MESSAGE_HISTORY', name: 'Read History' },
+            { flag: 'MANAGE_MESSAGES', name: 'Manage Messages' },
+            { flag: 'MENTION_EVERYONE', name: 'Mention Everyone' },
+            { flag: 'EMBED_LINKS', name: 'Embed Links' },
+            { flag: 'ATTACH_FILES', name: 'Attach Files' },
+            { flag: 'ADD_REACTIONS', name: 'Add Reactions' }
+          ];
+
+          const grantedPerms = keyPermissions
+            .filter(perm => botPermissions.has(perm.flag))
+            .map(perm => perm.name);
+
+          if (grantedPerms.length > 0) {
+            channelPerms = `[Bot channel permissions: ${grantedPerms.join(', ')}] `;
+          }
+        }
+      } catch (error) {
+        console.error('Error checking bot channel permissions:', error);
+      }
+
+      contextInfo += `[In channel #${message.channel.name} of server ${message.guild.name}] ${botRoles}${channelPerms}`;
     } else {
-      contextInfo += `[In private message] `
+      contextInfo += `[In private message] `;
     }
 
     const processedInput = await replaceMentionsWithNames(input, client)
@@ -574,7 +625,7 @@ export async function ai (client) {
         }
       } catch (error) {
         console.error('Error while building response:', error)
-        await message.reply('Désolé, une erreur est survenue lors du traitement de votre message.')
+        // await message.reply('Désolé, une erreur est survenue lors du traitement de votre message.')
       }
     } catch (error) {
       console.error('Critical error:', error)
