@@ -37,6 +37,7 @@ model Message {
   isBot          Boolean      @default(false) @map("is_bot")
   relevanceScore Float?       @default(0) @map("relevance_score") // Score de pertinence du message
   hasKeyInfo     Boolean      @default(false) @map("has_key_info") // Indique si le message contient des informations clés
+  isAnalyzed     Boolean      @default(false) @map("is_analyzed") // Indique si le message a été analysé
   createdAt      DateTime     @default(now()) @map("created_at")
 
   @@map("messages")

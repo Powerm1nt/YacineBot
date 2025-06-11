@@ -45,9 +45,10 @@ export async function getConversationHistory(channelId, guildId = null) {
  * @param {string} guildId - ID de la guilde (facultatif pour les DMs)
  * @param {number} relevanceScore - Score de pertinence du message (0-1)
  * @param {boolean} hasKeyInfo - Si le message contient des informations clés
+ * @param {boolean} isAnalyzed - Si le message a déjà été analysé
  * @returns {Promise<Object>} - Message ajouté
  */
-export async function addMessage(channelId, userId, userName, content, isBot = false, guildId = null, relevanceScore = 0, hasKeyInfo = false) {
+export async function addMessage(channelId, userId, userName, content, isBot = false, guildId = null, relevanceScore = 0, hasKeyInfo = false, isAnalyzed = false) {
   try {
     // Chercher ou créer la conversation avec upsert pour éviter les erreurs de contrainte unique
     const conversation = await prisma.conversation.upsert({
@@ -77,7 +78,8 @@ export async function addMessage(channelId, userId, userName, content, isBot = f
         content,
         isBot,
         relevanceScore,
-        hasKeyInfo
+        hasKeyInfo,
+        isAnalyzed
       }
     });
   } catch (error) {

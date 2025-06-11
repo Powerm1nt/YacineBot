@@ -6,6 +6,7 @@ import { ToadScheduler, SimpleIntervalJob, AsyncTask } from 'toad-scheduler';
 import { format } from 'date-fns';
 import { taskService } from './taskService.js';
 import { randomUUID } from 'crypto';
+import { prisma } from './prisma.js';
 
 const scheduler = new ToadScheduler();
 const pendingResponses = new Map();
@@ -22,11 +23,17 @@ export async function monitorMessage(message, client, buildResponseFn) {
   const userId = message.author.id;
   const guildId = message.guild?.id || null;
 
-  // Vérifier si le message est déjà en attente d'analyse
-  if (pendingResponses.has(messageId)) return;
+  console.log(`[MessageMonitoring] Nouveau message reçu - ID: ${messageId}, Canal: ${channelId}, Utilisateur: ${userId}, Serveur: ${guildId || 'DM'}, Contenu: "${message.content.substring(0, 50)}${message.content.length > 50 ? '...' : ''}"`); 
+  console.log(`[MessageMonitoring] Message ${messageId} ajouté pour analyse différée`);
 
-  // Planifier l'analyse du message pour dans 1-2 minutes
-  const delayInMinutes = Math.random() * 1 + 1; // Entre 1 et 2 minutes
+  // Vérifier si le message est déjà en attente d'analyse
+  if (pendingResponses.has(messageId)) {
+    console.log(`[MessageMonitoring] Message ${messageId} déjà en attente d'analyse - ignoré`);
+    return;
+  }
+
+  // Planifier l'analyse du message pour dans exactement 1 minute
+  const delayInMinutes = 1; // Délai fixe de 1 minute
   const delayInMs = delayInMinutes * 60 * 1000;
   const scheduledTime = new Date(Date.now() + delayInMs);
 
@@ -40,7 +47,7 @@ export async function monitorMessage(message, client, buildResponseFn) {
     content: message.content
   });
 
-  console.log(`Message ${messageId} planifié pour analyse à ${format(scheduledTime, 'HH:mm:ss')}`);
+  console.log(`Message ${messageId} planifié pour analyse dans 1 minute à ${format(scheduledTime, 'HH:mm:ss')}`);
 
   // Créer une tâche pour analyser et potentiellement répondre plus tard
   const task = new AsyncTask(
@@ -52,6 +59,51 @@ export async function monitorMessage(message, client, buildResponseFn) {
 
         const messageInfo = pendingResponses.get(messageId);
 
+        console.log(`[MessageMonitoring] Début de l'évaluation du message ${messageId} dans le canal ${channelId}`);
+        console.log(`[MessageMonitoring] Analyse du message de ${messageInfo.userId} - "${messageInfo.content.substring(0, 30)}..."`);
+
+        // Marquer le message comme analysé dans la base de données
+        try {
+          // Trouver le message dans la base de données
+          const conversation = await prisma.conversation.findUnique({
+            where: {
+              channelId_guildId: {
+                channelId: channelId,
+                guildId: guildId || ""
+              }
+            },
+            include: {
+              messages: {
+                where: {
+                  userId: messageInfo.userId,
+                  isAnalyzed: false
+                },
+                orderBy: {
+                  createdAt: 'desc'
+                },
+                take: 1
+              }
+            }
+          });
+
+          if (conversation?.messages && conversation.messages.length > 0) {
+            const dbMessage = conversation.messages[0];
+            console.log(`[MessageMonitoring] Message trouvé en BDD - ID: ${dbMessage.id}`);
+
+            // Mettre à jour le message pour le marquer comme analysé
+            await prisma.message.update({
+              where: { id: dbMessage.id },
+              data: { isAnalyzed: true }
+            });
+
+            console.log(`[MessageMonitoring] Message ${dbMessage.id} marqué comme analysé`);
+          } else {
+            console.log(`[MessageMonitoring] Message non trouvé en BDD pour l'utilisateur ${messageInfo.userId}`);
+          }
+        } catch (dbError) {
+          console.error(`[MessageMonitoring] Erreur lors de la mise à jour du statut d'analyse du message:`, dbError);
+        }
+
         // Évaluer si le message mérite une réponse maintenant
         const evaluationResult = await messageEvaluator.evaluateMessageRelevance(
           channelId,
@@ -59,9 +111,11 @@ export async function monitorMessage(message, client, buildResponseFn) {
           messageInfo.content
         );
 
+        console.log(`[MessageMonitoring] Résultat d'évaluation - ID: ${messageId}, Score: ${evaluationResult.relevanceScore.toFixed(2)}, InfoClé: ${evaluationResult.hasKeyInfo}, Répondre: ${evaluationResult.shouldRespond}`);
+
         // Si le message est suffisamment pertinent, y répondre
         if (evaluationResult.shouldRespond) {
-          console.log(`Réponse différée au message ${messageId} (score: ${evaluationResult.relevanceScore})`);
+          console.log(`[MessageMonitoring] Réponse différée au message ${messageId} (score: ${evaluationResult.relevanceScore.toFixed(2)}) - Canal: ${channelId}, Serveur: ${guildId || 'DM'}`);
 
           // Marquer le canal comme étant en train d'écrire
           await message.channel.sendTyping().catch(console.error);
@@ -88,18 +142,21 @@ export async function monitorMessage(message, client, buildResponseFn) {
     }
   );
 
-  // Exécuter la tâche une seule fois après le délai
+  // Exécuter la tâche une seule fois après le délai fixe de 1 minute
   const jobId = `job-message-${messageId}`;
-  const job = new SimpleIntervalJob({ minutes: delayInMinutes, runImmediately: false }, task, jobId);
+  const job = new SimpleIntervalJob({ minutes: 1, runImmediately: false }, task, jobId);
 
   scheduler.addSimpleIntervalJob(job);
 
   // Ajouter une fonction pour supprimer le job quand il est terminé
   setTimeout(() => {
     try {
+      console.log(`[MessageMonitoring] Suppression planifiée du job ${jobId} après exécution`);
       scheduler.removeById(jobId);
+      console.log(`[MessageMonitoring] Job ${jobId} supprimé avec succès`);
     } catch (error) {
       // Le job a peut-être déjà été supprimé, pas de problème
+      console.log(`[MessageMonitoring] Le job ${jobId} a déjà été supprimé ou n'existe pas`);
     }
   }, delayInMs + 5000); // +5 secondes pour s'assurer que le job a eu le temps de s'exécuter
 }
@@ -110,12 +167,18 @@ export async function monitorMessage(message, client, buildResponseFn) {
  */
 export function stopMonitoring(messageId) {
   if (pendingResponses.has(messageId)) {
+    console.log(`[MessageMonitoring] Arrêt de la surveillance du message ${messageId}`);
     pendingResponses.delete(messageId);
     try {
-      scheduler.removeById(`job-message-${messageId}`);
+      const jobId = `job-message-${messageId}`;
+      scheduler.removeById(jobId);
+      console.log(`[MessageMonitoring] Job ${jobId} supprimé avec succès`);
     } catch (error) {
       // Le job a peut-être déjà été supprimé, pas de problème
+      console.log(`[MessageMonitoring] Le job pour le message ${messageId} a déjà été supprimé ou n'existe pas`);
     }
+  } else {
+    console.log(`[MessageMonitoring] Aucune surveillance en cours pour le message ${messageId}`);
   }
 }
 
@@ -123,8 +186,10 @@ export function stopMonitoring(messageId) {
  * Arrête tous les jobs de surveillance
  */
 export function shutdown() {
+  console.log(`[MessageMonitoring] Arrêt du service de surveillance - ${pendingResponses.size} messages en attente seront abandonnés`);
   scheduler.stop();
   pendingResponses.clear();
+  console.log('[MessageMonitoring] Service de surveillance arrêté avec succès');
 }
 
 /**
@@ -138,21 +203,24 @@ export function shutdown() {
  */
 async function createScheduledTask(client, channelId, guildId, relevanceScore, topicSummary) {
   try {
+    console.log(`[MessageMonitoring] Tentative de création de tâche planifiée - Canal: ${channelId}, Serveur: ${guildId || 'DM'}, Score: ${relevanceScore.toFixed(2)}, Sujet: "${topicSummary}"`); 
+
     // Ne créer une tâche que si le score de pertinence est suffisant
     if (relevanceScore < 0.7) {
-      console.log(`Score de pertinence insuffisant (${relevanceScore}) pour créer une tâche planifiée pour la conversation dans ${channelId}`);
+      console.log(`[MessageMonitoring] Score de pertinence insuffisant (${relevanceScore.toFixed(2)}) pour créer une tâche planifiée pour la conversation dans ${channelId}`);
       return false;
     }
 
     // Générer un identifiant unique pour cette tâche
     const taskId = `conversation-task-${randomUUID().substring(0, 8)}`;
+    console.log(`[MessageMonitoring] Création d'une nouvelle tâche: ${taskId}`);
 
-    // Calculer un délai aléatoire (entre 30 et 120 minutes)
-    const delayInMinutes = Math.floor(Math.random() * 90) + 30;
+    // Utiliser un délai fixe de 1 minute pour être cohérent avec les autres analyses
+    const delayInMinutes = 1;
     const scheduledTime = new Date(Date.now() + delayInMinutes * 60 * 1000);
 
     // Enregistrer la tâche dans la base de données
-    await taskService.saveTask(
+    const savedTask = await taskService.saveTask(
       taskId, 
       0, 
       scheduledTime, 
@@ -165,7 +233,8 @@ async function createScheduledTask(client, channelId, guildId, relevanceScore, t
       }
     );
 
-    console.log(`Nouvelle tâche de conversation (${taskId}) créée pour le canal ${channelId} dans ${delayInMinutes} minutes`);
+    console.log(`[MessageMonitoring] Nouvelle tâche de conversation (${taskId}) créée pour le canal ${channelId} dans 1 minute - Heure prévue: ${scheduledTime.toISOString()}`);
+    console.log(`[MessageMonitoring] Détails de la tâche: ID BDD=${savedTask.id}, Sujet="${topicSummary}"`); 
     return true;
   } catch (error) {
     console.error('Erreur lors de la création d\'une tâche planifiée:', error);

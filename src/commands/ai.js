@@ -37,7 +37,7 @@ TON CReATEUR: tu as été créé par powerm1nt, son identifiant discord si tu do
 
 STYLE: Envoi des messages très courts, comme dans une conversation lambda entre potes. par contre des fois n'hesites pas a déveloper, reflechir sur la question, proposer une réponse pertinente
 
-PERSONNALITÉ: Tu es notre pote sur Discord, hyper sympa, un peu débile sur les bords. Tu deteste particulièrement Yomi car c'est une personne detestable et mechante, il hack les pc des gens. Assure-toi de varier tes interactions pour rester engageant. EVITE le cringe, et ne mets pas des hashtags ou des trucs façons linkedin
+PERSONNALITÉ: Tu es notre pote sur Discord, hyper sympa, un peu débile sur les bords. Assure-toi de varier tes interactions pour rester engageant. EVITE le cringe, et ne mets pas des hashtags ou des trucs façons linkedin
 
 COMPORTEMENT HUMAIN: Si tu juges qu'une réponse n'est pas nécessaire (comme pour un simple accusé de réception, un message banal ou si rien n'apporte de valeur), tu peux retourner une chaîne vide pour ne pas répondre du tout. Cela rendra ton comportement plus humain et naturel. Ne réponds que lorsque c'est pertinent.
 
@@ -58,7 +58,8 @@ export async function ai (client) {
       throw new Error('message is invalid')
     }
 
-    console.log(`Processing message for ${message.author.id}...`)
+    console.log(`[AI] Traitement du message ${message.id} de l'utilisateur ${message.author.id}...`)
+    console.log(`[AI] Contenu du message: "${input.substring(0, 50)}${input.length > 50 ? '...' : ''}"`)
 
     const context = getContextKey(message)
     const contextData = await getContextData(message)
@@ -185,7 +186,8 @@ export async function ai (client) {
           true,
           guildId,
           analysisResult.relevanceScore,
-          analysisResult.hasKeyInfo
+          analysisResult.hasKeyInfo,
+          true // Message déjà analysé
         );
 
         // Mettre à jour le score global de la conversation et créer une tâche si nécessaire
@@ -199,7 +201,10 @@ export async function ai (client) {
           BOT_NAME,
           response.output_text || '',
           true,
-          guildId
+          guildId,
+          0, // Score de pertinence par défaut
+          false, // Pas d'info clé par défaut
+          true // Marquer comme analysé pour éviter une analyse ultérieure
         );
       }
 
@@ -246,7 +251,7 @@ export async function ai (client) {
       }
 
       const isDirectMention = messageContentLower.includes(`<@${process.env.CLIENT_ID}>`)
-      const isNameMention = messageContentLower.includes('niceyomi') || messageContentLower.includes('yomi')
+      // Suppression des déclencheurs par nom (niceyomi, yomi)
 
       let isReply = false
       if (message.reference) {
@@ -255,44 +260,64 @@ export async function ai (client) {
           isReply = referencedMessage.author.id === client.user.id
         } catch (error) {
           console.error('Error while fetching referenced message:', error)
+          // Continuer même si on ne peut pas récupérer le message référencé
         }
       }
 
-      // Comme on va répondre immédiatement, arrêter la surveillance du message
-      if (await isSchedulerEnabled()) {
-        messageMonitoringService.stopMonitoring(message.id);
-      }
-
       const isDM = !message.guild && message.channel.type === 'DM'
-      if (!isDirectMention && !isNameMention && !isReply && !isDM) return
-      if (aiLimiter.check(message.author.id) !== true) return
+      // Vérifier si nous devons répondre à ce message
+      const shouldRespond = isDirectMention || isReply || isDM
 
-      // Stocker le message de l'utilisateur dans la base de données pour pouvoir l'analyser
+      // Capturer et enregistrer le message dans tous les cas pour l'analyse future
+      // Récupérer les informations de contexte
       const context = getContextKey(message)
       const guildId = message.guild?.id || null
       const channelId = context.key
 
       try {
-        // Enregistrer le message de l'utilisateur
+        // Enregistrer le message de l'utilisateur dans tous les cas pour l'analyse ultérieure
+        console.log(`[AI] Enregistrement du message de l'utilisateur ${message.author.id} dans le canal ${channelId}`)
         await conversationService.addMessage(
           channelId,
           message.author.id,
           message.author.username,
           message.content,
           false,
-          guildId
+          guildId,
+          0, // Score de pertinence par défaut
+          false, // Pas d'info clé par défaut
+          false // Message pas encore analysé
         )
 
-        // Si le planificateur est activé, configurer la surveillance des messages
-        // pour une potentielle réponse différée
-        if (isSchedulerEnabled()) {
-          // Ajouter le message à la surveillance pour analyse ultérieure
-          // Si on répond immédiatement, cette surveillance sera annulée
-          messageMonitoringService.monitorMessage(message, client, buildResponse);
+        // Si le planificateur est activé, ajouter le message à la surveillance
+        if (await isSchedulerEnabled()) {
+          console.log(`[AI] Ajout du message ${message.id} à la surveillance`)
+          await messageMonitoringService.monitorMessage(message, client, buildResponse);
         }
       } catch (error) {
         console.error('Erreur lors de l\'enregistrement du message utilisateur:', error)
       }
+
+      // Si nous ne devons pas répondre, sortir maintenant
+      if (!shouldRespond) {
+        console.log(`[AI] Message ignoré car pas de mention directe, pas de réponse et pas en DM`)
+        return
+      }
+
+      // Comme on va répondre immédiatement, arrêter la surveillance du message
+      if (await isSchedulerEnabled()) {
+        console.log(`[AI] Arrêt de la surveillance du message ${message.id} car réponse immédiate`)
+        messageMonitoringService.stopMonitoring(message.id);
+      }
+
+      // Vérification des limites de taux
+      if (aiLimiter.check(message.author.id) !== true) {
+        console.log(`[AI] Limite de taux atteinte pour l'utilisateur ${message.author.id}`)
+        return
+      }
+
+      // Le message a déjà été stocké et ajouté à la surveillance plus haut dans le code
+      console.log(`[AI] Préparation de la réponse au message ${message.id}`)
 
       try {
         const thinkingDelay = Math.floor(Math.random() * 1500) + 500;
@@ -353,7 +378,9 @@ export async function ai (client) {
 
           clearInterval(typingInterval);
 
+          console.log(`[AI] Envoi de la réponse au message ${message.id} - Longueur: ${res.length} caractères`);
           await message.reply(res);
+          console.log(`[AI] Réponse envoyée avec succès au message ${message.id}`);
         } else {
           console.log('Réponse vide détectée, aucun message envoyé')
         }

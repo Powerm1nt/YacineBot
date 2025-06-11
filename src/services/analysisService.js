@@ -21,7 +21,10 @@ const ai = new OpenAI({
  */
 export async function analyzeMessageRelevance(content, contextInfo = '') {
   try {
+    console.log(`[AnalysisService] Analyse de pertinence demandée - Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}", Contexte: ${contextInfo ? 'Fourni' : 'Non fourni'}`);
+
     if (!content || content.trim() === '') {
+      console.log('[AnalysisService] Contenu vide, retour score zéro');
       return { relevanceScore: 0, hasKeyInfo: false };
     }
 
@@ -38,21 +41,26 @@ Réponds UNIQUEMENT au format JSON brut (sans formatage markdown, sans bloc de c
 
 IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, renvoie uniquement l'objet JSON brut.`;
 
+    console.log('[AnalysisService] Envoi de la demande d\'analyse à l\'API OpenAI');
+
     const response = await ai.responses.create({
       model: 'gpt-4.1-mini',
       input: `${contextInfo ? 'Contexte: ' + contextInfo + '\n\n' : ''}Message à analyser: ${content}`,
       instructions: systemInstructions,
     });
 
+    console.log('[AnalysisService] Réponse reçue de l\'API OpenAI');
+
     // Extraire le JSON de la réponse
     const result = safeJsonParse(response.output_text, null);
 
     // Valider le format
     if (!result || typeof result.relevanceScore !== 'number' || typeof result.hasKeyInfo !== 'boolean') {
-      console.error('Format de réponse invalide:', response.output_text);
+      console.error('[AnalysisService] Format de réponse invalide:', response.output_text);
       return { relevanceScore: 0.5, hasKeyInfo: false };
     }
 
+    console.log(`[AnalysisService] Analyse complétée - Score: ${result.relevanceScore.toFixed(2)}, InfoClé: ${result.hasKeyInfo}`);
     return result;
   } catch (error) {
     console.error('Erreur lors de l\'analyse de pertinence:', error);
@@ -67,12 +75,16 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
  */
 export async function analyzeConversationRelevance(messages) {
   try {
+    console.log(`[AnalysisService] Analyse de conversation demandée - ${messages?.length || 0} messages`);
+
     if (!messages || messages.length === 0) {
+      console.log('[AnalysisService] Aucun message à analyser, retour score zéro');
       return { relevanceScore: 0, topicSummary: null };
     }
 
     // Limiter le nombre de messages pour l'analyse
     const messagesToAnalyze = messages.slice(-20);
+    console.log(`[AnalysisService] Analyse limitée à ${messagesToAnalyze.length} messages récents`);
 
     const messageContent = messagesToAnalyze.map(msg => {
       return `${msg.userName}: ${msg.content}`;
@@ -117,6 +129,8 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
  */
 export async function updateConversationRelevance(channelId, guildId = null, client = null) {
   try {
+    console.log(`[AnalysisService] Mise à jour de la pertinence de conversation - Canal: ${channelId}, Serveur: ${guildId || 'DM'}`);
+
     // Récupérer la conversation et ses messages
     const conversation = await prisma.conversation.findUnique({
       where: {
@@ -133,6 +147,13 @@ export async function updateConversationRelevance(channelId, guildId = null, cli
         }
       }
     });
+
+    if (!conversation) {
+      console.log(`[AnalysisService] Aucune conversation trouvée pour Canal: ${channelId}, Serveur: ${guildId || 'DM'}`);
+      return null;
+    }
+
+    console.log(`[AnalysisService] Conversation trouvée - ID: ${conversation.id}, ${conversation.messages.length} messages`);
 
     if (!conversation) {
       return null;
@@ -154,18 +175,27 @@ export async function updateConversationRelevance(channelId, guildId = null, cli
     // Si le client est fourni et que le service de surveillance des messages est disponible,
     // créer une tâche planifiée si la conversation est pertinente
     if (client && analysis.relevanceScore >= 0.7) {
+      console.log(`[AnalysisService] Score de pertinence élevé (${analysis.relevanceScore.toFixed(2)}) - Tentative de création de tâche planifiée`);
       try {
         const { messageMonitoringService } = await import('./messageMonitoringService.js');
-        await messageMonitoringService.createScheduledTask(
+        const taskCreated = await messageMonitoringService.createScheduledTask(
           client,
           channelId,
           guildId,
           analysis.relevanceScore,
           analysis.topicSummary
         );
+
+        if (taskCreated) {
+          console.log(`[AnalysisService] Tâche planifiée créée avec succès pour le canal ${channelId} - Sujet: "${analysis.topicSummary}"`);
+        } else {
+          console.log(`[AnalysisService] Création de tâche planifiée échouée ou ignorée pour le canal ${channelId}`);
+        }
       } catch (taskError) {
-        console.error('Erreur lors de la création d\'une tâche planifiée pour la conversation:', taskError);
+        console.error('[AnalysisService] Erreur lors de la création d\'une tâche planifiée pour la conversation:', taskError);
       }
+    } else if (client) {
+      console.log(`[AnalysisService] Score de pertinence trop faible (${analysis.relevanceScore.toFixed(2)}) - Pas de tâche planifiée`);
     }
 
     return updatedConversation;

@@ -15,7 +15,9 @@ import { prisma } from './prisma.js';
  */
 export async function saveTask(schedulerId, taskNumber, nextExecution, targetChannelType = null, type = 'scheduler', data = {}) {
   try {
-    return await prisma.task.upsert({
+    console.log(`[TaskService] Sauvegarde de tâche - ID: ${schedulerId}, Type: ${type}, Exécution: ${nextExecution.toISOString()}`);
+
+    const task = await prisma.task.upsert({
       where: { schedulerId },
       update: { 
         taskNumber,
@@ -35,6 +37,9 @@ export async function saveTask(schedulerId, taskNumber, nextExecution, targetCha
         targetChannelType
       }
     });
+
+    console.log(`[TaskService] Tâche sauvegardée avec succès - ID BDD: ${task.id}, Scheduler ID: ${schedulerId}`);
+    return task;
   } catch (error) {
     console.error('Erreur lors de la sauvegarde de la tâche:', error);
     throw error;
@@ -66,13 +71,21 @@ export async function getAllTasks() {
  */
 export async function getTasksByType(taskType) {
   try {
-    return await prisma.task.findMany({
+    console.log(`[TaskService] Recherche de tâches par type: ${taskType}`);
+    // Ignorer les recherches pour les tâches de type random-question-task qui n'existent plus
+    if (taskType === 'random-question-task') {
+      console.log(`[TaskService] Type de tâche "random-question-task" déprécié`);
+      return [];
+    }
+    const tasks = await prisma.task.findMany({
       where: { 
         schedulerId: { contains: taskType }
       }
     });
+    console.log(`[TaskService] ${tasks.length} tâches trouvées de type ${taskType}`);
+    return tasks;
   } catch (error) {
-    console.error(`Erreur lors de la récupération des tâches de type ${taskType}:`, error);
+    console.error(`[TaskService] Erreur lors de la récupération des tâches de type ${taskType}:`, error);
     return [];
   }
 }
@@ -114,6 +127,25 @@ export async function deleteAllTasks() {
 }
 
 /**
+ * Supprime les tâches planifiées par type
+ * @param {string} taskType - Type de tâche à supprimer
+ * @returns {Promise<number>} Nombre de tâches supprimées
+ */
+export async function deleteTasksByType(taskType) {
+  try {
+    const result = await prisma.task.deleteMany({
+      where: { 
+        schedulerId: { contains: taskType }
+      }
+    });
+    return result.count;
+  } catch (error) {
+    console.error(`Erreur lors de la suppression des tâches de type ${taskType}:`, error);
+    return 0;
+  }
+}
+
+/**
  * Enregistre l'exécution d'une tâche
  * @param {string} schedulerId - ID du scheduler (ancien taskId)
  * @param {string} channelId - ID du canal où le message a été envoyé
@@ -123,18 +155,22 @@ export async function deleteAllTasks() {
  */
 export async function logTaskExecution(schedulerId, channelId, userId, message) {
   try {
+    console.log(`[TaskService] Enregistrement d'exécution de tâche - Scheduler ID: ${schedulerId}, Canal: ${channelId}, Utilisateur: ${userId}`);
+
     // Rechercher d'abord la tâche par son schedulerId
     const task = await prisma.task.findUnique({
       where: { schedulerId }
     });
 
     if (!task) {
-      console.warn(`Aucune tâche trouvée avec schedulerId: ${schedulerId}`);
+      console.warn(`[TaskService] Aucune tâche trouvée avec schedulerId: ${schedulerId}`);
       return null;
     }
 
+    console.log(`[TaskService] Tâche trouvée - ID BDD: ${task.id}, Type: ${task.type}`);
+
     // Créer l'exécution liée à la tâche
-    return await prisma.taskExecution.create({
+    const execution = await prisma.taskExecution.create({
       data: {
         taskId: task.id,
         schedulerId,
@@ -144,6 +180,9 @@ export async function logTaskExecution(schedulerId, channelId, userId, message) 
         executedAt: new Date()
       }
     });
+
+    console.log(`[TaskService] Exécution enregistrée avec succès - ID: ${execution.id}`);
+    return execution;
   } catch (error) {
     console.error('Erreur lors de l\'enregistrement de l\'exécution de la tâche:', error);
     // Ne pas propager l'erreur pour ne pas interrompre l'exécution de la tâche
@@ -158,5 +197,6 @@ export const taskService = {
   getTasksByType,
   deleteTask,
   deleteAllTasks,
+  deleteTasksByType,
   logTaskExecution
 };

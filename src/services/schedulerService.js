@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto'
 import { isGuildEnabled, isChannelTypeEnabled, isSchedulerEnabled, isAnalysisEnabled, isAutoRespondEnabled } from '../utils/configService.js'
 import { analysisService } from './analysisService.js'
 import { taskService } from './taskService.js'
+import { messageTaskService } from './messageTaskService.js'
 const { prisma } = await import('./prisma.js');
 
 dotenv.config()
@@ -27,8 +28,6 @@ let previewedNextChannel = null
 
 const MIN_DELAY = parseInt(process.env.MIN_DELAY_MINUTES || '10') * 60 * 1000
 const MAX_DELAY = parseInt(process.env.MAX_DELAY_MINUTES || '120') * 60 * 1000
-const MIN_TASKS = parseInt(process.env.MIN_TASKS || '1')
-const MAX_TASKS = parseInt(process.env.MAX_TASKS || '3')
 
 const activeTasks = new Map()
 
@@ -55,10 +54,6 @@ function generateRandomDelay () {
   return Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY + 1)) + MIN_DELAY
 }
 
-function getRandomTaskCount () {
-  return Math.floor(Math.random() * (MAX_TASKS - MIN_TASKS + 1)) + MIN_TASKS
-}
-
 export function formatDelay (ms) {
   const minutes = Math.floor(ms / 60000)
   if (minutes < 60) {
@@ -69,24 +64,6 @@ export function formatDelay (ms) {
   return `${hours}h ${remainingMinutes}m`
 }
 
-const questionSystemInstructions = `Génère une seule question intéressante, originale, amusante ou provocante (mais jamais offensive) pour animer une conversation entre amis sur Discord. 
-La question doit être courte (maximum 50 mots) et facilement compréhensible.
-Ne pas utiliser de formules d'introduction comme "Voici une question:" ou "Question du jour:", donne simplement la question directement.`
-
-async function generateRandomQuestion () {
-  try {
-    const response = await openai.responses.create({
-      model: 'gpt-4.1-mini',
-      input: 'Génère une question pour animer une conversation',
-      instructions: questionSystemInstructions,
-    })
-
-    return response.output_text || 'Qu\'est-ce que vous pensez de cette journée ?'
-  } catch (error) {
-    console.error('Erreur lors de la génération de question:', error)
-    return 'Comment allez-vous aujourd\'hui ?'
-  }
-}
 
 function selectRandomChannel(client, channelType = null) {
   const enabledTypes = [];
@@ -259,9 +236,10 @@ function isActiveHour (startHour = 8, endHour = 23) {
  * @param {Object} client - Client Discord
  */
 export async function initScheduler (client) {
+  console.log('[Scheduler] Initialisation du planificateur de tâches...')
   // Vérifier si les messages automatiques sont activés
   if (!(await isSchedulerEnabled()) || process.env.ENABLE_AUTO_MESSAGES !== 'true') {
-    console.log('Les messages automatiques sont désactivés')
+    console.log('[Scheduler] Les messages automatiques sont désactivés - Planificateur non initialisé')
     return
   }
 
@@ -270,7 +248,7 @@ export async function initScheduler (client) {
 
   const currentTime = formatDate(new Date(), 'HH:mm:ss')
   console.log(`Planificateur initialisé à ${currentTime} avec le fuseau horaire système (${TIMEZONE} configuré)`)
-  console.log(`Configuration: ${MIN_TASKS}-${MAX_TASKS} tâches, délai: ${formatDelay(MIN_DELAY)}-${formatDelay(MAX_DELAY)}`)
+  console.log(`Configuration: délai: ${formatDelay(MIN_DELAY)}-${formatDelay(MAX_DELAY)}`)
 
   try {
     let dbAccessible;
@@ -289,6 +267,16 @@ export async function initScheduler (client) {
 
     // Supprimer les tâches expirées dans la base de données
     await cleanupExpiredTasks();
+
+    // Supprimer les anciennes tâches de type random-question-task qui n'existent plus
+    try {
+      const deletedCount = await taskService.deleteTasksByType('random-question-task');
+      if (deletedCount > 0) {
+        console.log(`[Scheduler] ${deletedCount} anciennes tâches de questions aléatoires supprimées`);
+      }
+    } catch (deleteError) {
+      console.error('[Scheduler] Erreur lors de la suppression des anciennes tâches:', deleteError);
+    }
 
     // Restaurer les tâches non expirées
     await restorePendingTasks(client);
@@ -322,20 +310,34 @@ async function createAnalysisTask(client, taskNumber) {
     taskId,
     async () => {
       try {
+        console.log('[Scheduler] Exécution de la tâche d\'analyse de conversation');
+
+        // Traiter les tâches intermédiaires (analyse des messages capturés)
+        const processedTasks = await messageTaskService.processIntermediateTasks();
+        console.log(`[Scheduler] ${processedTasks} tâches intermédiaires traitées`);
+
+        // Exécuter les tâches de réponse
+        const executedTasks = await messageTaskService.executeResponseTasks(client);
+        console.log(`[Scheduler] ${executedTasks} tâches de réponse exécutées`);
         // Vérifier si l'analyse est activée
         const analysisEnabled = await isAnalysisEnabled();
         const autoRespondEnabled = await isAutoRespondEnabled();
 
+        console.log(`[Scheduler] Configuration - Analyse: ${analysisEnabled ? 'activée' : 'désactivée'}, Réponse auto: ${autoRespondEnabled ? 'activée' : 'désactivée'}`);
+
         if (!analysisEnabled) {
-          console.log('Tâche d\'analyse ignorée - L\'analyse est désactivée');
+          console.log('[Scheduler] Tâche d\'analyse ignorée - L\'analyse est désactivée');
           return;
         }
 
         // Vérifier si nous sommes dans les heures actives
         if (!isActiveHour()) {
-          console.log(`Tâche d'analyse ignorée - Hors des heures actives (${formatDate(new Date(), 'HH:mm')})`);
+          const currentTime = formatDate(new Date(), 'HH:mm');
+          console.log(`[Scheduler] Tâche d'analyse ignorée - Hors des heures actives (${currentTime})`);
           return;
         }
+
+        console.log('[Scheduler] Tâche d\'analyse en cours d\'exécution - Dans les heures actives');
 
         // Récupérer aussi les tâches de conversation planifiées
         const pendingTasks = await taskService.getTasksByType('conversation');
@@ -583,138 +585,6 @@ Ne pas inclure d'introduction comme "Je pense que" ou "À mon avis". Donne simpl
   }
 }
 
-async function createRandomTask (client, taskNumber) {
-  // Générer un identifiant unique pour cette tâche
-  const taskId = `random-question-task-${taskNumber}-${randomUUID().substring(0, 8)}`
-
-  // Déterminer le type de canal ciblé pour cette tâche
-  const targetChannelType = process.env.TARGET_CHANNEL_TYPE || null
-
-  // Créer la tâche asynchrone
-  const task = new AsyncTask(
-    taskId,
-    async () => {
-      try {
-        // Vérifier si nous sommes dans les heures actives (8h-23h par défaut)
-        if (!isActiveHour()) {
-          console.log(`Message non envoyé - Hors des heures actives (${formatDate(new Date(), 'HH:mm')}) - Fuseau horaire: ${TIMEZONE}`)
-
-          // Recréer la tâche avec un nouveau délai
-          if (activeTasks.has(taskId)) {
-            scheduler.removeById(taskId)
-            activeTasks.delete(taskId)
-          }
-          await createRandomTask(client, taskNumber)
-          return
-        }
-
-        // Sélectionner un canal aléatoire du type spécifié
-        const channel = selectRandomChannel(client, targetChannelType)
-        if (!channel) return
-
-        // Sélectionner un utilisateur aléatoire
-        const user = await selectRandomUser(channel, client)
-        if (!user) return
-
-        // Générer une question aléatoire
-        const question = await generateRandomQuestion()
-
-        // Stocker les informations pour les statistiques
-        if (activeTasks.has(taskId)) {
-          const taskInfo = activeTasks.get(taskId);
-          taskInfo.targetChannel = channel.channelInfo;
-          taskInfo.targetUser = {
-            id: user.id,
-            username: user.user.username
-          };
-          activeTasks.set(taskId, taskInfo);
-        }
-
-        // Envoyer le message avec mention
-        const sentMessage = await channel.send(`<@${user.id}> ${question}`)
-
-        const currentTime = formatDate(new Date(), 'HH:mm:ss')
-        console.log(`[${currentTime}] Message envoyé à ${user.user.username} dans ${channel.channelInfo.name} - Fuseau horaire: ${TIMEZONE}`)
-
-        // Enregistrer l'exécution dans la base de données
-        try {
-          await taskService.logTaskExecution(
-            taskId, // Utiliser taskId comme schedulerId
-            channel.id,
-            user.id,
-            question
-          );
-        } catch (logError) {
-          console.warn(`Erreur lors de l'enregistrement de l'exécution de la tâche ${taskId}:`, logError.message);
-        }
-
-        // Recréer la tâche avec un nouveau délai
-        if (activeTasks.has(taskId)) {
-          scheduler.removeById(taskId)
-          activeTasks.delete(taskId)
-        }
-        await createRandomTask(client, taskNumber)
-      } catch (error) {
-        console.error(`[Tâche ${taskNumber}] Erreur lors de l'exécution:`, error)
-
-        // Recréer la tâche même en cas d'erreur
-        if (activeTasks.has(taskId)) {
-          scheduler.removeById(taskId)
-          activeTasks.delete(taskId)
-        }
-        await createRandomTask(client, taskNumber)
-      }
-    },
-    (err) => {
-      console.error(`[Tâche ${taskNumber}] Erreur dans la tâche:`, err)
-
-      // Recréer la tâche même en cas d'erreur
-      if (activeTasks.has(taskId)) {
-        scheduler.removeById(taskId)
-        activeTasks.delete(taskId)
-      }
-      createRandomTask(client, taskNumber)
-    }
-  )
-
-  // Générer un délai aléatoire pour cette tâche
-  const randomDelay = generateRandomDelay()
-  const minutesDelay = Math.floor(randomDelay / 60000)
-
-  // Calculer l'heure prévue
-  const now = new Date()
-  const nextExecutionTime = addMinutes(now, minutesDelay)
-  const formattedTime = formatDate(nextExecutionTime, 'HH:mm:ss')
-  const formattedDate = formatDate(nextExecutionTime, 'dd/MM/yyyy')
-
-  console.log(`[Tâche ${taskNumber}] Planifiée dans ${formatDelay(randomDelay)} (${formattedTime} le ${formattedDate})`)
-
-  // Créer un nouveau job avec le délai aléatoire
-  const job = new SimpleIntervalJob(
-    { milliseconds: randomDelay, runImmediately: false },
-    task,
-    taskId // ID unique pour le job
-  )
-
-  // Ajouter le job au planificateur et à notre registre
-  scheduler.addSimpleIntervalJob(job)
-  activeTasks.set(taskId, {
-    job,
-    taskNumber,
-    nextExecution: nextExecutionTime,
-    targetChannelType,
-    // Informations qui seront remplies lors de l'exécution
-    targetChannel: null,
-    targetUser: null
-  })
-
-  // Enregistrer la tâche dans la base de données
-  try {
-    await taskService.saveTask(taskId, taskNumber, nextExecutionTime, targetChannelType);
-  } catch (error) {
-    console.warn(`Erreur lors de l'enregistrement de la tâche ${taskId} en base de données:`, error.message);
-  }
-}
 
 /**
  * Prévisualise le prochain canal qui sera utilisé pour envoyer un message
@@ -821,8 +691,6 @@ export function getSchedulerStatus () {
     config: {
       minDelay: formatDelay(MIN_DELAY),
       maxDelay: formatDelay(MAX_DELAY),
-      minTasks: MIN_TASKS,
-      maxTasks: MAX_TASKS,
       activeHours: '8h-23h' // À personnaliser si vous changez isActiveHour
     },
     tasks: tasks
@@ -1027,9 +895,6 @@ async function restorePendingTasks(client) {
         if (task.schedulerId.includes('analysis-task')) {
           // Recréer la tâche d'analyse
           await createAnalysisTask(client, task.taskNumber || 1);
-        } else if (task.schedulerId.includes('random-question-task')) {
-          // Recréer la tâche de question aléatoire
-          await createRandomTask(client, task.taskNumber || 1);
         } else if (task.schedulerId.includes('conversation-task')) {
           // Les tâches de conversation sont gérées par messageMonitoringService
           console.log(`Tâche de conversation ${task.schedulerId} restaurée, sera traitée par l'analyseur`);

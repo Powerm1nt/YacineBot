@@ -14,7 +14,6 @@ export const defaultConfig = {
     },
     analysisEnabled: true,  // Active l'analyse de pertinence des messages
     autoRespond: true,      // Permet de répondre automatiquement aux messages pertinents
-    autoQuestion: true,     // Permet de poser des questions sur les sujets de la conversation
     sharingEnabled: true    // Active le partage de contexte
   }
 };
@@ -136,9 +135,11 @@ export async function isSchedulerEnabled() {
   const config = await loadConfig();
 
   if (config.scheduler && config.scheduler.hasOwnProperty('enabled')) {
+    console.log(`[ConfigService] État du planificateur: ${config.scheduler.enabled ? 'activé' : 'désactivé'}`);
     return config.scheduler.enabled === true;
   }
 
+  console.log(`[ConfigService] État par défaut du planificateur: ${defaultConfig.scheduler.enabled ? 'activé' : 'désactivé'}`);
   return defaultConfig.scheduler.enabled;
 }
 
@@ -148,7 +149,9 @@ export async function isSchedulerEnabled() {
  */
 export async function isAnalysisEnabled() {
   const config = await loadConfig();
-  return config.scheduler?.analysisEnabled !== false && defaultConfig.scheduler.analysisEnabled !== false;
+  const isEnabled = config.scheduler?.analysisEnabled !== false && defaultConfig.scheduler.analysisEnabled !== false;
+  console.log(`[ConfigService] État de l'analyse de pertinence: ${isEnabled ? 'activée' : 'désactivée'}`);
+  return isEnabled;
 }
 
 /**
@@ -157,6 +160,7 @@ export async function isAnalysisEnabled() {
  * @returns {Promise<boolean>} - Succès de l'opération
  */
 export async function setAnalysisEnabled(enabled) {
+  console.log(`[ConfigService] Modification de l'état de l'analyse: ${enabled ? 'activation' : 'désactivation'}`);
   try {
     const config = await loadConfig();
 
@@ -179,7 +183,9 @@ export async function setAnalysisEnabled(enabled) {
  */
 export async function isAutoRespondEnabled() {
   const config = await loadConfig();
-  return config.scheduler?.autoRespond !== false && defaultConfig.scheduler.autoRespond !== false;
+  const isEnabled = config.scheduler?.autoRespond !== false && defaultConfig.scheduler.autoRespond !== false;
+  console.log(`[ConfigService] État de la réponse automatique: ${isEnabled ? 'activée' : 'désactivée'}`);
+  return isEnabled;
 }
 
 /**
@@ -188,6 +194,7 @@ export async function isAutoRespondEnabled() {
  * @returns {Promise<boolean>} - Succès de l'opération
  */
 export async function setAutoRespondEnabled(enabled) {
+  console.log(`[ConfigService] Modification de l'état de la réponse automatique: ${enabled ? 'activation' : 'désactivation'}`);
   try {
     const config = await loadConfig();
 

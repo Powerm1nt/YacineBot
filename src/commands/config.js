@@ -158,7 +158,6 @@ async function showConfigList(client, message, showFull) {
     configMessage += `▫️ Groupes: ${config.scheduler.channelTypes?.group ? '✅ activés' : '⭕ désactivés'}\n`;
     configMessage += `▫️ Analyse de pertinence: ${config.scheduler.analysisEnabled !== false ? '✅ activée' : '⭕ désactivée'}\n`;
     configMessage += `▫️ Réponse automatique: ${config.scheduler.autoRespond !== false ? '✅ activée' : '⭕ désactivée'}\n`;
-    configMessage += `▫️ Questions automatiques: ${config.scheduler.autoQuestion !== false ? '✅ activées' : '⭕ désactivées'}\n`;
     configMessage += `▫️ Partage de contexte: ${config.scheduler.sharingEnabled !== false ? '✅ activé' : '⭕ désactivé'}\n\n`;
 
     if (showFull) {

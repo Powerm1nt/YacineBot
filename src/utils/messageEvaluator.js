@@ -13,16 +13,28 @@ import { conversationService } from '../services/conversationService.js';
  * @returns {Promise<boolean>} - Si le message mérite une réponse immédiate
  */
 export async function shouldRespondImmediately(content, isDirectMention, isDM, isReply) {
+  console.log(`[MessageEvaluator] Évaluation immédiate - Mention: ${isDirectMention}, DM: ${isDM}, Réponse: ${isReply}, Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`); 
+
   // Répondre toujours aux mentions directes, DMs et réponses à nos messages
-  if (isDirectMention || isDM || isReply) return true;
+  if (isDirectMention || isDM || isReply) {
+    console.log('[MessageEvaluator] Réponse immédiate requise - Mention directe, DM ou réponse détectée');
+    return true;
+  }
 
   // Répondre aux questions
-  if (content.includes('?')) return true;
+  if (content.includes('?')) {
+    console.log('[MessageEvaluator] Réponse immédiate requise - Question détectée');
+    return true;
+  }
 
   // Répondre aux messages urgents ou importants (mots clés)
   const urgentWords = ['urgent', 'important', 'help', 'aide', 'sos', 'problème', 'problem'];
-  if (urgentWords.some(word => content.toLowerCase().includes(word))) return true;
+  if (urgentWords.some(word => content.toLowerCase().includes(word))) {
+    console.log(`[MessageEvaluator] Réponse immédiate requise - Mot urgent détecté: ${urgentWords.find(word => content.toLowerCase().includes(word))}`);
+    return true;
+  }
 
+  console.log('[MessageEvaluator] Message ne nécessitant pas de réponse immédiate');
   return false;
 }
 
@@ -35,10 +47,15 @@ export async function shouldRespondImmediately(content, isDirectMention, isDM, i
  */
 export async function evaluateMessageRelevance(channelId, guildId, content) {
   try {
+    console.log(`[MessageEvaluator] Début d'évaluation de pertinence - Canal: ${channelId}, Serveur: ${guildId || 'DM'}, Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`); 
+
     const recentMessages = await conversationService.getRecentMessages(channelId, guildId, 5);
+    console.log(`[MessageEvaluator] ${recentMessages.length} messages récents récupérés pour contexte`);
+
     const conversationContext = recentMessages.length > 0 ? 
       recentMessages.map(msg => `${msg.userName}: ${msg.content}`).join('\n') : '';
 
+    console.log(`[MessageEvaluator] Envoi à l'analyse de pertinence avec ${conversationContext.length > 0 ? 'contexte' : 'sans contexte'}`);
     const relevanceAnalysis = await analysisService.analyzeMessageRelevance(
       content,
       conversationContext
@@ -46,6 +63,8 @@ export async function evaluateMessageRelevance(channelId, guildId, content) {
 
     // Décider si on répond en fonction du score et de la présence d'info clé
     const shouldRespond = relevanceAnalysis.relevanceScore >= 0.6 || relevanceAnalysis.hasKeyInfo;
+
+    console.log(`[MessageEvaluator] Résultat d'analyse - Score: ${relevanceAnalysis.relevanceScore.toFixed(2)}, InfoClé: ${relevanceAnalysis.hasKeyInfo}, Décision: ${shouldRespond ? 'Répondre' : 'Ignorer'}`);
 
     return {
       ...relevanceAnalysis,
