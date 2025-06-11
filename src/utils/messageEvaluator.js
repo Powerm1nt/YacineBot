@@ -53,6 +53,17 @@ export async function evaluateMessageRelevance(channelId, guildId, content) {
       return { relevanceScore: 0, hasKeyInfo: false, shouldRespond: false };
     }
 
+    // Vérifier si une conversation est active dans ce canal
+    const isActive = conversationService.isActiveConversation(channelId, guildId);
+    console.log(`[MessageEvaluator] État de la conversation dans le canal ${channelId}: ${isActive ? 'Active' : 'Inactive'}`);
+
+    // Si une conversation est active, vérifier si un délai d'attente est en cours
+    if (isActive && analysisService.isWaitingForMoreMessages(channelId, guildId)) {
+      console.log(`[MessageEvaluator] Un délai d'attente est actif dans le canal ${channelId} - Réduire le score de pertinence`);
+      // Réduire la probabilité de réponse pendant un bloc de messages actif
+      return { relevanceScore: 0.3, hasKeyInfo: false, shouldRespond: false };
+    }
+
     console.log(`[MessageEvaluator] Début d'évaluation de pertinence - Canal: ${channelId}, Serveur: ${guildId || 'DM'}, Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`); 
 
     const recentMessages = await conversationService.getRecentMessages(channelId, guildId, 5);
@@ -67,8 +78,20 @@ export async function evaluateMessageRelevance(channelId, guildId, content) {
       conversationContext
     );
 
-    // Décider si on répond en fonction du score et de la présence d'info clé
-    const shouldRespond = relevanceAnalysis.relevanceScore >= 0.6 || relevanceAnalysis.hasKeyInfo;
+    // Décider si on répond en fonction du score, de la présence d'info clé et de l'activité de la conversation
+    let shouldRespond = relevanceAnalysis.relevanceScore >= 0.6 || relevanceAnalysis.hasKeyInfo;
+
+    // Si la conversation est active, augmenter le seuil de pertinence requis
+    if (conversationService.isActiveConversation(channelId, guildId)) {
+      const higherThreshold = 0.75;
+      shouldRespond = relevanceAnalysis.relevanceScore >= higherThreshold || relevanceAnalysis.hasKeyInfo;
+      console.log(`[MessageEvaluator] Conversation active - Seuil de pertinence augmenté à ${higherThreshold}`);
+
+      // Si on décide de répondre, activer le délai d'attente pour ce canal
+      if (shouldRespond) {
+        analysisService.startMessageBatchDelay(channelId, guildId);
+      }
+    }
 
     console.log(`[MessageEvaluator] Résultat d'analyse - Score: ${relevanceAnalysis.relevanceScore.toFixed(2)}, InfoClé: ${relevanceAnalysis.hasKeyInfo}, Décision: ${shouldRespond ? 'Répondre' : 'Ignorer'}`);
 

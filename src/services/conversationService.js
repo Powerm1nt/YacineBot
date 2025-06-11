@@ -4,6 +4,59 @@
 import { prisma } from './prisma.js';
 
 /**
+ * Map pour suivre les conversations actives et les blocs de messages
+ * Structure: Map<channelId-guildId, { lastActivity: Date, messageCount: number }>
+ */
+const activeConversations = new Map();
+
+/**
+ * Délai d'inactivité en ms avant qu'une conversation soit considérée comme terminée
+ */
+const CONVERSATION_TIMEOUT = 60000; // 1 minute
+
+/**
+ * Vérifie si une conversation est active dans le canal spécifié
+ * @param {string} channelId - ID du canal
+ * @param {string} guildId - ID de la guilde (facultatif)
+ * @returns {boolean} - True si la conversation est active
+ */
+export function isActiveConversation(channelId, guildId = null) {
+  const key = `${channelId}-${guildId || 'dm'}`;
+  const conversation = activeConversations.get(key);
+
+  if (!conversation) return false;
+
+  // Vérifier si la conversation n'a pas expiré
+  const now = new Date();
+  const elapsed = now - conversation.lastActivity;
+
+  if (elapsed > CONVERSATION_TIMEOUT) {
+    // La conversation a expiré, la supprimer
+    activeConversations.delete(key);
+    console.log(`[ConversationService] Conversation expirée dans le canal ${channelId} après ${elapsed}ms d'inactivité`);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Enregistre une activité dans la conversation
+ * @param {string} channelId - ID du canal
+ * @param {string} guildId - ID de la guilde (facultatif)
+ */
+export function registerConversationActivity(channelId, guildId = null) {
+  const key = `${channelId}-${guildId || 'dm'}`;
+  const conversation = activeConversations.get(key) || { messageCount: 0 };
+
+  conversation.lastActivity = new Date();
+  conversation.messageCount++;
+
+  activeConversations.set(key, conversation);
+  console.log(`[ConversationService] Activité enregistrée dans le canal ${channelId} - Total: ${conversation.messageCount} messages`);
+}
+
+/**
  * Récupère l'historique de conversation pour un canal
  * @param {string} channelId - ID du canal Discord
  * @param {string} guildId - ID de la guilde (facultatif pour les DMs)
@@ -50,6 +103,9 @@ export async function getConversationHistory(channelId, guildId = null) {
  */
 export async function addMessage(channelId, userId, userName, content, isBot = false, guildId = null, relevanceScore = 0, hasKeyInfo = false, isAnalyzed = false) {
   try {
+    // Enregistrer l'activité de conversation
+    registerConversationActivity(channelId, guildId);
+
     // Chercher ou créer la conversation avec upsert pour éviter les erreurs de contrainte unique
     const conversation = await prisma.conversation.upsert({
       where: {
@@ -149,5 +205,7 @@ export const conversationService = {
   getConversationHistory,
   addMessage,
   deleteConversationHistory,
-  getRecentMessages
+  getRecentMessages,
+  isActiveConversation,
+  registerConversationActivity
 };

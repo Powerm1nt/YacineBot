@@ -14,6 +14,51 @@ const ai = new OpenAI({
  */
 
 /**
+ * Délai d'attente entre les analyses de messages groupés (en ms)
+ * Permet d'éviter de suralimenter les conversations avec trop de réponses rapides
+ */
+const MESSAGE_BATCH_DELAY = 10000; // 10 secondes
+const messageBatchTimers = new Map(); // Pour suivre les délais par canal
+
+/**
+ * Vérifie si un délai d'attente est actif pour le canal
+ * @param {string} channelId - ID du canal
+ * @param {string} guildId - ID du serveur (optionnel)
+ * @returns {boolean} - True si un délai est actif
+ */
+export function isWaitingForMoreMessages(channelId, guildId = null) {
+  const key = `${channelId}-${guildId || 'dm'}`;
+  return messageBatchTimers.has(key);
+}
+
+/**
+ * Démarre un délai d'attente pour le canal spécifié
+ * @param {string} channelId - ID du canal
+ * @param {string} guildId - ID du serveur (optionnel)
+ * @returns {Promise<void>}
+ */
+export function startMessageBatchDelay(channelId, guildId = null) {
+  const key = `${channelId}-${guildId || 'dm'}`;
+
+  // Si un délai existe déjà, le réinitialiser
+  if (messageBatchTimers.has(key)) {
+    clearTimeout(messageBatchTimers.get(key));
+  }
+
+  // Créer un nouveau délai
+  return new Promise(resolve => {
+    const timer = setTimeout(() => {
+      messageBatchTimers.delete(key);
+      console.log(`[AnalysisService] Délai d'attente terminé pour le canal ${channelId}`);
+      resolve();
+    }, MESSAGE_BATCH_DELAY);
+
+    messageBatchTimers.set(key, timer);
+    console.log(`[AnalysisService] Délai d'attente démarré pour le canal ${channelId} (${MESSAGE_BATCH_DELAY}ms)`);
+  });
+}
+
+/**
  * Évalue la pertinence d'un message
  * @param {string} content - Contenu du message
  * @param {string} contextInfo - Informations de contexte (optionnel)
@@ -297,5 +342,7 @@ export const analysisService = {
   analyzeConversationRelevance,
   updateConversationRelevance,
   shareConversation,
-  getSharedConversations
+  getSharedConversations,
+  isWaitingForMoreMessages,
+  startMessageBatchDelay
 };

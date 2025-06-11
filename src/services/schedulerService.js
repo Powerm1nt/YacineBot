@@ -26,8 +26,8 @@ export const CHANNEL_TYPES = {
 
 let previewedNextChannel = null
 
-const MIN_DELAY = parseInt(process.env.MIN_DELAY_MINUTES || '10') * 60 * 1000
-const MAX_DELAY = parseInt(process.env.MAX_DELAY_MINUTES || '120') * 60 * 1000
+const MIN_DELAY = parseFloat(process.env.MIN_DELAY_MINUTES || '0.2') * 60 * 1000
+const MAX_DELAY = parseFloat(process.env.MAX_DELAY_MINUTES || '5') * 60 * 1000
 
 const activeTasks = new Map()
 
@@ -48,10 +48,6 @@ function formatDate (date, formatStr = 'HH:mm:ss dd/MM/yyyy') {
 
 function getCurrentHour () {
   return getHours(new Date())
-}
-
-function generateRandomDelay () {
-  return Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY + 1)) + MIN_DELAY
 }
 
 export function formatDelay (ms) {
@@ -491,8 +487,10 @@ async function createAnalysisTask(client, taskNumber) {
     }
   );
 
-  // Générer un délai aléatoire plus long pour l'analyse (30-60 minutes)
-  const analysisDelay = 30 * 60 * 1000 + Math.floor(Math.random() * 30 * 60 * 1000);
+  // Générer un délai aléatoire pour l'analyse en utilisant les constantes globales
+  const minDelayMs = MIN_DELAY; // Utilise la constante globale déjà en millisecondes
+  const maxDelayMs = MAX_DELAY; // Utilise la constante globale déjà en millisecondes
+  const analysisDelay = minDelayMs + Math.floor(Math.random() * (maxDelayMs - minDelayMs));
   const nextExecutionTime = addMinutes(new Date(), Math.floor(analysisDelay / 60000));
 
   console.log(`[Tâche d'analyse ${taskNumber}] Planifiée pour ${formatDate(nextExecutionTime, 'HH:mm:ss')}`);

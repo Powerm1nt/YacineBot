@@ -32,9 +32,24 @@ export async function monitorMessage(message, client, buildResponseFn) {
     return;
   }
 
-  // Planifier l'analyse du message pour dans exactement 1 minute
-  const delayInMinutes = 1; // Délai fixe de 1 minute
-  const delayInMs = delayInMinutes * 60 * 1000;
+  // Importer analysisService pour vérifier si un délai d'attente est actif
+  const { analysisService } = await import('./analysisService.js');
+
+  // Planifier l'analyse du message avec un délai entre 1 et 5 minutes
+  // ou plus si un délai d'attente est actif sur ce canal
+  const MIN_DELAY_MS = 60 * 1000;  // 1 minute en ms
+  const MAX_DELAY_MS = 5 * 60 * 1000;  // 5 minutes en ms
+  let delayInMs = Math.floor(MIN_DELAY_MS + Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS));
+
+  // Si un délai d'attente est actif, ajouter un délai supplémentaire
+  if (analysisService.isWaitingForMoreMessages(channelId, guildId)) {
+    console.log(`[MessageMonitoring] Un délai d'attente est déjà actif pour le canal ${channelId} - Ajout de délai supplémentaire`);
+    delayInMs += 5000; // Ajouter 5 secondes pour s'assurer que les messages sont groupés
+  } else {
+    // Démarrer un nouveau délai d'attente pour ce canal
+    analysisService.startMessageBatchDelay(channelId, guildId);
+  }
+
   const scheduledTime = new Date(Date.now() + delayInMs);
 
   // Enregistrer l'information sur le message en attente
@@ -47,7 +62,7 @@ export async function monitorMessage(message, client, buildResponseFn) {
     content: message.content
   });
 
-  console.log(`Message ${messageId} planifié pour analyse dans 1 minute à ${format(scheduledTime, 'HH:mm:ss')}`);
+  console.log(`Message ${messageId} planifié pour analyse dans ${(delayInMs / 60000).toFixed(1)} minutes à ${format(scheduledTime, 'HH:mm:ss')}`);
 
   // Créer une tâche pour analyser et potentiellement répondre plus tard
   const task = new AsyncTask(
@@ -144,9 +159,10 @@ export async function monitorMessage(message, client, buildResponseFn) {
     }
   );
 
-  // Exécuter la tâche une seule fois après le délai fixe de 1 minute
+  // Exécuter la tâche une seule fois après le délai calculé
   const jobId = `job-message-${messageId}`;
-  const job = new SimpleIntervalJob({ minutes: 1, runImmediately: false }, task, jobId);
+  // Convertir en millisecondes pour SimpleIntervalJob
+  const job = new SimpleIntervalJob({ milliseconds: delayInMs, runImmediately: false }, task, jobId);
 
   scheduler.addSimpleIntervalJob(job);
 
@@ -217,9 +233,11 @@ async function createScheduledTask(client, channelId, guildId, relevanceScore, t
     const taskId = `conversation-task-${randomUUID().substring(0, 8)}`;
     console.log(`[MessageMonitoring] Création d'une nouvelle tâche: ${taskId}`);
 
-    // Utiliser un délai fixe de 1 minute pour être cohérent avec les autres analyses
-    const delayInMinutes = 1;
-    const scheduledTime = new Date(Date.now() + delayInMinutes * 60 * 1000);
+    // Utiliser un délai aléatoire entre 1 et 5 minutes (60 000 à 300 000 ms)
+    const MIN_DELAY_MS = 10 * 1000;  // 1 minute en ms
+    const MAX_DELAY_MS = 5 * 60 * 1000;  // 5 minutes en ms
+    const delayInMs = Math.floor(MIN_DELAY_MS + Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS));
+    const scheduledTime = new Date(Date.now() + delayInMs);
 
     // Enregistrer la tâche dans la base de données
     const savedTask = await taskService.saveTask(
@@ -235,7 +253,7 @@ async function createScheduledTask(client, channelId, guildId, relevanceScore, t
       }
     );
 
-    console.log(`[MessageMonitoring] Nouvelle tâche de conversation (${taskId}) créée pour le canal ${channelId} dans 1 minute - Heure prévue: ${scheduledTime.toISOString()}`);
+    console.log(`[MessageMonitoring] Nouvelle tâche de conversation (${taskId}) créée pour le canal ${channelId} dans ${(delayInMs / 60000).toFixed(1)} minutes - Heure prévue: ${scheduledTime.toISOString()}`);
     console.log(`[MessageMonitoring] Détails de la tâche: ID BDD=${savedTask.id}, Sujet="${topicSummary}"`); 
     return true;
   } catch (error) {

@@ -27,7 +27,7 @@ const EMOJIS = {
 export const metadata = {
   name: 'context',
   description: 'Affiche les informations sur le contexte actuel et les statistiques',
-  restricted: true,
+  restricted: false,
   usage: 'context [action]'
 };
 

@@ -349,6 +349,13 @@ export async function ai (client) {
       const channelId = context.key
 
       try {
+        // Vérifier si un délai d'attente est actif pour ce canal
+        const isWaiting = await analysisService.isWaitingForMoreMessages(channelId, guildId);
+
+        if (isWaiting && !isDirectMention && !isDM && !isReply) {
+          console.log(`[AI] Délai d'attente actif pour le canal ${channelId} - Message ajouté au bloc de conversation`);
+        }
+
         // Enregistrer le message de l'utilisateur dans tous les cas pour l'analyse ultérieure
         console.log(`[AI] Enregistrement du message de l'utilisateur ${message.author.id} dans le canal ${channelId}`)
         await conversationService.addMessage(
@@ -375,6 +382,13 @@ export async function ai (client) {
       // Si nous ne devons pas répondre, sortir maintenant
       if (!shouldRespond) {
         console.log(`[AI] Message ignoré car pas de mention directe, pas de réponse et pas en DM`)
+
+        // Si un délai d'attente est actif pour ce canal, le maintenir actif
+        if (await analysisService.isWaitingForMoreMessages(channelId, guildId)) {
+          console.log(`[AI] Délai d'attente maintenu actif pour le canal ${channelId} - Attente de plus de messages`);
+          await analysisService.startMessageBatchDelay(channelId, guildId);
+        }
+
         return
       }
 
