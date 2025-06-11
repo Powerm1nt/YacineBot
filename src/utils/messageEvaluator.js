@@ -87,17 +87,17 @@ import { prisma } from '../services/prisma.js';
       return { relevanceScore: 0.85, hasKeyInfo: true, shouldRespond: true };
     }
 
-    // Si c'est une réponse entre utilisateurs, appliquer des règles plus strictes
+    // Si c'est une réponse entre utilisateurs, appliquer des règles moins strictes pour permettre plus de réponses
     if (isReplyBetweenUsers) {
-      console.log(`[MessageEvaluator] Analyse de pertinence pour une réponse entre utilisateurs - Application de règles strictes`);
+      console.log(`[MessageEvaluator] Analyse de pertinence pour une réponse entre utilisateurs - Application de règles moins strictes`);
       // Ne considérer que les messages contenant des questions directes d'aide
       if (content.includes('?') && (content.toLowerCase().includes('help') || content.toLowerCase().includes('aide') || 
           content.toLowerCase().includes('question') || content.toLowerCase().includes('besoin'))) {
         console.log(`[MessageEvaluator] Question d'aide explicite détectée dans une conversation entre utilisateurs`);
         return { relevanceScore: 0.8, hasKeyInfo: true, shouldRespond: true };
       }
-      // Pour tous les autres cas de conversations entre utilisateurs, score très bas
-      return { relevanceScore: 0.2, hasKeyInfo: false, shouldRespond: false };
+      // Pour tous les autres cas de conversations entre utilisateurs, score beaucoup plus élevé qu'avant
+      return { relevanceScore: 0.6, hasKeyInfo: true, shouldRespond: true };
     }
 
     // Récupérer des informations sur le canal si disponibles
@@ -154,7 +154,7 @@ import { prisma } from '../services/prisma.js';
     // Si le score est modéré ou élevé (>=0.5), répondre systématiquement
     let shouldRespond = relevanceAnalysis.relevanceScore >= 0.5 || relevanceAnalysis.hasKeyInfo;
 
-    // Si la conversation est active mais que le score est quand même assez élevé, répondre
+    // Si la conversation est active, répondre avec un seuil très bas pour maximiser les interactions
     if (conversationService.isActiveConversation(channelId, guildId)) {
       // On garde un seuil mais moins élevé qu'avant pour privilégier la réponse
       const moderateThreshold = 0.5;
