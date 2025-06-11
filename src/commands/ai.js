@@ -17,6 +17,7 @@ import { conversationService } from '../services/conversationService.js'
 import { analysisService } from '../services/analysisService.js'
 import { convertBigIntsToStrings } from '../utils/jsonUtils.js'
 import { isSchedulerEnabled } from '../utils/configService.js'
+import { messageMonitoringService } from '../services/messageMonitoringService.js'
 
 import dotenv from 'dotenv'
 dotenv.config()
@@ -257,9 +258,41 @@ export async function ai (client) {
         }
       }
 
+      // Comme on va répondre immédiatement, arrêter la surveillance du message
+      if (await isSchedulerEnabled()) {
+        messageMonitoringService.stopMonitoring(message.id);
+      }
+
       const isDM = !message.guild && message.channel.type === 'DM'
       if (!isDirectMention && !isNameMention && !isReply && !isDM) return
       if (aiLimiter.check(message.author.id) !== true) return
+
+      // Stocker le message de l'utilisateur dans la base de données pour pouvoir l'analyser
+      const context = getContextKey(message)
+      const guildId = message.guild?.id || null
+      const channelId = context.key
+
+      try {
+        // Enregistrer le message de l'utilisateur
+        await conversationService.addMessage(
+          channelId,
+          message.author.id,
+          message.author.username,
+          message.content,
+          false,
+          guildId
+        )
+
+        // Si le planificateur est activé, configurer la surveillance des messages
+        // pour une potentielle réponse différée
+        if (isSchedulerEnabled()) {
+          // Ajouter le message à la surveillance pour analyse ultérieure
+          // Si on répond immédiatement, cette surveillance sera annulée
+          messageMonitoringService.monitorMessage(message, client, buildResponse);
+        }
+      } catch (error) {
+        console.error('Erreur lors de l\'enregistrement du message utilisateur:', error)
+      }
 
       try {
         const thinkingDelay = Math.floor(Math.random() * 1500) + 500;

@@ -1,0 +1,63 @@
+/**
+ * Utilitaire pour évaluer si un message mérite une réponse
+ */
+import { analysisService } from '../services/analysisService.js';
+import { conversationService } from '../services/conversationService.js';
+
+/**
+ * Évalue si un message mérite une réponse immédiate
+ * @param {string} content - Contenu du message
+ * @param {boolean} isDirectMention - Si le message est une mention directe du bot
+ * @param {boolean} isDM - Si le message est un DM
+ * @param {boolean} isReply - Si le message est une réponse à un message du bot
+ * @returns {Promise<boolean>} - Si le message mérite une réponse immédiate
+ */
+export async function shouldRespondImmediately(content, isDirectMention, isDM, isReply) {
+  // Répondre toujours aux mentions directes, DMs et réponses à nos messages
+  if (isDirectMention || isDM || isReply) return true;
+
+  // Répondre aux questions
+  if (content.includes('?')) return true;
+
+  // Répondre aux messages urgents ou importants (mots clés)
+  const urgentWords = ['urgent', 'important', 'help', 'aide', 'sos', 'problème', 'problem'];
+  if (urgentWords.some(word => content.toLowerCase().includes(word))) return true;
+
+  return false;
+}
+
+/**
+ * Évalue si un message est pertinent pour une réponse différée
+ * @param {string} channelId - ID du canal
+ * @param {string} guildId - ID de la guilde (optionnel)
+ * @param {string} content - Contenu du message
+ * @returns {Promise<Object>} - Résultat d'analyse avec décision
+ */
+export async function evaluateMessageRelevance(channelId, guildId, content) {
+  try {
+    const recentMessages = await conversationService.getRecentMessages(channelId, guildId, 5);
+    const conversationContext = recentMessages.length > 0 ? 
+      recentMessages.map(msg => `${msg.userName}: ${msg.content}`).join('\n') : '';
+
+    const relevanceAnalysis = await analysisService.analyzeMessageRelevance(
+      content,
+      conversationContext
+    );
+
+    // Décider si on répond en fonction du score et de la présence d'info clé
+    const shouldRespond = relevanceAnalysis.relevanceScore >= 0.6 || relevanceAnalysis.hasKeyInfo;
+
+    return {
+      ...relevanceAnalysis,
+      shouldRespond
+    };
+  } catch (error) {
+    console.error('Erreur lors de l\'évaluation de la pertinence:', error);
+    return { relevanceScore: 0.5, hasKeyInfo: false, shouldRespond: true }; // Par défaut, répondre en cas d'erreur
+  }
+}
+
+export const messageEvaluator = {
+  shouldRespondImmediately,
+  evaluateMessageRelevance
+};
