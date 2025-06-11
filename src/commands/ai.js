@@ -25,6 +25,59 @@ dotenv.config()
 
 const BOT_NAME = process.env.BOT_NAME || 'Yascine'
 
+// Fonction pour ajouter une réaction pertinente au message
+async function addRelevantReaction(message, responseText) {
+  try {
+    // Liste d'emojis positifs pour des réponses courtes/affirmatives
+    const positiveEmojis = ['👍', '✅', '🙂', '😊', '👌', '🎉', '🔥', '💯', '⭐', '✨'];
+
+    // Liste d'emojis négatifs pour des réponses négatives
+    const negativeEmojis = ['👎', '❌', '😕', '😢', '😬', '🤔', '🙃', '😶', '⚠️'];
+
+    // Liste d'emojis réflexifs pour des questions ou réflexions
+    const questionEmojis = ['🤔', '🧐', '❓', '🔍', '💭', '📝', '📊', '🔎'];
+
+    // Liste d'emojis pour des réponses drôles
+    const funnyEmojis = ['😂', '🤣', '😅', '😜', '🙃', '😎', '🤪', '😆'];
+
+    // Détecter le ton de la réponse (très basique)
+    let emojiList;
+    const lowercaseText = responseText.toLowerCase();
+
+    if (lowercaseText.length < 50 || lowercaseText.includes('oui') || lowercaseText.includes('d\'accord') || 
+        lowercaseText.includes('parfait') || lowercaseText.includes('super')) {
+      // Réponse courte ou positive - utiliser un emoji positif
+      emojiList = positiveEmojis;
+    } else if (lowercaseText.includes('non') || lowercaseText.includes('désolé') || 
+               lowercaseText.includes('malheureusement') || lowercaseText.includes('impossible')) {
+      // Réponse négative
+      emojiList = negativeEmojis;
+    } else if (lowercaseText.includes('?') || lowercaseText.includes('comment') || 
+               lowercaseText.includes('pourquoi') || lowercaseText.includes('quand')) {
+      // Question ou réflexion
+      emojiList = questionEmojis;
+    } else if (lowercaseText.includes('mdr') || lowercaseText.includes('lol') || 
+               lowercaseText.includes('ptdr') || lowercaseText.includes('😂')) {
+      // Réponse drôle
+      emojiList = funnyEmojis;
+    } else {
+      // Par défaut, mélanger tous les emojis
+      emojiList = [...positiveEmojis, ...questionEmojis, ...funnyEmojis];
+      // Éviter les emojis négatifs par défaut
+    }
+
+    // Choisir un emoji aléatoire de la liste appropriée
+    const randomEmoji = emojiList[Math.floor(Math.random() * emojiList.length)];
+
+    // Ajouter la réaction
+    await message.react(randomEmoji);
+    console.log(`[AI] Réaction ajoutée au message ${message.id}: ${randomEmoji}`);
+  } catch (error) {
+    console.error('Erreur lors de l\'ajout d\'une réaction:', error);
+    // Ne pas bloquer le processus si la réaction échoue
+  }
+}
+
 export const metadata = {
   name: 'ai',
   description: 'Interagir avec l\'assistant IA',
@@ -242,6 +295,12 @@ export async function ai (client) {
 
       if (message.author.id === client.user.id || !message.content?.length) return
 
+      // Ne pas répondre aux messages des bots
+      if (message.author.bot) {
+        console.log(`[AI] Message ignoré car provenant d'un bot: ${message.author.username}`)
+        return
+      }
+
       const messageContentLower = message.content.toLowerCase()
       if (messageContentLower.includes('reset conversation')) {
         try {
@@ -308,6 +367,37 @@ export async function ai (client) {
         return
       }
 
+      // Parfois, pour des messages très simples, répondre juste avec une réaction
+      // sans générer de réponse textuelle
+      if (message.content.length < 15 && Math.random() < 0.4) { // 40% de chance pour les messages courts
+        const simpleMessages = {
+          'merci': ['👍', '😊', '🙏', '✨'],
+          'ok': ['👌', '👍', '✅'],
+          'oui': ['👍', '✅', '😊'],
+          'non': ['👎', '❌', '😕'],
+          'd\'accord': ['👍', '👌', '🙂'],
+          'bien': ['👍', '👌', '😊'],
+          'cool': ['😎', '👍', '🆒'],
+          'super': ['👍', '🎉', '✨', '🔥']
+        };
+
+        const lowercaseContent = message.content.toLowerCase();
+        for (const [keyword, reactions] of Object.entries(simpleMessages)) {
+          if (lowercaseContent.includes(keyword)) {
+            const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
+            try {
+              await message.react(randomReaction);
+              console.log(`[AI] Réponse rapide par réaction: ${randomReaction} pour le message: "${message.content}"`); 
+              return; // Sortir après avoir ajouté la réaction
+            } catch (error) {
+              console.error('Erreur lors de l\'ajout d\'une réaction rapide:', error);
+              // Continuer avec la réponse textuelle si la réaction échoue
+              break;
+            }
+          }
+        }
+      }
+
       // Comme on va répondre immédiatement, arrêter la surveillance du message
       if (await isSchedulerEnabled()) {
         console.log(`[AI] Arrêt de la surveillance du message ${message.id} car réponse immédiate`)
@@ -329,6 +419,12 @@ export async function ai (client) {
 
         await message.channel.sendTyping().catch(console.error)
         let res = await buildResponse(message.content, message)
+
+        // Parfois, réagir au message avec un emoji pertinent
+        const shouldAddReaction = Math.random() < 0.3; // 30% de chance d'ajouter une réaction
+        if (shouldAddReaction) {
+          await addRelevantReaction(message, res);
+        }
 
         res = convertAITextToDiscordMentions(res)
 

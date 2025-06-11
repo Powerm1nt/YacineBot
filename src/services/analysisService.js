@@ -19,13 +19,19 @@ const ai = new OpenAI({
  * @param {string} contextInfo - Informations de contexte (optionnel)
  * @returns {Promise<Object>} - Résultat d'analyse avec score et hasKeyInfo
  */
-export async function analyzeMessageRelevance(content, contextInfo = '') {
+  export async function analyzeMessageRelevance(content, contextInfo = '', isFromBot = false) {
   try {
-    console.log(`[AnalysisService] Analyse de pertinence demandée - Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}", Contexte: ${contextInfo ? 'Fourni' : 'Non fourni'}`);
+    console.log(`[AnalysisService] Analyse de pertinence demandée - Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}", Contexte: ${contextInfo ? 'Fourni' : 'Non fourni'}, Bot: ${isFromBot}`);
 
     if (!content || content.trim() === '') {
       console.log('[AnalysisService] Contenu vide, retour score zéro');
       return { relevanceScore: 0, hasKeyInfo: false };
+    }
+
+    // Si le message provient d'un bot, ne pas analyser pour économiser des appels API
+    if (isFromBot) {
+      console.log('[AnalysisService] Message provenant d\'un bot, analyse ignorée');
+      return { relevanceScore: 0.3, hasKeyInfo: false }; // Score par défaut pour les bots
     }
 
     const systemInstructions = `Tu es un système d'analyse de pertinence de messages. 
