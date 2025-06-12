@@ -157,7 +157,7 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
     // Valider le format
     if (!result || typeof result.relevanceScore !== 'number' || typeof result.hasKeyInfo !== 'boolean') {
       console.error('[AnalysisService] Format de réponse invalide:', response.output_text);
-      return { relevanceScore: 0.5, hasKeyInfo: false };
+      return { relevanceScore: 0.4, hasKeyInfo: false };
     }
 
     // Appliquer le modificateur basé sur le canal si présent
@@ -171,7 +171,7 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
     return result;
   } catch (error) {
     console.error('Erreur lors de l\'analyse de pertinence:', error);
-    return { relevanceScore: 0.5, hasKeyInfo: false }; // Valeur par défaut en cas d'erreur
+    return { relevanceScore: 0.4, hasKeyInfo: false }; // Valeur par défaut en cas d'erreur
   }
 }
 

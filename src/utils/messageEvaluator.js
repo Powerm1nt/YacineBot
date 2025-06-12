@@ -152,12 +152,12 @@ import { prisma } from '../services/prisma.js';
 
     // Décider si on répond en fonction du score, de la présence d'info clé et de l'activité de la conversation
     // Si le score est modéré ou élevé (>=0.5), répondre systématiquement
-    let shouldRespond = relevanceAnalysis.relevanceScore >= 0.5 || relevanceAnalysis.hasKeyInfo;
+    let shouldRespond = relevanceAnalysis.relevanceScore >= 0.6 || relevanceAnalysis.hasKeyInfo;
 
     // Si la conversation est active, répondre avec un seuil très bas pour maximiser les interactions
     if (conversationService.isActiveConversation(channelId, guildId)) {
       // On garde un seuil mais moins élevé qu'avant pour privilégier la réponse
-      const moderateThreshold = 0.5;
+      const moderateThreshold = 0.7;
       shouldRespond = relevanceAnalysis.relevanceScore >= moderateThreshold || relevanceAnalysis.hasKeyInfo;
       console.log(`[MessageEvaluator] Conversation active - Seuil de pertinence modéré à ${moderateThreshold}`);
 
@@ -175,7 +175,7 @@ import { prisma } from '../services/prisma.js';
     };
   } catch (error) {
     console.error('Erreur lors de l\'évaluation de la pertinence:', error);
-    return { relevanceScore: 0.6, hasKeyInfo: true, shouldRespond: true }; // Par défaut, toujours répondre en cas d'erreur
+    return { relevanceScore: 0, hasKeyInfo: false, shouldRespond: false }; // Par défaut, toujours répondre en cas d'erreur
   }
 }
 

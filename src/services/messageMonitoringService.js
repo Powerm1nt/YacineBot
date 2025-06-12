@@ -364,7 +364,7 @@ async function createScheduledTask(client, channelId, guildId, relevanceScore, t
     }
 
     // Ne créer une tâche que si le score de pertinence est suffisant (seuil abaissé)
-    if (relevanceScore < 0.3) {
+    if (relevanceScore < 0.4) {
       console.log(`[MessageMonitoring] Score de pertinence insuffisant (${relevanceScore.toFixed(2)}) pour créer une tâche planifiée pour la conversation dans ${channelId}`);
       return false;
     }
@@ -375,7 +375,7 @@ async function createScheduledTask(client, channelId, guildId, relevanceScore, t
 
     // Utiliser un délai aléatoire plus court (5 à 120 secondes)
     const MIN_DELAY_MS = 5 * 1000;  // 5 secondes en ms
-    const MAX_DELAY_MS = 1 * 60 * 1000;  // 2 minutes en ms
+    const MAX_DELAY_MS = 60 * 1000;  // 2 minutes en ms
     const delayInMs = Math.floor(MIN_DELAY_MS + Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS));
     const scheduledTime = new Date(Date.now() + delayInMs);
 

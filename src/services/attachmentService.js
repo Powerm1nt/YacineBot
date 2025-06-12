@@ -41,7 +41,7 @@ async function downloadAttachment(url) {
 async function analyzeImage(imageData) {
   try {
     const response = await ai.chat.completions.create({
-      model: "gpt-4-vision-preview",
+      model: "gpt-4.1-mini",
       messages: [
         {
           role: "user", 
@@ -88,7 +88,7 @@ async function analyzePDF(pdfData) {
     const assistant = await ai.beta.assistants.create({
       name: "PDF Analyzer",
       description: "Analyse les documents PDF et en extrait les informations importantes.",
-      model: "gpt-4-turbo",
+      model: "gpt-4.1-mini",
       tools: [{ type: "retrieval" }],
       file_ids: [fileUploadResponse.id]
     });
@@ -134,8 +134,8 @@ async function analyzePDF(pdfData) {
     const messages = await ai.beta.threads.messages.list(thread.id);
 
     // Nettoyer les ressources
-    await ai.beta.assistants.del(assistant.id);
-    await ai.files.del(fileUploadResponse.id);
+    await ai.beta.assistants.delete(assistant.id);
+    await ai.files.delete(fileUploadResponse.id);
 
     // Extraire le contenu de la réponse de l'assistant
     const assistantMessages = messages.data.filter(msg => msg.role === "assistant");
