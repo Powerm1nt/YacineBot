@@ -130,7 +130,13 @@ function selectRandomGuildChannel(client) {
 
   // Récupérer tous les canaux textuels du serveur
   const textChannels = Array.from(randomGuild.channels.cache.values())
-    .filter(channel => channel.type === 'GUILD_TEXT' && channel.permissionsFor(client.user).has('SEND_MESSAGES'));
+    .filter(channel => {
+      if (channel.type === 'GUILD_TEXT') {
+        const botMember = channel.guild.members.cache.get(client.user.id);
+        return botMember && channel.permissionsFor(botMember).has('SEND_MESSAGES');
+      }
+      return false;
+    });
 
   if (textChannels.length === 0) {
     console.log(`Aucun canal textuel accessible dans ${randomGuild.name}`);

@@ -245,8 +245,9 @@ export async function buildResponse(input, message, additionalInstructions = '')
   if (message.guild) {
     // Récupérer les rôles du bot dans ce serveur
     let botRoles = ''
+    let botMember = null
     try {
-      const botMember = await message.guild.members.fetch(message.client.user.id)
+      botMember = await message.guild.members.fetch(message.client.user.id)
       if (botMember && botMember.roles.cache.size > 0) {
         const roleNames = botMember.roles.cache
           .filter(role => role.name !== '@everyone')
@@ -267,7 +268,7 @@ export async function buildResponse(input, message, additionalInstructions = '')
     // Vérifier les permissions du bot dans ce canal
     let channelPerms = ''
     try {
-      const botPermissions = message.channel.permissionsFor(message.client.user.id)
+      const botPermissions = message.channel.permissionsFor(botMember)
       if (botPermissions) {
         // Liste des permissions importantes à vérifier
         const keyPermissions = [
@@ -482,7 +483,8 @@ export async function buildResponse(input, message, additionalInstructions = '')
       // Récupérer les permissions du bot dans ce canal
       let botPermissions = null
       if (message.channel && message.guild) {
-        botPermissions = message.channel.permissionsFor(message.client.user.id)
+        const botMember = message.guild.members.cache.get(message.client.user.id)
+        botPermissions = message.channel.permissionsFor(botMember)
       }
 
       // Analyser la pertinence du message du bot avec un contexte plus riche
@@ -527,6 +529,12 @@ export async function buildResponse(input, message, additionalInstructions = '')
     }
 
     let responseText = response.output_text || ''
+
+    // Check if the response contains the specific message we want to disable
+    if (responseText.includes("Désolé, je ne peux pas répondre à ce genre de messages.")) {
+      console.log(`[AI] Message "Désolé, je ne peux pas répondre à ce genre de messages." détecté, retour d'une chaîne vide`)
+      return '' // Return empty string to prevent the bot from responding
+    }
 
     const incorrectNameRegex = new RegExp(`(?<!${BOT_NAME})(\s|^)(je m'appelle|mon nom est|je suis)\s+([A-Za-zÀ-ÖØ-öø-ÿ]{2,})`, 'i')
     responseText = responseText.replace(incorrectNameRegex, `$1$2 ${BOT_NAME}`)
@@ -663,7 +671,8 @@ export async function handleMessage(message) {
       // Vérifier si le bot a les permissions d'écriture dans ce canal
       let botHasPermissions = true
       if (message.channel && message.guild) {
-        const botPermissions = message.channel.permissionsFor(client.user.id)
+        const botMember = message.guild.members.cache.get(client.user.id)
+        const botPermissions = message.channel.permissionsFor(botMember)
         if (!botPermissions || !botPermissions.has('SEND_MESSAGES')) {
           console.log(`[AI] Pas de permission d'écriture dans le canal ${channelId} - Analyse et enregistrement annulés`)
           botHasPermissions = false
@@ -798,36 +807,55 @@ export async function handleMessage(message) {
       console.log(`[AI] Demande de GIF détectée avec le terme: "${gifSearchTerm}"`);
 
       try {
-        // Indiquer que le bot est en train d'écrire
-        await message.channel.sendTyping();
+        // Analyser la pertinence du message pour déterminer si on doit envoyer un GIF
+        const relevanceAnalysis = await analysisService.analyzeMessageRelevance(
+          message.content,
+          '', // Pas de contexte supplémentaire
+          false, // Pas un message de bot
+          message.channel?.name || '',
+          message.guild?.id || null,
+          message.channel && message.guild ? message.channel.permissionsFor(message.guild.members.cache.get(client.user.id)) : null
+        );
 
-        // Rechercher un GIF aléatoire correspondant au terme
-        const randomGif = await attachmentService.getRandomGif(gifSearchTerm);
+        console.log(`[AI] Analyse de pertinence pour demande de GIF - Score: ${relevanceAnalysis.relevanceScore}`);
 
-        if (randomGif) {
-          // Préparer le GIF pour Discord
-          const discordGif = attachmentService.prepareGifForDiscord(randomGif);
+        // Vérifier si le score de pertinence est suffisant pour envoyer un GIF
+        if (relevanceAnalysis.relevanceScore >= 0.3) { // Seuil de pertinence modéré
+          // Indiquer que le bot est en train d'écrire
+          await message.channel.sendTyping();
 
-          if (discordGif && discordGif.url) {
-            console.log(`[AI] GIF trouvé: "${randomGif.title}" - URL: ${discordGif.url}`);
+          // Rechercher un GIF aléatoire correspondant au terme
+          const randomGif = await attachmentService.getRandomGif(gifSearchTerm);
 
-            // Envoyer le GIF avec un message
-            await message.reply({ 
-              content: `Voici un GIF de "${gifSearchTerm}" pour toi!`, 
-              files: [discordGif.url] 
-            });
+          if (randomGif) {
+            // Préparer le GIF pour Discord
+            const discordGif = attachmentService.prepareGifForDiscord(randomGif);
 
-            console.log(`[AI] GIF envoyé avec succès en réponse au message ${message.id}`);
-            return; // Sortir de la fonction après avoir envoyé le GIF
+            if (discordGif && discordGif.url) {
+              console.log(`[AI] GIF trouvé: "${randomGif.title}" - URL: ${discordGif.url}`);
+
+              // Envoyer le GIF avec un message
+              await message.reply({ 
+                content: `Voici un GIF de "${gifSearchTerm}" pour toi!`, 
+                files: [discordGif.url] 
+              });
+
+              console.log(`[AI] GIF envoyé avec succès en réponse au message ${message.id}`);
+              return; // Sortir de la fonction après avoir envoyé le GIF
+            } else {
+              console.log(`[AI] GIF trouvé mais URL invalide`);
+              // Continuer avec une réponse normale
+            }
           } else {
-            console.log(`[AI] GIF trouvé mais URL invalide`);
-            // Continuer avec une réponse normale
+            console.log(`[AI] Aucun GIF trouvé pour le terme: "${gifSearchTerm}"`);
+            // Informer l'utilisateur qu'aucun GIF n'a été trouvé
+            await message.reply(`Désolé, je n'ai pas trouvé de GIF pour "${gifSearchTerm}". Essaie avec un autre terme!`);
+            return; // Sortir de la fonction après avoir informé l'utilisateur
           }
         } else {
-          console.log(`[AI] Aucun GIF trouvé pour le terme: "${gifSearchTerm}"`);
-          // Informer l'utilisateur qu'aucun GIF n'a été trouvé
-          await message.reply(`Désolé, je n'ai pas trouvé de GIF pour "${gifSearchTerm}". Essaie avec un autre terme!`);
-          return; // Sortir de la fonction après avoir informé l'utilisateur
+          console.log(`[AI] Score de pertinence insuffisant (${relevanceAnalysis.relevanceScore}) pour envoyer un GIF - Ignoré`);
+          // Ne pas envoyer de GIF si le score de pertinence est trop bas
+          // Continuer avec le traitement normal du message
         }
       } catch (error) {
         console.error('Erreur lors de la recherche ou de l\'envoi du GIF:', error);

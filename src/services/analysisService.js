@@ -359,7 +359,7 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
 
     // Appliquer le modificateur basé sur le canal si présent
     if (channelRelevanceModifier && result.relevanceScore) {
-      const adjustedScore = Math.min(0, Math.max(1, result.relevanceScore + channelRelevanceModifier))
+      const adjustedScore = Math.min(1, Math.max(0, result.relevanceScore + channelRelevanceModifier))
       console.log(`[AnalysisService] Score ajusté pour le canal #${channelName}: ${result.relevanceScore.toFixed(2)} -> ${adjustedScore.toFixed(2)}`)
       result.relevanceScore = adjustedScore
     }
@@ -1051,7 +1051,8 @@ export async function monitorMessage(message, client, buildResponseFn) {
 
   // Vérifier si le bot a les permissions d'écriture dans ce canal
   if (message.channel && message.guild) {
-    const botPermissions = message.channel.permissionsFor(client.user.id);
+    const botMember = message.guild.members.cache.get(client.user.id);
+    const botPermissions = message.channel.permissionsFor(botMember);
     if (!botPermissions || !botPermissions.has('SEND_MESSAGES')) {
       console.log(`[MessageMonitoring] Pas de permission d'écriture dans le canal ${channelId} - Surveillance annulée`);
       return;
