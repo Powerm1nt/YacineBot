@@ -326,10 +326,6 @@ export async function initScheduler(client) {
           await taskService.deleteTask(task.schedulerId);
         }
       }
-    } else {
-      // Créer une nouvelle tâche d'analyse si aucune n'existe
-      console.log('[Scheduler] Aucune tâche d\'analyse existante, création d\'une nouvelle...');
-      await createAnalysisTask(client, 1);
     }
 
     console.log('[Scheduler] Initialisation du planificateur terminée. Les tâches de message seront créées par le service d\'analyse si nécessaire.');
