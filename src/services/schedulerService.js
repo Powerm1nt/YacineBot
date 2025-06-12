@@ -341,16 +341,12 @@ export async function initScheduler(client) {
     const cleanedExpired = await taskService.cleanupExpiredTasks();
 
     // Nettoyer les tâches terminées (completed ou failed)
-    const finishedTasksResult = await prisma.task.deleteMany({
-      where: {
-        status: { in: ['completed', 'failed'] }
-      }
-    });
-    console.log(`[Scheduler] ${finishedTasksResult.count} tâches terminées nettoyées`);
+    const cleanedFinished = await taskService.cleanupFinishedTasks();
+    console.log(`[Scheduler] ${cleanedExpired} tâches expirées et ${cleanedFinished} tâches terminées nettoyées`);
 
     // Synchroniser le cache mémoire avec la base de données
     const restoredCount = await taskService.syncMemoryCache();
-    console.log(`[Scheduler] Service de tâches initialisé: ${cleanedExpired + finishedTasksResult.count} tâches nettoyées, ${restoredCount} tâches restaurées en mémoire`);
+    console.log(`[Scheduler] Service de tâches initialisé: ${cleanedExpired + cleanedFinished} tâches nettoyées, ${restoredCount} tâches restaurées en mémoire`);
 
     // Initialiser les gestionnaires de tâches spécifiques
     await initTaskHandlers();
@@ -1117,6 +1113,24 @@ async function cleanupExpiredTasks() {
 async function restorePendingTasks(client) {
   try {
     const now = new Date();
+
+    // Nettoyer les tâches terminées ou échouées avant de restaurer
+    const cleanedTasks = await prisma.task.deleteMany({
+      where: {
+        status: { in: ['completed', 'failed'] }
+      }
+    });
+    console.log(`[Scheduler] ${cleanedTasks.count} tâches terminées ou échouées nettoyées avant restauration`);
+
+    // Nettoyer les tâches expirées
+    const expiredTasks = await prisma.task.deleteMany({
+      where: {
+        nextExecution: {
+          lt: now // Tâches dont la date d'exécution est passée
+        }
+      }
+    });
+    console.log(`[Scheduler] ${expiredTasks.count} tâches expirées nettoyées avant restauration`);
 
     // Récupérer toutes les tâches non expirées
     const pendingTasks = await prisma.task.findMany({

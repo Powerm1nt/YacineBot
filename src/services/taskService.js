@@ -127,8 +127,6 @@ export async function getTaskById(schedulerId) {
  */
 export async function getTasksByType(taskType) {
   try {
-    console.log(`[TaskService] Recherche de tâches par type: ${taskType}`);
-    // Ignorer les recherches pour les tâches de type random-question-task qui n'existent plus
     if (taskType === 'random-question-task') {
       console.log(`[TaskService] Type de tâche "random-question-task" déprécié`);
       return [];
@@ -147,7 +145,6 @@ export async function getTasksByType(taskType) {
       }
     });
 
-    console.log(`[TaskService] ${tasks.length} tâches trouvées de type ${taskType}`);
     return tasks;
   } catch (error) {
     console.error(`[TaskService] Erreur lors de la récupération des tâches de type ${taskType}:`, error);
@@ -193,6 +190,22 @@ export async function updateTaskStatus(schedulerId, status) {
  */
 export async function deleteTask(schedulerId) {
   try {
+    // Check if the task exists before attempting to delete it
+    const taskExists = await prisma.task.findUnique({
+      where: { schedulerId },
+      select: { id: true }
+    });
+
+    if (!taskExists) {
+      console.log(`[TaskService] Aucune tâche trouvée avec l'ID ${schedulerId}, aucune suppression nécessaire`);
+      // Remove from memory cache if present
+      if (tasksMemoryCache.has(schedulerId)) {
+        tasksMemoryCache.delete(schedulerId);
+      }
+      return true; // Return success since the end state is as expected (task doesn't exist)
+    }
+
+    // Proceed with deletion since the task exists
     await prisma.task.delete({
       where: { schedulerId }
     });
@@ -346,6 +359,42 @@ export function getActiveTaskCount() {
   return tasksMemoryCache.size;
 }
 
+/**
+ * Nettoie les tâches terminées (completed ou failed)
+ * @returns {Promise<number>} Nombre de tâches nettoyées
+ */
+export async function cleanupFinishedTasks() {
+  try {
+    // Récupérer d'abord les IDs pour mettre à jour le cache
+    const finishedTasks = await prisma.task.findMany({
+      where: {
+        status: { in: ['completed', 'failed'] }
+      },
+      select: { schedulerId: true }
+    });
+
+    // Supprimer de la base de données
+    const result = await prisma.task.deleteMany({
+      where: {
+        status: { in: ['completed', 'failed'] }
+      }
+    });
+
+    // Supprimer du cache mémoire
+    finishedTasks.forEach(task => {
+      if (task.schedulerId && tasksMemoryCache.has(task.schedulerId)) {
+        tasksMemoryCache.delete(task.schedulerId);
+      }
+    });
+
+    console.log(`[TaskService] ${result.count} tâches terminées nettoyées`);
+    return result.count;
+  } catch (error) {
+    console.error('Erreur lors du nettoyage des tâches terminées:', error);
+    return 0;
+  }
+}
+
 export const taskService = {
   saveTask,
   getAllTasks,
@@ -356,6 +405,7 @@ export const taskService = {
   deleteAllTasks,
   deleteTasksByType,
   cleanupExpiredTasks,
+  cleanupFinishedTasks,
   syncMemoryCache,
   getActiveTaskCount
 };

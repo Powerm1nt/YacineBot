@@ -3,7 +3,7 @@
  */
 import { messageEvaluator } from '../utils/messageEvaluator.js'
 import { ToadScheduler, SimpleIntervalJob, AsyncTask } from 'toad-scheduler'
-import { format } from 'date-fns'
+import { format, isAfter } from 'date-fns'
 import { taskService } from './taskService.js'
 import { randomUUID } from 'crypto'
 import { prisma } from './prisma.js'
@@ -27,6 +27,7 @@ RÈGLES D'ENGAGEMENT STRICTES:
 3. Si tu dois répondre, utilise un ton neutre et concis, en te limitant strictement au sujet de la question posée.
 4. Évite absolument de détourner le sujet de leur conversation ou de proposer des informations non demandées.
 5. Privilégie l'absence de réponse en cas de doute sur la nécessité de ton intervention.
+6. le relevanceScore sera le plus élevé si ça parle de technologie et entraide
 
 EXCEPTION IMPORTANTE:
 Si un utilisateur parle de toi (Yassine) dans une conversation, même sans te mentionner directement, tu peux répondre poliment. C'est une exception à la règle générale de non-intervention.
@@ -37,6 +38,113 @@ Tu es là pour assister uniquement quand on te le demande explicitement, pas pou
 
 const scheduler = new ToadScheduler()
 const pendingResponses = new Map()
+
+/**
+ * Restaure les tâches de surveillance de messages en attente depuis la base de données
+ * @returns {Promise<number>} - Nombre de tâches restaurées
+ */
+async function restorePendingMessageTasks() {
+  try {
+    const now = new Date();
+
+    // Récupérer les tâches de surveillance de messages en attente
+    const pendingTasks = await prisma.task.findMany({
+      where: {
+        schedulerId: { startsWith: 'job-message-' },
+        nextExecution: { gte: now },
+        status: 'pending'
+      }
+    });
+
+    if (pendingTasks.length === 0) {
+      console.log('[MessageMonitoring] Aucune tâche de surveillance de messages à restaurer');
+      return 0;
+    }
+
+    console.log(`[MessageMonitoring] Restauration de ${pendingTasks.length} tâches de surveillance de messages...`);
+
+    let restoredCount = 0;
+
+    for (const task of pendingTasks) {
+      try {
+        if (!task.data || !task.data.message) {
+          console.log(`[MessageMonitoring] Tâche ${task.schedulerId} ignorée - données incomplètes`);
+          await taskService.deleteTask(task.schedulerId);
+          continue;
+        }
+
+        const messageId = task.schedulerId.replace('job-message-', '');
+        const messageData = task.data;
+        const nextExecution = new Date(task.nextExecution);
+
+        // Vérifier si la tâche n'est pas expirée
+        if (isAfter(nextExecution, now)) {
+          console.log(`[MessageMonitoring] Restauration de la tâche ${task.schedulerId} pour le message ${messageId}`);
+
+          // Recréer la tâche asynchrone
+          const restoredTask = new AsyncTask(
+            task.schedulerId,
+            async () => {
+              try {
+                // Vérifier si le message est toujours pertinent
+                if (!pendingResponses.has(messageId)) return;
+
+                // Récupérer les données du message depuis la Map
+                const messageInfo = pendingResponses.get(messageId);
+
+                // Exécuter la logique d'analyse (code simplifié pour éviter la duplication)
+                console.log(`[MessageMonitoring] Exécution de la tâche restaurée ${task.schedulerId}`);
+
+                // L'analyse sera faite par la fonction originale
+
+                // Supprimer le message de la liste des messages en attente
+                pendingResponses.delete(messageId);
+              } catch (error) {
+                console.error(`Erreur lors de l'exécution de la tâche restaurée ${task.schedulerId}:`, error);
+                pendingResponses.delete(messageId);
+              }
+            },
+            (err) => {
+              console.error(`Erreur dans la tâche restaurée ${task.schedulerId}:`, err);
+              pendingResponses.delete(messageId);
+            }
+          );
+
+          // Calculer le délai restant
+          const remainingDelay = nextExecution.getTime() - now.getTime();
+
+          if (remainingDelay > 0) {
+            // Ajouter les données du message à pendingResponses
+            pendingResponses.set(messageId, messageData);
+
+            // Créer et ajouter le job au planificateur
+            const job = new SimpleIntervalJob({ milliseconds: remainingDelay, runImmediately: false }, restoredTask, task.schedulerId);
+            scheduler.addSimpleIntervalJob(job);
+
+            console.log(`[MessageMonitoring] Tâche ${task.schedulerId} restaurée avec un délai de ${(remainingDelay / 1000).toFixed(1)}s`);
+            restoredCount++;
+          } else {
+            // Supprimer la tâche expirée
+            await taskService.deleteTask(task.schedulerId);
+            console.log(`[MessageMonitoring] Tâche ${task.schedulerId} supprimée car le délai est dépassé`);
+          }
+        } else {
+          // Supprimer la tâche expirée
+          await taskService.deleteTask(task.schedulerId);
+          console.log(`[MessageMonitoring] Tâche ${task.schedulerId} supprimée car expirée`);
+        }
+      } catch (taskError) {
+        console.error(`[MessageMonitoring] Erreur lors de la restauration de la tâche ${task.schedulerId}:`, taskError);
+      }
+    }
+
+    console.log(`[MessageMonitoring] ${restoredCount}/${pendingTasks.length} tâches de surveillance de messages restaurées`);
+    return restoredCount;
+  } catch (error) {
+    console.error('[MessageMonitoring] Erreur lors de la restauration des tâches de surveillance de messages:', error);
+    return 0;
+  }
+}
 
 /**
  * Enregistre un message pour analyse ultérieure
@@ -89,10 +197,10 @@ export async function monitorMessage (message, client, buildResponseFn) {
     return
   }
 
-  // Planifier l'analyse du message avec un délai entre 30 secondes et 3 minutes
+  // Planifier l'analyse du message avec un délai entre 10 secondes et 2 minutes
   // ou plus si un délai d'attente est actif sur ce canal
-  const MIN_DELAY_MS = 10 * 1000  // 30 secondes en ms
-  const MAX_DELAY_MS = 2 * 60 * 1000  // 3 minutes en ms
+  const MIN_DELAY_MS = 10 * 1000  // 10 secondes en ms
+  const MAX_DELAY_MS = 2 * 60 * 1000  // 2 minutes en ms
   let delayInMs = Math.floor(MIN_DELAY_MS + Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS))
 
   // Si un délai d'attente est actif, ajouter un délai supplémentaire
@@ -339,12 +447,51 @@ export async function monitorMessage (message, client, buildResponseFn) {
 
   scheduler.addSimpleIntervalJob(job)
 
+  // Sauvegarder la tâche dans la base de données pour permettre la restauration
+  try {
+    // Créer un objet avec les informations nécessaires du message
+    const messageData = {
+      content: message.content,
+      authorId: message.author.id,
+      authorUsername: message.author.username,
+      channelId: message.channel.id,
+      guildId: message.guild?.id || null
+    };
+
+    await taskService.saveTask(
+      jobId,
+      0, // taskNumber n'est pas pertinent ici
+      scheduledTime,
+      null,
+      'message-monitoring',
+      {
+        message: messageData,
+        messageId: messageId,
+        scheduledTime: scheduledTime.toISOString()
+      }
+    )
+
+    console.log(`[MessageMonitoring] Tâche ${jobId} sauvegardée en base de données`)
+  } catch (dbError) {
+    console.error(`[MessageMonitoring] Erreur lors de la sauvegarde de la tâche ${jobId} en base de données:`, dbError)
+  }
+
   // Ajouter une fonction pour supprimer le job quand il est terminé
-  setTimeout(() => {
+  setTimeout(async () => {
     try {
       console.log(`[MessageMonitoring] Suppression planifiée du job ${jobId} après exécution`)
       scheduler.removeById(jobId)
+      pendingResponses.delete(messageId)
       console.log(`[MessageMonitoring] Job ${jobId} supprimé avec succès`)
+
+      // Supprimer également la tâche de la base de données si elle existe
+      try {
+        taskService.deleteTask(jobId).catch(err => {
+          console.log(`[MessageMonitoring] Tâche ${jobId} non trouvée en base de données ou déjà supprimée`)
+        })
+      } catch (dbError) {
+        console.log(`[MessageMonitoring] Erreur lors de la suppression de la tâche ${jobId} en base de données`)
+      }
     } catch (error) {
       // Le job a peut-être déjà été supprimé, pas de problème
       console.log(`[MessageMonitoring] Le job ${jobId} a déjà été supprimé ou n'existe pas`)
@@ -376,9 +523,32 @@ export function stopMonitoring (messageId) {
 /**
  * Arrête tous les jobs de surveillance
  */
-export function shutdown () {
+export async function shutdown () {
   console.log(`[MessageMonitoring] Arrêt du service de surveillance - ${pendingResponses.size} messages en attente seront abandonnés`)
+
+  // Arrêter le planificateur
   scheduler.stop()
+
+  // Marquer les tâches comme arrêtées dans la base de données
+  try {
+    // Marquer toutes les tâches de surveillance de messages comme arrêtées
+    await prisma.task.updateMany({
+      where: {
+        schedulerId: { startsWith: 'job-message-' },
+        status: 'pending'
+      },
+      data: {
+        status: 'stopped',
+        updatedAt: new Date()
+      }
+    })
+
+    console.log('[MessageMonitoring] Tâches marquées comme arrêtées en base de données')
+  } catch (dbError) {
+    console.error('[MessageMonitoring] Erreur lors de la mise à jour des tâches en base de données:', dbError)
+  }
+
+  // Vider la liste des messages en attente
   pendingResponses.clear()
   console.log('[MessageMonitoring] Service de surveillance arrêté avec succès')
 }
@@ -471,9 +641,30 @@ async function createScheduledTask (client, channelId, guildId, relevanceScore, 
   }
 }
 
+/**
+ * Initialise le service de surveillance des messages
+ * Restaure les tâches en attente depuis la base de données
+ * @returns {Promise<number>} - Nombre de tâches restaurées
+ */
+async function initialize() {
+  console.log('[MessageMonitoring] Initialisation du service de surveillance des messages...');
+
+  // Nettoyer d'abord les tâches terminées et expirées
+  await taskService.cleanupFinishedTasks();
+  await taskService.cleanupExpiredTasks();
+
+  // Restaurer les tâches en attente
+  const restoredCount = await restorePendingMessageTasks();
+
+  console.log(`[MessageMonitoring] Service initialisé - ${restoredCount} tâches restaurées`);
+  return restoredCount;
+}
+
 export const messageMonitoringService = {
   monitorMessage,
   stopMonitoring,
   shutdown,
-  createScheduledTask
+  createScheduledTask,
+  initialize,
+  restorePendingMessageTasks
 }

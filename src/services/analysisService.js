@@ -264,6 +264,7 @@ export async function analyzeConversationRelevance (messages) {
 Analyse la conversation fournie et réponds UNIQUEMENT au format JSON brut (sans formatage markdown, sans bloc de code) avec deux propriétés:
 - relevanceScore: un nombre entre 0 et 1 indiquant la pertinence globale de la conversation
 - topicSummary: un résumé concis (max 100 caractères) des principaux sujets abordés
+- le relevanceScore sera le plus élevé si ça parle de technologie et entraide
 
 IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, renvoie uniquement l'objet JSON brut.`
 
@@ -304,6 +305,7 @@ export async function updateConversationRelevance (channelId, guildId = null, cl
     if (client) {
       try {
         const formattedChannelId = channelId.split('_')[1]
+        console.log("ANALYSIS SERVICE CHANNEL ID QUI BUG: ", channelId)
         const channel = await client.channels.fetch(formattedChannelId)
         if (channel) {
           // Vérifier si le canal est dans une guilde (serveur)
