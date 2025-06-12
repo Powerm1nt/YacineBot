@@ -243,7 +243,7 @@ export async function updateConversationRelevance(channelId, guildId = null, cli
       try {
         const channel = await client.channels.fetch(channelId);
         if (channel) {
-          const botPermissions = channel.permissionsFor(client.user.id);
+          const botPermissions = channel.permissionsFor(process.env.CLIENT_ID);
           if (!botPermissions || !botPermissions.has('SEND_MESSAGES')) {
             console.log(`[AnalysisService] Pas de permission d'écriture dans le canal ${channelId} - Analyse annulée`);
             return null;
