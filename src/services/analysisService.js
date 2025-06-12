@@ -318,28 +318,30 @@ export async function updateConversationRelevance(channelId, guildId = null, cli
 
     // Si le client est fourni et que le service de surveillance des messages est disponible,
     // créer une tâche planifiée si la conversation est pertinente (seuil fortement abaissé)
-    if (client && analysis.relevanceScore >= 0.2) {
-      console.log(`[AnalysisService] Score de pertinence suffisant (${analysis.relevanceScore.toFixed(2)}) - Tentative de création de tâche planifiée`);
+    if (!(client && analysis.relevanceScore >= 0.2)) {
+      if (client) {
+        console.log(`[AnalysisService] Score de pertinence trop faible (${analysis.relevanceScore.toFixed(2)}) - Pas de tâche planifiée`)
+      }
+    } else {
+      console.log(`[AnalysisService] Score de pertinence suffisant (${analysis.relevanceScore.toFixed(2)}) - Tentative de création de tâche planifiée`)
       try {
-        const { messageMonitoringService } = await import('./messageMonitoringService.js');
+        const { messageMonitoringService } = await import('./messageMonitoringService.js')
         const taskCreated = await messageMonitoringService.createScheduledTask(
           client,
           channelId,
           guildId,
           analysis.relevanceScore,
           analysis.topicSummary
-        );
+        )
 
         if (taskCreated) {
-          console.log(`[AnalysisService] Tâche planifiée créée avec succès pour le canal ${channelId} - Sujet: "${analysis.topicSummary}"`);
+          console.log(`[AnalysisService] Tâche planifiée créée avec succès pour le canal ${channelId} - Sujet: "${analysis.topicSummary}"`)
         } else {
-          console.log(`[AnalysisService] Création de tâche planifiée échouée ou ignorée pour le canal ${channelId}`);
+          console.log(`[AnalysisService] Création de tâche planifiée échouée ou ignorée pour le canal ${channelId}`)
         }
       } catch (taskError) {
-        console.error('[AnalysisService] Erreur lors de la création d\'une tâche planifiée pour la conversation:', taskError);
+        console.error('[AnalysisService] Erreur lors de la création d\'une tâche planifiée pour la conversation:', taskError)
       }
-    } else if (client) {
-      console.log(`[AnalysisService] Score de pertinence trop faible (${analysis.relevanceScore.toFixed(2)}) - Pas de tâche planifiée`);
     }
 
     return updatedConversation;
