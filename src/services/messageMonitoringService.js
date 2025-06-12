@@ -702,9 +702,10 @@ async function cleanupMonitoringTasks() {
 
     // Nettoyer également le planificateur en mémoire
     let memoryTasksCleanedCount = 0;
-    const jobIds = scheduler.getAllJobIds();
+    const jobs = scheduler.getAllJobs();
 
-    for (const jobId of jobIds) {
+    for (const job of jobs) {
+      const jobId = job.id;
       if (jobId.startsWith('job-message-') && !pendingResponses.has(jobId.replace('job-message-', ''))) {
         try {
           scheduler.removeById(jobId);
