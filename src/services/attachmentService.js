@@ -40,8 +40,6 @@ async function downloadAttachment(url) {
  */
 async function analyzeImage(imageData) {
   try {
-    const stream = Readable.from(imageData);
-
     const response = await ai.chat.completions.create({
       model: "gpt-4-vision-preview",
       messages: [
@@ -58,7 +56,6 @@ async function analyzeImage(imageData) {
           ]
         }
       ],
-      max_tokens: 1000,
     });
 
     return response.choices[0]?.message?.content || "Je n'ai pas pu analyser cette image.";
