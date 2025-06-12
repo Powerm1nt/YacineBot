@@ -103,7 +103,7 @@ export function startMessageBatchDelay(channelId, guildId = null) {
     // Si le message provient d'un bot, ne pas analyser pour économiser des appels API
     if (isFromBot) {
       console.log('[AnalysisService] Message provenant d\'un bot, analyse ignorée');
-      return { relevanceScore: 0.5, hasKeyInfo: true }; // Score par défaut plus élevé pour les bots avec indicateur d'information clé
+      return { relevanceScore: 0.1, hasKeyInfo: false }; // Score par défaut plus élevé pour les bots avec indicateur d'information clé
     }
 
     // Ajuster le score initial en fonction du canal
@@ -171,7 +171,7 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
     return result;
   } catch (error) {
     console.error('Erreur lors de l\'analyse de pertinence:', error);
-    return { relevanceScore: 0.4, hasKeyInfo: false }; // Valeur par défaut en cas d'erreur
+    return { relevanceScore: 0, hasKeyInfo: false }; // Valeur par défaut en cas d'erreur
   }
 }
 
@@ -318,7 +318,7 @@ export async function updateConversationRelevance(channelId, guildId = null, cli
 
     // Si le client est fourni et que le service de surveillance des messages est disponible,
     // créer une tâche planifiée si la conversation est pertinente (seuil fortement abaissé)
-    if (!(client && analysis.relevanceScore >= 0.2)) {
+    if (!(client && analysis.relevanceScore >= 0.4)) {
       if (client) {
         console.log(`[AnalysisService] Score de pertinence trop faible (${analysis.relevanceScore.toFixed(2)}) - Pas de tâche planifiée`)
       }
