@@ -3,6 +3,12 @@ import { OpenAI } from 'openai/client.mjs'
 import { format, addMinutes, getHours } from 'date-fns'
 import dotenv from 'dotenv'
 import { randomUUID } from 'crypto'
+
+// Fonction pour vérifier si on utilise l'API DeepSeek
+function isUsingDeepSeekAPI() {
+  const baseURL = process.env['OPENAI_API_BASE_URL'] || '';
+  return baseURL.toLowerCase().includes('deepseek');
+}
 import { isGuildEnabled, isChannelTypeEnabled, isSchedulerEnabled, isAnalysisEnabled, isAutoRespondEnabled, isGuildAnalysisEnabled, isGuildAutoRespondEnabled } from '../utils/configService.js'
 import { analysisService } from './analysisService.js'
 import { taskService } from './taskService.js'
@@ -14,6 +20,7 @@ dotenv.config()
 const scheduler = new ToadScheduler()
 const openai = new OpenAI({
   apiKey: process.env['OPENAI_API_KEY'],
+  baseURL: process.env['OPENAI_API_BASE_URL'] || 'https://api.openai.com/v1',
 })
 
 const TIMEZONE = process.env.TIMEZONE || 'Europe/Paris'
@@ -689,11 +696,39 @@ Ne pas inclure d'introduction comme "Alors," ou "Au fait,". Donne simplement la 
     // Préparer les derniers messages comme contexte
     const recentMessages = messages.slice(-10).map(msg => `${msg.userName}: ${msg.content}`).join('\n');
 
-    const response = await openai.responses.create({
-      model: 'gpt-4.1-mini',
-      input: `Conversation récente:\n${recentMessages}\n\nSujet principal: ${topicSummary}`,
-      instructions: systemInstructions,
-    });
+    let response;
+
+    // Vérifier si on utilise l'API DeepSeek
+    if (isUsingDeepSeekAPI()) {
+      console.log(`[SchedulerService] Utilisation de l'API DeepSeek avec chat.completions.create pour question de suivi`);
+
+      // Convertir les paramètres pour l'API Chat Completions
+      const chatResponse = await openai.chat.completions.create({
+        model: process.env.GPT_MODEL || 'gpt-4.1-mini',
+        messages: [
+          {
+            role: "system",
+            content: systemInstructions
+          },
+          {
+            role: "user",
+            content: `Conversation récente:\n${recentMessages}\n\nSujet principal: ${topicSummary}`
+          }
+        ]
+      });
+
+      // Construire un objet de réponse compatible avec le format attendu
+      response = {
+        output_text: chatResponse.choices[0]?.message?.content || ''
+      };
+    } else {
+      // Utiliser l'API Assistants standard
+      response = await openai.responses.create({
+        model: process.env.GPT_MODEL || 'gpt-4.1-mini',
+        input: `Conversation récente:\n${recentMessages}\n\nSujet principal: ${topicSummary}`,
+        instructions: systemInstructions,
+      });
+    }
 
     return response.output_text || 'Qu\'en pensez-vous?';
   } catch (error) {
@@ -725,7 +760,7 @@ Ne pas inclure d'introduction comme "Je pense que" ou "À mon avis". Donne simpl
     const recentMessages = messages.slice(-10).map(msg => `${msg.userName}: ${msg.content}`).join('\n');
 
     const response = await openai.responses.create({
-      model: 'gpt-4.1-mini',
+      model: process.env.GPT_MODEL || 'gpt-4.1-mini',
       input: `Conversation récente:\n${recentMessages}\n\nSujet principal: ${topicSummary}`,
       instructions: systemInstructions,
     });

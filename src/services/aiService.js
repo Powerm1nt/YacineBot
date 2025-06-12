@@ -211,9 +211,16 @@ export function getOpenAIClient() {
   if (!openAIClient) {
     openAIClient = new OpenAI({
       apiKey: process.env['OPENAI_API_KEY'],
+      baseURL: process.env['OPENAI_API_BASE_URL'] || 'https://api.openai.com/v1',
     });
   }
   return openAIClient;
+}
+
+// Fonction pour vérifier si on utilise l'API DeepSeek
+export function isUsingDeepSeekAPI() {
+  const baseURL = process.env['OPENAI_API_BASE_URL'] || '';
+  return baseURL.toLowerCase().includes('deepseek');
 }
 
 // Fonction pour construire une réponse à partir d'un message
@@ -392,7 +399,7 @@ export async function buildResponse(input, message, additionalInstructions = '')
     const ai = getOpenAIClient();
 
     const responseParams = {
-      model: 'gpt-4.1-mini',
+      model: process.env.GPT_MODEL || 'gpt-4.1-mini',
       input: userInput,
       instructions: fullSystemInstructions,
       metadata: {
@@ -423,13 +430,52 @@ export async function buildResponse(input, message, additionalInstructions = '')
       console.log(`Ignoring invalid response ID format: ${lastResponseId} (must start with 'resp')`)
     }
 
-    const response = await ai.responses.create(responseParams)
+    let response;
+
+    // Vérifier si on utilise l'API DeepSeek
+    if (isUsingDeepSeekAPI()) {
+      console.log(`[AI] Utilisation de l'API DeepSeek avec chat.completions.create`);
+
+      // Convertir les paramètres pour l'API Chat Completions
+      const chatCompletionParams = {
+        model: responseParams.model,
+        messages: [
+          {
+            role: "system",
+            content: responseParams.instructions
+          },
+          {
+            role: "user",
+            content: responseParams.input
+          }
+        ],
+        // Ajouter d'autres paramètres si nécessaire
+      };
+
+      // Si un ID de réponse précédente est disponible, on peut l'ajouter comme contexte
+      if (responseParams.previous_response_id) {
+        console.log(`[AI] Ajout du contexte de conversation précédent: ${responseParams.previous_response_id}`);
+        // On pourrait ajouter des messages supplémentaires ici si nécessaire
+      }
+
+      // Appeler l'API Chat Completions
+      const chatResponse = await ai.chat.completions.create(chatCompletionParams);
+
+      // Construire un objet de réponse compatible avec le format attendu
+      response = {
+        id: chatResponse.id || `chat-${Date.now()}`,
+        output_text: chatResponse.choices[0]?.message?.content || ''
+      };
+    } else {
+      // Utiliser l'API Assistants standard
+      response = await ai.responses.create(responseParams);
+    }
 
     // Ne sauvegarder le contexte que si la réponse est valide
     if (response.output_text && response.output_text.trim() !== '' && response.output_text.trim() !== '\' \'\' \'') {
-      await saveContextResponse(message, response.id)
+      await saveContextResponse(message, response.id);
     } else {
-      console.log(`[AI] Réponse invalide détectée, le contexte n'est pas sauvegardé`)
+      console.log(`[AI] Réponse invalide détectée, le contexte n'est pas sauvegardé`);
     }
 
     const guildId = message.guild?.id || null

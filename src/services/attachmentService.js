@@ -15,6 +15,7 @@ dotenv.config();
 
 const ai = new OpenAI({
   apiKey: process.env['OPENAI_API_KEY'],
+  baseURL: process.env['OPENAI_API_BASE_URL'] || 'https://api.openai.com/v1',
 });
 
 /**
@@ -56,7 +57,7 @@ async function downloadAttachment(url) {
 async function analyzeImage(imageData) {
   try {
     const response = await ai.chat.completions.create({
-      model: "gpt-4.1-mini",
+      model: process.env.GPT_MODEL || "gpt-4.1-mini",
       messages: [
         {
           role: "user", 
@@ -103,7 +104,7 @@ async function analyzePDF(pdfData) {
     const assistant = await ai.beta.assistants.create({
       name: "PDF Analyzer",
       description: "Analyse les documents PDF et en extrait les informations importantes.",
-      model: "gpt-4.1-mini",
+      model: process.env.GPT_MODEL || "gpt-4.1-mini",
       tools: [{ type: "retrieval" }],
       file_ids: [fileUploadResponse.id]
     });

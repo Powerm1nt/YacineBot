@@ -3,6 +3,12 @@ import dotenv from 'dotenv'
 import { prisma } from './prisma.js'
 import { safeJsonParse } from '../utils/jsonUtils.js'
 import { taskService } from './taskService.js'
+
+// Fonction pour vérifier si on utilise l'API DeepSeek
+function isUsingDeepSeekAPI() {
+  const baseURL = process.env['OPENAI_API_BASE_URL'] || '';
+  return baseURL.toLowerCase().includes('deepseek');
+}
 import { messageEvaluator } from '../utils/messageEvaluator.js'
 import { ToadScheduler, SimpleIntervalJob, AsyncTask } from 'toad-scheduler'
 import { format, isAfter } from 'date-fns'
@@ -19,6 +25,7 @@ dotenv.config()
 
 const ai = new OpenAI({
   apiKey: process.env['OPENAI_API_KEY'],
+  baseURL: process.env['OPENAI_API_BASE_URL'] || 'https://api.openai.com/v1',
 })
 
 // Système d'instructions pour le service de surveillance des messages
@@ -282,15 +289,44 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
 
     const ai = new OpenAI({
       apiKey: process.env['OPENAI_API_KEY'],
+      baseURL: process.env['OPENAI_API_BASE_URL'] || 'https://api.openai.com/v1',
     })
 
-    const response = await ai.responses.create({
-      model: 'gpt-4.1-nano',
-      input: `${channelContext}${contextInfo ? 'Contexte: ' + contextInfo + '\n\n' : ''}Message à analyser: ${content}`,
-      instructions: systemInstructions,
-    })
+    let response;
 
-    console.log('[AnalysisService] Réponse reçue de l\'API OpenAI')
+    // Vérifier si on utilise l'API DeepSeek
+    if (isUsingDeepSeekAPI()) {
+      console.log('[AnalysisService] Utilisation de l\'API DeepSeek avec chat.completions.create');
+
+      // Convertir les paramètres pour l'API Chat Completions
+      const chatResponse = await ai.chat.completions.create({
+        model: process.env.ANALYSIS_MODEL || 'gpt-4.1-nano',
+        messages: [
+          {
+            role: "system",
+            content: systemInstructions
+          },
+          {
+            role: "user",
+            content: `${channelContext}${contextInfo ? 'Contexte: ' + contextInfo + '\n\n' : ''}Message à analyser: ${content}`
+          }
+        ]
+      });
+
+      // Construire un objet de réponse compatible avec le format attendu
+      response = {
+        output_text: chatResponse.choices[0]?.message?.content || ''
+      };
+    } else {
+      // Utiliser l'API Assistants standard
+      response = await ai.responses.create({
+        model: process.env.ANALYSIS_MODEL || 'gpt-4.1-nano',
+        input: `${channelContext}${contextInfo ? 'Contexte: ' + contextInfo + '\n\n' : ''}Message à analyser: ${content}`,
+        instructions: systemInstructions,
+      });
+    }
+
+    console.log('[AnalysisService] Réponse reçue de l\'API');
 
     // Extraire le JSON de la réponse
     const result = safeJsonParse(response.output_text, null)
@@ -353,11 +389,39 @@ Analyse la conversation fournie et réponds UNIQUEMENT au format JSON brut (sans
 
 IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, renvoie uniquement l'objet JSON brut.`
 
-    const response = await ai.responses.create({
-      model: 'gpt-4.1-nano',
-      input: `Conversation à analyser:\n${messageContent}`,
-      instructions: systemInstructions,
-    })
+    let response;
+
+    // Vérifier si on utilise l'API DeepSeek
+    if (isUsingDeepSeekAPI()) {
+      console.log('[AnalysisService] Utilisation de l\'API DeepSeek avec chat.completions.create pour l\'analyse de conversation');
+
+      // Convertir les paramètres pour l'API Chat Completions
+      const chatResponse = await ai.chat.completions.create({
+        model: process.env.ANALYSIS_MODEL || 'gpt-4.1-nano',
+        messages: [
+          {
+            role: "system",
+            content: systemInstructions
+          },
+          {
+            role: "user",
+            content: `Conversation à analyser:\n${messageContent}`
+          }
+        ]
+      });
+
+      // Construire un objet de réponse compatible avec le format attendu
+      response = {
+        output_text: chatResponse.choices[0]?.message?.content || ''
+      };
+    } else {
+      // Utiliser l'API Assistants standard
+      response = await ai.responses.create({
+        model: process.env.ANALYSIS_MODEL || 'gpt-4.1-nano',
+        input: `Conversation à analyser:\n${messageContent}`,
+        instructions: systemInstructions,
+      });
+    }
 
     // Extraire le JSON de la réponse
     const result = safeJsonParse(response.output_text, null)

@@ -3,8 +3,15 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Fonction pour vérifier si on utilise l'API DeepSeek
+function isUsingDeepSeekAPI() {
+  const baseURL = process.env['OPENAI_API_BASE_URL'] || '';
+  return baseURL.toLowerCase().includes('deepseek');
+}
+
 const openai = new OpenAI({
   apiKey: process.env['OPENAI_API_KEY'],
+  baseURL: process.env['OPENAI_API_BASE_URL'] || 'https://api.openai.com/v1',
 });
 
 // Catégories de questions pour varier les interactions
@@ -35,11 +42,39 @@ La question doit être directe, entre 10 et 20 mots maximum.
 Ne pas ajouter d'introduction ou de formule de politesse, donne juste la question.
 Utilise le tutoiement et un ton décontracté entre amis.`;
 
-    const response = await openai.responses.create({
-      model: 'gpt-4.1-mini',
-      input: `Génère une question ${randomCategory} pour ${username}`,
-      instructions: systemPrompt,
-    });
+    let response;
+
+    // Vérifier si on utilise l'API DeepSeek
+    if (isUsingDeepSeekAPI()) {
+      console.log(`[MessageGenerator] Utilisation de l'API DeepSeek avec chat.completions.create`);
+
+      // Convertir les paramètres pour l'API Chat Completions
+      const chatResponse = await openai.chat.completions.create({
+        model: process.env.GPT_MODEL || 'gpt-4.1-mini',
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt
+          },
+          {
+            role: "user",
+            content: `Génère une question ${randomCategory} pour ${username}`
+          }
+        ]
+      });
+
+      // Construire un objet de réponse compatible avec le format attendu
+      response = {
+        output_text: chatResponse.choices[0]?.message?.content || ''
+      };
+    } else {
+      // Utiliser l'API Assistants standard
+      response = await openai.responses.create({
+        model: process.env.GPT_MODEL || 'gpt-4.1-mini',
+        input: `Génère une question ${randomCategory} pour ${username}`,
+        instructions: systemPrompt,
+      });
+    }
 
     return response.output_text || `Hey ${username}, ça va aujourd'hui ?`;
   } catch (error) {
@@ -76,11 +111,39 @@ La question doit être directe, entre 10 et 20 mots maximum.
 Utilise le pluriel ("vous") et un ton décontracté entre amis.
 Ne pas ajouter d'introduction, donne juste la question.`;
 
-    const response = await openai.responses.create({
-      model: 'gpt-4.1-mini',
-      input: `Génère une question ${randomCategory} pour un groupe`,
-      instructions: systemPrompt,
-    });
+    let response;
+
+    // Vérifier si on utilise l'API DeepSeek
+    if (isUsingDeepSeekAPI()) {
+      console.log(`[MessageGenerator] Utilisation de l'API DeepSeek avec chat.completions.create pour groupe`);
+
+      // Convertir les paramètres pour l'API Chat Completions
+      const chatResponse = await openai.chat.completions.create({
+        model: process.env.GPT_MODEL || 'gpt-4.1-mini',
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt
+          },
+          {
+            role: "user",
+            content: `Génère une question ${randomCategory} pour un groupe`
+          }
+        ]
+      });
+
+      // Construire un objet de réponse compatible avec le format attendu
+      response = {
+        output_text: chatResponse.choices[0]?.message?.content || ''
+      };
+    } else {
+      // Utiliser l'API Assistants standard
+      response = await openai.responses.create({
+        model: process.env.GPT_MODEL || 'gpt-4.1-mini',
+        input: `Génère une question ${randomCategory} pour un groupe`,
+        instructions: systemPrompt,
+      });
+    }
 
     return response.output_text || `Vous préférez les jeux compétitifs ou coopératifs ?`;
   } catch (error) {
