@@ -224,7 +224,6 @@ export async function executeScheduledAnalysis (taskData) {
 
 RÈGLES SPÉCIFIQUES:
 - Favorise fortement les messages qui parlent de technologie, programmation, développement, informatique ou entraide technique
-- Préfère l'engagement plutôt que le silence en cas de doute
 - Attribue un score plus élevé aux messages qui semblent demander de l'aide ou qui pourraient bénéficier d'une réponse
 
 Réponds UNIQUEMENT au format JSON brut (sans formatage markdown, sans bloc de code) avec deux propriétés:
