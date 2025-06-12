@@ -21,16 +21,34 @@ import { isSchedulerEnabled } from '../utils/configService.js'
 import { messageMonitoringService } from '../services/messageMonitoringService.js'
 import { messageEvaluator } from '../utils/messageEvaluator.js'
 import { attachmentService } from '../services/attachmentService.js'
+import { taskService } from '../services/taskService.js'
 
-// Fonction pour nettoyer périodiquement les tâches de surveillance des messages
+// Fonction pour nettoyer périodiquement les tâches de surveillance des messages et les tâches d'attente
 async function setupCleanupInterval(client) {
   // Nettoyer immédiatement au démarrage
   try {
     console.log('[AI] Nettoyage initial des tâches de surveillance des messages...')
     const cleanedCount = await messageMonitoringService.cleanupMonitoringTasks()
     console.log(`[AI] Nettoyage initial terminé - ${cleanedCount} tâches nettoyées`)
+
+    // Nettoyer également toutes les tâches d'attente au démarrage
+    console.log('[AI] Nettoyage initial des tâches d\'attente...')
+
+    // Supprimer les tâches d'attente de type 'waiting-ai'
+    const aiWaitingTasksCount = await taskService.deleteTasksByType('waiting-ai')
+    console.log(`[AI] ${aiWaitingTasksCount} tâches d'attente AI supprimées`)
+
+    // Supprimer les tâches d'attente de type 'waiting-conversation'
+    const convWaitingTasksCount = await taskService.deleteTasksByType('waiting-conversation')
+    console.log(`[AI] ${convWaitingTasksCount} tâches d'attente de conversation supprimées`)
+
+    // Nettoyer les tâches terminées
+    const finishedTasksCount = await taskService.cleanupFinishedTasks()
+    console.log(`[AI] ${finishedTasksCount} tâches terminées nettoyées`)
+
+    console.log(`[AI] Nettoyage initial des tâches d'attente terminé - ${aiWaitingTasksCount + convWaitingTasksCount + finishedTasksCount} tâches nettoyées au total`)
   } catch (error) {
-    console.error('[AI] Erreur lors du nettoyage initial des tâches de surveillance:', error)
+    console.error('[AI] Erreur lors du nettoyage initial des tâches:', error)
   }
 
   // Configurer un intervalle pour nettoyer périodiquement (toutes les 30 minutes)
@@ -40,9 +58,16 @@ async function setupCleanupInterval(client) {
     try {
       console.log('[AI] Nettoyage périodique des tâches de surveillance des messages...')
       const cleanedCount = await messageMonitoringService.cleanupMonitoringTasks()
-      console.log(`[AI] Nettoyage périodique terminé - ${cleanedCount} tâches nettoyées`)
+
+      // Nettoyer également les tâches d'attente et terminées périodiquement
+      const aiWaitingTasksCount = await taskService.deleteTasksByType('waiting-ai')
+      const convWaitingTasksCount = await taskService.deleteTasksByType('waiting-conversation')
+      const finishedTasksCount = await taskService.cleanupFinishedTasks()
+
+      const totalCleaned = cleanedCount + aiWaitingTasksCount + convWaitingTasksCount + finishedTasksCount
+      console.log(`[AI] Nettoyage périodique terminé - ${totalCleaned} tâches nettoyées au total (${cleanedCount} surveillance, ${aiWaitingTasksCount + convWaitingTasksCount} attente, ${finishedTasksCount} terminées)`)
     } catch (error) {
-      console.error('[AI] Erreur lors du nettoyage périodique des tâches de surveillance:', error)
+      console.error('[AI] Erreur lors du nettoyage périodique des tâches:', error)
     }
   }, CLEANUP_INTERVAL_MS)
 
@@ -678,8 +703,43 @@ export async function ai (client) {
         const thinkingDelay = Math.floor(Math.random() * 1500) + 500
         await new Promise(resolve => setTimeout(resolve, thinkingDelay))
 
+        // Créer une tâche d'attente avant de répondre
+        const waitingTaskId = `ai-waiting-${message.id}-${Date.now()}`
+        console.log(`[AI] Création d'une tâche d'attente: ${waitingTaskId}`)
+
+        try {
+          // Enregistrer la tâche d'attente dans la base de données
+          await taskService.saveTask(
+            waitingTaskId,
+            0,
+            new Date(), // Exécution immédiate
+            message.guild?.id ? 'guild' : 'dm', // targetChannelType
+            'waiting-ai', // type de tâche
+            {
+              messageId: message.id,
+              channelId: message.channel.id,
+              userId: message.author.id,
+              guildId: message.guild?.id || null,
+              content: message.content.substring(0, 100) // Limiter la taille pour éviter des problèmes de stockage
+            }
+          )
+          console.log(`[AI] Tâche d'attente ${waitingTaskId} créée avec succès`)
+        } catch (taskError) {
+          console.error(`[AI] Erreur lors de la création de la tâche d'attente:`, taskError)
+          // Continuer même en cas d'erreur
+        }
+
         await message.channel.sendTyping().catch(console.error)
         let res = await buildResponse(message.content, message)
+
+        // Supprimer la tâche d'attente une fois la réponse générée
+        try {
+          await taskService.deleteTask(waitingTaskId)
+          console.log(`[AI] Tâche d'attente ${waitingTaskId} supprimée après génération de la réponse`)
+        } catch (deleteError) {
+          console.error(`[AI] Erreur lors de la suppression de la tâche d'attente:`, deleteError)
+          // Ne pas bloquer le processus si la suppression échoue
+        }
 
         // Parfois, réagir au message avec un emoji pertinent
         const shouldAddReaction = Math.random() < 0.3 // 30% de chance d'ajouter une réaction

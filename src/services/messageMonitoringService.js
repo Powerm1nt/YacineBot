@@ -635,7 +635,26 @@ async function createScheduledTask (client, channelId, guildId, relevanceScore, 
     const delayInMs = Math.floor(MIN_DELAY_MS + Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS))
     const scheduledTime = new Date(Date.now() + delayInMs)
 
-    // Enregistrer la tâche dans la base de données
+    // Créer d'abord une tâche d'attente
+    const waitingTaskId = `waiting-${taskId}`
+    console.log(`[MessageMonitoring] Création d'une tâche d'attente: ${waitingTaskId}`)
+
+    // Enregistrer la tâche d'attente dans la base de données
+    await taskService.saveTask(
+      waitingTaskId,
+      0,
+      new Date(), // Exécution immédiate
+      null,
+      'waiting-conversation',
+      {
+        channelId,
+        guildId: guildId || '',
+        topicSummary,
+        parentTaskId: taskId
+      }
+    )
+
+    // Enregistrer la tâche principale dans la base de données
     const savedTask = await taskService.saveTask(
       taskId,
       0,
@@ -645,13 +664,25 @@ async function createScheduledTask (client, channelId, guildId, relevanceScore, 
       {
         channelId,
         guildId: guildId || '',
-        topicSummary
+        topicSummary,
+        waitingTaskId
       }
     )
 
     console.log(`[MessageMonitoring] Nouvelle tâche de conversation (${taskId}) créée pour le canal ${channelId} dans ${(delayInMs / 60000).toFixed(1)} minutes - Heure prévue: ${scheduledTime.toISOString()}`)
     console.log(`[MessageMonitoring] Détails de la tâche: ID BDD=${savedTask.id}, Sujet="${topicSummary}"`)
-    return true
+
+    // Planifier la suppression de la tâche d'attente une fois la tâche principale terminée
+    setTimeout(async () => {
+      try {
+        await taskService.deleteTask(waitingTaskId);
+        console.log(`[MessageMonitoring] Tâche d'attente ${waitingTaskId} supprimée après exécution de la tâche principale`);
+      } catch (error) {
+        console.error(`[MessageMonitoring] Erreur lors de la suppression de la tâche d'attente ${waitingTaskId}:`, error);
+      }
+    }, delayInMs + 5000); // Ajouter 5 secondes pour s'assurer que la tâche principale a eu le temps de s'exécuter
+
+    return true;
   } catch (error) {
     console.error('Erreur lors de la création d\'une tâche planifiée:', error)
     return false
@@ -673,6 +704,13 @@ async function initialize() {
   // Nettoyer spécifiquement les tâches de surveillance de messages
   await cleanupMonitoringTasks();
 
+  // Nettoyer les tâches d'attente
+  console.log('[MessageMonitoring] Nettoyage des tâches d\'attente au démarrage...');
+
+  // Supprimer les tâches d'attente de type 'waiting-conversation'
+  const waitingTasksCount = await taskService.deleteTasksByType('waiting-conversation');
+  console.log(`[MessageMonitoring] ${waitingTasksCount} tâches d'attente supprimées au démarrage`);
+
   // Restaurer les tâches en attente
   const restoredCount = await restorePendingMessageTasks();
 
@@ -681,7 +719,7 @@ async function initialize() {
 }
 
 /**
- * Nettoie les tâches de surveillance obsolètes
+ * Nettoie les tâches de surveillance obsolètes et les tâches d'attente terminées
  * @returns {Promise<number>} - Nombre de tâches nettoyées
  */
 async function cleanupMonitoringTasks() {
@@ -702,6 +740,19 @@ async function cleanupMonitoringTasks() {
 
     console.log(`[MessageMonitoring] ${deletedTasks.count} tâches de surveillance obsolètes nettoyées de la base de données`);
 
+    // Nettoyer également les tâches d'attente terminées
+    const deletedWaitingTasks = await prisma.task.deleteMany({
+      where: {
+        type: 'waiting-conversation',
+        OR: [
+          { status: { in: ['completed', 'stopped', 'failed'] } },
+          { nextExecution: { lt: now } }
+        ]
+      }
+    });
+
+    console.log(`[MessageMonitoring] ${deletedWaitingTasks.count} tâches d'attente terminées nettoyées de la base de données`);
+
     // Nettoyer également le planificateur en mémoire
     let memoryTasksCleanedCount = 0;
     const jobs = scheduler.getAllJobs();
@@ -720,7 +771,7 @@ async function cleanupMonitoringTasks() {
 
     console.log(`[MessageMonitoring] ${memoryTasksCleanedCount} tâches de surveillance obsolètes nettoyées du planificateur en mémoire`);
 
-    return deletedTasks.count + memoryTasksCleanedCount;
+    return deletedTasks.count + deletedWaitingTasks.count + memoryTasksCleanedCount;
   } catch (error) {
     console.error('[MessageMonitoring] Erreur lors du nettoyage des tâches de surveillance:', error);
     return 0;
