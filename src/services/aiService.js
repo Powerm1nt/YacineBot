@@ -798,7 +798,8 @@ export async function handleMessage(message) {
         // Continuer même en cas d'erreur
       }
 
-      await message.channel.sendTyping().catch(console.error)
+      // Typing indicator disabled as per requirements
+      // await message.channel.sendTyping().catch(console.error)
       let res = await buildResponse(message.content, message)
 
       // Supprimer la tâche d'attente une fois la réponse générée
@@ -861,6 +862,7 @@ export async function handleMessage(message) {
         const typingDelay = calculateTypingDelay(res)
         console.log(`Délai de frappe calculé: ${typingDelay}ms pour ${res.length} caractères`)
 
+        // Enable typing indicator when sending the message
         let typingInterval = setInterval(() => {
           message.channel.sendTyping().catch(console.error)
         }, 5000)

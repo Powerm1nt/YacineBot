@@ -1226,7 +1226,7 @@ export async function monitorMessage(message, client, buildResponseFn) {
         if (evaluationResult.shouldRespond) {
           console.log(`[MessageMonitoring] Réponse différée au message ${messageId} (score: ${evaluationResult.relevanceScore.toFixed(2)}) - Canal: ${channelId}, Serveur: ${guildId || 'DM'}`);
 
-          // Marquer le canal comme étant en train d'écrire
+          // Enable typing indicator when sending the message
           await message.channel.sendTyping().catch(console.error);
 
           // Vérifier si le message est une réponse à un autre utilisateur

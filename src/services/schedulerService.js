@@ -694,6 +694,8 @@ La question doit:
 Ne pas inclure d'introduction comme "Alors," ou "Au fait,". Donne simplement la question.`;
 
     // Préparer les derniers messages comme contexte
+    // Note: Nous utilisons directement les messages passés en paramètre plutôt que de faire un appel à la base de données
+    // car le contexte est déjà créé avec l'API OpenAI et nous avons besoin de formater les messages d'une manière spécifique
     const recentMessages = messages.slice(-10).map(msg => `${msg.userName}: ${msg.content}`).join('\n');
 
     let response;
@@ -757,6 +759,8 @@ Le commentaire doit:
 Ne pas inclure d'introduction comme "Je pense que" ou "À mon avis". Donne simplement le commentaire direct.`;
 
     // Préparer les derniers messages comme contexte
+    // Note: Nous utilisons directement les messages passés en paramètre plutôt que de faire un appel à la base de données
+    // car le contexte est déjà créé avec l'API OpenAI et nous avons besoin de formater les messages d'une manière spécifique
     const recentMessages = messages.slice(-10).map(msg => `${msg.userName}: ${msg.content}`).join('\n');
 
     let response;
