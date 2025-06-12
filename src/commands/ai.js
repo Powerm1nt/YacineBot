@@ -237,18 +237,27 @@ export async function ai (client) {
       contextInfo += `[In private message] `
     }
 
-    // Analyser les éventuelles pièces jointes du message
+    // Analyser les éventuelles pièces jointes et les URLs d'images dans le message
     let attachmentAnalysis = ''
-    if (message.attachments && message.attachments.size > 0) {
-      console.log(`[AI] Message contient ${message.attachments.size} pièce(s) jointe(s). Analyse en cours...`)
+    let imageUrlsAnalysis = ''
+
+    // Vérifier si le message contient du texte ou des pièces jointes à analyser
+    if ((message.content && message.content.length > 0) || (message.attachments && message.attachments.size > 0)) {
+      console.log(`[AI] Analyse du contenu du message ${message.id}. Texte: ${message.content?.length || 0} chars, Pièces jointes: ${message.attachments?.size || 0}`)
       try {
-        attachmentAnalysis = await attachmentService.analyzeMessageAttachments(message)
-        if (attachmentAnalysis) {
-          console.log(`[AI] Analyse des pièces jointes terminée - Longueur du résultat: ${attachmentAnalysis.length} caractères`)
+        // Utiliser la nouvelle fonction qui analyse le texte et les pièces jointes
+        const analysisResults = await attachmentService.analyzeMessageContent(message)
+
+        // Récupérer les résultats des différentes analyses
+        attachmentAnalysis = analysisResults.attachmentAnalysis || ''
+        imageUrlsAnalysis = analysisResults.imageUrlsAnalysis || ''
+
+        if (attachmentAnalysis || imageUrlsAnalysis) {
+          console.log(`[AI] Analyse terminée - Pièces jointes: ${attachmentAnalysis.length} chars, URLs d'images: ${imageUrlsAnalysis.length} chars`)
         }
-      } catch (attachmentError) {
-        console.error('Erreur lors de l\'analyse des pièces jointes:', attachmentError)
-        attachmentAnalysis = 'J\'ai rencontré un problème lors de l\'analyse des pièces jointes.'
+      } catch (analysisError) {
+        console.error('Erreur lors de l\'analyse du contenu du message:', analysisError)
+        attachmentAnalysis = 'J\'ai rencontré un problème lors de l\'analyse du contenu du message.'
       }
     }
 
@@ -284,11 +293,17 @@ export async function ai (client) {
       contextTypeInfo = '[SERVER CONVERSATION] '
     }
 
-    // Ajouter l'analyse des pièces jointes à l'entrée utilisateur si disponible
+    // Ajouter l'analyse des pièces jointes et des URLs d'images à l'entrée utilisateur si disponible
     let userInput = contextTypeInfo + contextInfo + userContext + processedInput
 
+    // Ajouter l'analyse des pièces jointes standard
     if (attachmentAnalysis) {
       userInput += `\n\n[PIÈCES JOINTES ANALYSÉES]\n${attachmentAnalysis}`
+    }
+
+    // Ajouter l'analyse des URLs d'images trouvées dans le texte
+    if (imageUrlsAnalysis) {
+      userInput += `\n\n[IMAGES DEPUIS URLS ANALYSÉES]\n${imageUrlsAnalysis}`
     }
 
     try {
@@ -480,9 +495,10 @@ export async function ai (client) {
       }
 
       // Vérifier si nous devons répondre à ce message
-      // Vérifier également si le message contient des pièces jointes
+      // Vérifier également si le message contient des pièces jointes ou des URLs d'images
       const hasAttachments = message.attachments && message.attachments.size > 0
-      const shouldRespond = isDirectMention || isReply || isDM || hasAttachments
+      const hasImageUrls = message.content && attachmentService.extractImageUrls(message.content).length > 0
+      const shouldRespond = isDirectMention || isReply || isDM || hasAttachments || hasImageUrls
 
       // Capturer et enregistrer le message dans tous les cas pour l'analyse future
       // Récupérer les informations de contexte

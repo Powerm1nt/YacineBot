@@ -8,11 +8,26 @@ import { FormData } from 'formdata-node';
 import { OpenAI } from 'openai/client.mjs';
 import dotenv from 'dotenv';
 
+// Regex pour détecter les URL d'images dans un texte
+const IMAGE_URL_REGEX = /(https?:\/\/\S+\.(jpg|jpeg|png|gif|webp)(\?\S*)?)/gi;
+
 dotenv.config();
 
 const ai = new OpenAI({
   apiKey: process.env['OPENAI_API_KEY'],
 });
+
+/**
+ * Extrait les URL d'images d'un texte
+ * @param {string} text - Le texte à analyser
+ * @returns {Array<string>} - Les URL d'images trouvées
+ */
+function extractImageUrls(text) {
+  if (!text) return [];
+
+  const matches = text.match(IMAGE_URL_REGEX) || [];
+  return [...new Set(matches)]; // Éliminer les doublons
+}
 
 /**
  * Télécharge une pièce jointe depuis une URL
@@ -181,6 +196,71 @@ async function analyzeAttachment(attachment) {
 }
 
 /**
+ * Analyse les URLs d'images trouvées dans le texte d'un message
+ * @param {string} messageContent - Contenu du message
+ * @returns {Promise<string>} - Résultat de l'analyse des images trouvées dans le texte
+ */
+async function analyzeImageUrlsFromText(messageContent) {
+  try {
+    const imageUrls = extractImageUrls(messageContent);
+    if (imageUrls.length === 0) return "";
+
+    console.log(`[AttachmentService] ${imageUrls.length} URL(s) d'image trouvée(s) dans le texte`);
+
+    const results = [];
+
+    for (const url of imageUrls) {
+      console.log(`[AttachmentService] Analyse de l'image depuis l'URL: ${url}`);
+      try {
+        const imageData = await downloadAttachment(url);
+        const result = await analyzeImage(imageData);
+        results.push(`**Analyse de l'image depuis URL:**\n${result}`);
+      } catch (error) {
+        console.error(`Erreur lors de l'analyse de l'image depuis l'URL ${url}:`, error);
+        results.push(`**URL d'image:** ${url}\nJe n'ai pas pu analyser cette image en raison d'une erreur technique.`);
+      }
+    }
+
+    return results.length > 0 ? results.join('\n\n') : "";
+  } catch (error) {
+    console.error('Erreur lors de l\'analyse des URLs d\'images dans le texte:', error);
+    return "Désolé, je n'ai pas pu analyser les images liées dans le texte en raison d'une erreur technique.";
+  }
+}
+
+/**
+ * Analyse le contenu textuel et les pièces jointes d'un message Discord
+ * @param {Object} message - Le message Discord à analyser
+ * @returns {Promise<Object>} - Résultat de l'analyse avec les réponses pour le texte et les pièces jointes
+ */
+async function analyzeMessageContent(message) {
+  try {
+    const results = {
+      textAnalysis: "",
+      attachmentAnalysis: "",
+      imageUrlsAnalysis: ""
+    };
+
+    // Analyser les URL d'images dans le texte du message
+    if (message.content && message.content.length > 0) {
+      results.imageUrlsAnalysis = await analyzeImageUrlsFromText(message.content);
+    }
+
+    // Analyser les pièces jointes normales
+    results.attachmentAnalysis = await analyzeMessageAttachments(message);
+
+    return results;
+  } catch (error) {
+    console.error('Erreur lors de l\'analyse complète du message:', error);
+    return {
+      textAnalysis: "",
+      attachmentAnalysis: "Désolé, une erreur est survenue lors de l'analyse de ce message.",
+      imageUrlsAnalysis: ""
+    };
+  }
+}
+
+/**
  * Analyse toutes les pièces jointes d'un message Discord
  * @param {Object} message - Le message Discord contenant des pièces jointes
  * @returns {Promise<string>} - Résultat de l'analyse de toutes les pièces jointes
@@ -213,5 +293,8 @@ export const attachmentService = {
   analyzeMessageAttachments,
   analyzeAttachment,
   analyzeImage,
-  analyzePDF
+  analyzePDF,
+  analyzeMessageContent,
+  analyzeImageUrlsFromText,
+  extractImageUrls
 };
