@@ -1226,9 +1226,6 @@ export async function monitorMessage(message, client, buildResponseFn) {
         if (evaluationResult.shouldRespond) {
           console.log(`[MessageMonitoring] Réponse différée au message ${messageId} (score: ${evaluationResult.relevanceScore.toFixed(2)}) - Canal: ${channelId}, Serveur: ${guildId || 'DM'}`);
 
-          // Enable typing indicator when sending the message
-          await message.channel.sendTyping().catch(console.error);
-
           // Vérifier si le message est une réponse à un autre utilisateur
           let additionalContext = '';
           isReplyBetweenUsers = messageInfo.isReplyBetweenUsers || false;
@@ -1288,6 +1285,7 @@ export async function monitorMessage(message, client, buildResponseFn) {
           const containsItalics = response ? /(\*[^*]+\*|_[^_]+_)/.test(response.trim()) : false;
 
           if (response && response.trim() !== '' && response !== '\' \'\' \'' && response.trim().length > 1 && !containsItalics) {
+            await message.channel.sendTyping().catch(console.error);
             await message.reply(response);
           } else if (containsItalics) {
             console.log(`[MessageMonitoring] Réponse contenant des actions en italique détectée, aucun message envoyé`);
