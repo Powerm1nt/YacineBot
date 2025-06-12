@@ -94,10 +94,10 @@ import { prisma } from '../services/prisma.js';
       if (content.includes('?') && (content.toLowerCase().includes('help') || content.toLowerCase().includes('aide') || 
           content.toLowerCase().includes('question') || content.toLowerCase().includes('besoin'))) {
         console.log(`[MessageEvaluator] Question d'aide explicite détectée dans une conversation entre utilisateurs`);
-        return { relevanceScore: 0.8, hasKeyInfo: true, shouldRespond: true };
+        return { relevanceScore: 0.4, hasKeyInfo: true, shouldRespond: true };
       }
       // Pour tous les autres cas de conversations entre utilisateurs, score beaucoup plus élevé qu'avant
-      return { relevanceScore: 0.6, hasKeyInfo: true, shouldRespond: true };
+      return { relevanceScore: 0.3, hasKeyInfo: true, shouldRespond: true };
     }
 
     // Récupérer des informations sur le canal si disponibles
