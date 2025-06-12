@@ -22,6 +22,33 @@ import { messageMonitoringService } from '../services/messageMonitoringService.j
 import { messageEvaluator } from '../utils/messageEvaluator.js'
 import { attachmentService } from '../services/attachmentService.js'
 
+// Fonction pour nettoyer périodiquement les tâches de surveillance des messages
+async function setupCleanupInterval(client) {
+  // Nettoyer immédiatement au démarrage
+  try {
+    console.log('[AI] Nettoyage initial des tâches de surveillance des messages...')
+    const cleanedCount = await messageMonitoringService.cleanupMonitoringTasks()
+    console.log(`[AI] Nettoyage initial terminé - ${cleanedCount} tâches nettoyées`)
+  } catch (error) {
+    console.error('[AI] Erreur lors du nettoyage initial des tâches de surveillance:', error)
+  }
+
+  // Configurer un intervalle pour nettoyer périodiquement (toutes les 30 minutes)
+  const CLEANUP_INTERVAL_MS = 30 * 60 * 1000 // 30 minutes
+
+  setInterval(async () => {
+    try {
+      console.log('[AI] Nettoyage périodique des tâches de surveillance des messages...')
+      const cleanedCount = await messageMonitoringService.cleanupMonitoringTasks()
+      console.log(`[AI] Nettoyage périodique terminé - ${cleanedCount} tâches nettoyées`)
+    } catch (error) {
+      console.error('[AI] Erreur lors du nettoyage périodique des tâches de surveillance:', error)
+    }
+  }, CLEANUP_INTERVAL_MS)
+
+  console.log(`[AI] Intervalle de nettoyage des tâches configuré (${CLEANUP_INTERVAL_MS/60000} minutes)`)
+}
+
 import dotenv from 'dotenv'
 
 dotenv.config()
@@ -146,6 +173,9 @@ export async function ai (client) {
   const ai = new OpenAI({
     apiKey: process.env['OPENAI_API_KEY'],
   })
+
+  // Configurer le nettoyage périodique des tâches de surveillance
+  await setupCleanupInterval(client)
 
   const buildResponse = async (input, message, additionalInstructions = '') => {
     if (!message || !message.author || !message.author.id) {

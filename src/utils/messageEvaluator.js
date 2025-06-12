@@ -84,7 +84,7 @@ import { prisma } from '../services/prisma.js';
 
     if (botMentioned) {
       console.log(`[MessageEvaluator] Mention du bot détectée dans le message - Augmentation du score de pertinence`);
-      return { relevanceScore: 0.85, hasKeyInfo: true, shouldRespond: true };
+      return { relevanceScore: 0.95, hasKeyInfo: true, shouldRespond: true };
     }
 
     // Si c'est une réponse entre utilisateurs, ne pas intervenir en mettant le score à 0
@@ -144,15 +144,15 @@ import { prisma } from '../services/prisma.js';
     );
 
     // Décider si on répond en fonction du score, de la présence d'info clé et de l'activité de la conversation
-    // Si le score est modéré ou élevé (>=0.5), répondre systématiquement
-    let shouldRespond = relevanceAnalysis.relevanceScore >= 0.6 || relevanceAnalysis.hasKeyInfo;
+    // Abaisser le seuil pour répondre plus souvent et être plus engageant
+    let shouldRespond = relevanceAnalysis.relevanceScore >= 0.45 || relevanceAnalysis.hasKeyInfo;
 
     // Si la conversation est active, répondre avec un seuil très bas pour maximiser les interactions
     if (conversationService.isActiveConversation(channelId, guildId)) {
-      // On garde un seuil mais moins élevé qu'avant pour privilégier la réponse
-      const moderateThreshold = 0.7;
+      // On utilise un seuil très bas pour favoriser l'engagement et la participation
+      const moderateThreshold = 0.5;
       shouldRespond = relevanceAnalysis.relevanceScore >= moderateThreshold || relevanceAnalysis.hasKeyInfo;
-      console.log(`[MessageEvaluator] Conversation active - Seuil de pertinence modéré à ${moderateThreshold}`);
+      console.log(`[MessageEvaluator] Conversation active - Seuil de pertinence abaissé à ${moderateThreshold}`);
 
       // Si on décide de répondre, activer le délai d'attente pour ce canal
       if (shouldRespond) {

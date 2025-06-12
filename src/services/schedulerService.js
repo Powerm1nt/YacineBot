@@ -32,14 +32,6 @@ const MAX_ACTIVE_TASKS = parseInt(process.env.MAX_ACTIVE_TASKS || '100', 10)
 
 const activeTasks = new Map()
 
-/**
- * Check if the task limit has been reached
- * @returns {boolean} - true if the task limit has been reached
- */
-function checkTaskLimit() {
-  return activeTasks.size >= MAX_ACTIVE_TASKS;
-}
-
 function formatDate (date, formatStr = 'HH:mm:ss dd/MM/yyyy') {
   try {
     // Vérifier que date est un objet Date valide
@@ -410,12 +402,6 @@ export async function initScheduler(client) {
  * @param {number} taskNumber - Numéro de la tâche
  */
 async function createAnalysisTask(client, taskNumber) {
-  // Vérifier si le nombre maximum de tâches est atteint
-  if (checkTaskLimit()) {
-    console.log(`[Scheduler] Limite de tâches atteinte (${MAX_ACTIVE_TASKS}) - Création de nouvelle tâche d'analyse reportée`);
-    return null;
-  }
-
   // Générer un identifiant unique pour cette tâche
   const taskId = `analysis-task-${taskNumber}-${randomUUID().substring(0, 8)}`;
 

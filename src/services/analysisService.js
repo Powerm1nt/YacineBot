@@ -63,6 +63,10 @@ export function startMessageBatchDelay (channelId, guildId = null) {
  * Évalue la pertinence d'un message
  * @param {string} content - Contenu du message
  * @param {string} contextInfo - Informations de contexte (optionnel)
+ * @param isFromBot
+ * @param channelName
+ * @param guildId
+ * @param channe Permissions
  * @returns {Promise<Object>} - Résultat d'analyse avec score et hasKeyInfo
  */
 export async function analyzeMessageRelevance (content, contextInfo = '', isFromBot = false, channelName = '', guildId = null, channelPermissions = null) {
@@ -70,7 +74,7 @@ export async function analyzeMessageRelevance (content, contextInfo = '', isFrom
     console.log(`[AnalysisService] Demande d'analyse de pertinence reçue - Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}", Contexte: ${contextInfo ? 'Fourni' : 'Non fourni'}, Bot: ${isFromBot}, Canal: ${channelName || 'Non spécifié'}, Serveur: ${guildId || 'DM'}`)
 
     // Vérifier si le bot a les permissions d'écriture dans ce canal
-    if (channelPermissions && !channelPermissions.has('SEND_MESSAGES')) {
+    if (channelPermissions && typeof channelPermissions.has === 'function' && !channelPermissions.has('SEND_MESSAGES')) {
       console.log(`[AnalysisService] Pas de permission d'écriture dans le canal - Analyse annulée`)
       return { relevanceScore: 0, hasKeyInfo: false }
     }
@@ -118,7 +122,9 @@ export async function analyzeMessageRelevance (content, contextInfo = '', isFrom
       isFromBot,
       channelName,
       guildId,
-      channelPermissions: channelPermissions ? Array.from(channelPermissions) : null,
+      channelPermissions: channelPermissions && typeof channelPermissions.has === 'function' ? 
+        Array.from(channelPermissions) : 
+        (Array.isArray(channelPermissions) ? channelPermissions : null),
     }
 
     // Sauvegarder la tâche en base de données et en mémoire
@@ -156,24 +162,54 @@ export async function executeScheduledAnalysis (taskData) {
   try {
     console.log(`[AnalysisService] Exécution d'une analyse planifiée - Tâche: ${JSON.stringify(taskData).substring(0, 100)}...`)
 
-    const { content, contextInfo, isFromBot, channelName, guildId, channelPermissions } = taskData
+    // Extraire les données de la tâche avec valeurs par défaut sécurisées
+    const { 
+      content, 
+      contextInfo = '', 
+      isFromBot = false, 
+      channelName = '', 
+      guildId = null, 
+      channelPermissions = null 
+    } = taskData || {}
+
+    // Vérifications de sécurité
+    if (!content) {
+      console.error('[AnalysisService] Données de tâche incomplètes, contenu manquant')
+      return { relevanceScore: 0, hasKeyInfo: false }
+    }
+
+    // Si le message provient d'un bot, retourner un score bas pour économiser des appels API
+    if (isFromBot) {
+      console.log('[AnalysisService] Message provenant d\'un bot, analyse rapide')
+      return { relevanceScore: 0.1, hasKeyInfo: false }
+    }
+
+    // Vérifier les permissions si fournies
+    if (channelPermissions && Array.isArray(channelPermissions)) {
+      if (!channelPermissions.includes('SEND_MESSAGES')) {
+        console.log(`[AnalysisService] Pas de permission d'écriture dans le canal - Analyse simplifiée`)
+        return { relevanceScore: 0.2, hasKeyInfo: false }
+      }
+    }
 
     // Ajuster le score initial en fonction du canal
-    let channelRelevanceModifier = 0.2 // Bonus par défaut pour tous les canaux
+    let channelRelevanceModifier = 0.25 // Bonus par défaut pour tous les canaux
     if (channelName) {
       const channelNameLower = channelName.toLowerCase()
       // Canaux où on est plus susceptible de vouloir participer
       if (channelNameLower.includes('général') || channelNameLower.includes('general') ||
         channelNameLower.includes('discussion') || channelNameLower.includes('chat') ||
         channelNameLower.includes('meme') || channelNameLower.includes('fun') ||
-        channelNameLower.includes('social') || channelNameLower.includes('random')) {
-        channelRelevanceModifier = 0.4 // Beaucoup plus susceptible de répondre
+        channelNameLower.includes('social') || channelNameLower.includes('random') ||
+        channelNameLower.includes('tech') || channelNameLower.includes('aide') ||
+        channelNameLower.includes('dev') || channelNameLower.includes('entraide')) {
+        channelRelevanceModifier = 0.5 // Beaucoup plus susceptible de répondre
       }
       // Canaux où on est moins susceptible de vouloir participer
       else if (channelNameLower.includes('admin') || channelNameLower.includes('mod') ||
         channelNameLower.includes('annonce') || channelNameLower.includes('règle') ||
         channelNameLower.includes('important')) {
-        channelRelevanceModifier = 0 // Neutre pour ces canaux
+        channelRelevanceModifier = 0.1 // Légèrement positif même pour ces canaux
       }
     }
 
@@ -184,6 +220,12 @@ export async function executeScheduledAnalysis (taskData) {
 2. Informations utiles ou importantes contenues dans le message
 3. Potentiel d'apporter de la valeur à la conversation
 4. Adéquation au canal dans lequel le message est posté (si spécifié)
+5. Si le message parle de technologie ou d'entraide technique, attribue un score très élevé
+
+RÈGLES SPÉCIFIQUES:
+- Favorise fortement les messages qui parlent de technologie, programmation, développement, informatique ou entraide technique
+- Préfère l'engagement plutôt que le silence en cas de doute
+- Attribue un score plus élevé aux messages qui semblent demander de l'aide ou qui pourraient bénéficier d'une réponse
 
 Réponds UNIQUEMENT au format JSON brut (sans formatage markdown, sans bloc de code) avec deux propriétés:
 - relevanceScore: un nombre entre 0 et 1 (0 = non pertinent, 1 = très pertinent)
@@ -220,6 +262,12 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
     if (!result || typeof result.relevanceScore !== 'number' || typeof result.hasKeyInfo !== 'boolean') {
       console.error('[AnalysisService] Format de réponse invalide:', response.output_text)
       return { relevanceScore: 0.4, hasKeyInfo: false }
+    }
+
+    // Ajustement basé sur isFromBot (même si normalement déjà filtré plus haut)
+    if (isFromBot && result.relevanceScore > 0.3) {
+      result.relevanceScore = Math.min(result.relevanceScore, 0.3); // Limiter le score pour les bots
+      console.log(`[AnalysisService] Score limité car message provenant d'un bot: ${result.relevanceScore.toFixed(2)}`);
     }
 
     // Appliquer le modificateur basé sur le canal si présent
@@ -390,8 +438,8 @@ export async function updateConversationRelevance (channelId, guildId = null, cl
     })
 
     // Si le client est fourni et que le service de surveillance des messages est disponible,
-    // créer une tâche planifiée si la conversation est pertinente (seuil fortement abaissé)
-    if (!(client && analysis.relevanceScore >= 0.4)) {
+    // créer une tâche planifiée si la conversation est pertinente (seuil extrêmement abaissé)
+    if (!(client && analysis.relevanceScore >= 0.3)) {
       if (client) {
         console.log(`[AnalysisService] Score de pertinence trop faible (${analysis.relevanceScore.toFixed(2)}) - Pas de tâche planifiée`)
       }
@@ -504,21 +552,6 @@ export async function getSharedConversations (userId) {
     return []
   }
 }
-
-/**
- * Vérifie si le système a atteint la limite de tâches actives
- * @returns {Promise<boolean>} - true si la limite est atteinte, false sinon
- */
-async function isTaskLimitReached () {
-  try {
-    const MAX_ACTIVE_TASKS = parseInt(process.env.MAX_ACTIVE_TASKS || '100', 10)
-    return taskService.getActiveTaskCount() >= MAX_ACTIVE_TASKS
-  } catch (error) {
-    console.error('Erreur lors de la vérification de la limite de tâches:', error)
-    return false // Par défaut, on suppose que la limite n'est pas atteinte
-  }
-}
-
 export const analysisService = {
   analyzeMessageRelevance,
   analyzeConversationRelevance,
@@ -526,6 +559,5 @@ export const analysisService = {
   shareConversation,
   getSharedConversations,
   isWaitingForMoreMessages,
-  startMessageBatchDelay,
-  isTaskLimitReached
+  startMessageBatchDelay
 }

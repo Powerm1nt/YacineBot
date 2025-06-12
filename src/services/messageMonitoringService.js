@@ -18,22 +18,25 @@ import {
 
 // Système d'instructions pour le service de surveillance des messages
 const systemPrompt = `
-Règle CRUCIALE concernant les conversations entre utilisateurs :
-Quand un utilisateur répond à un autre utilisateur (et non à toi), tu dois être EXTRÊMEMENT prudent dans ton niveau d'engagement.
+Règle concernant les conversations entre utilisateurs :
+Quand un utilisateur répond à un autre utilisateur (et non à toi), tu dois faire preuve de discernement dans ton niveau d'engagement.
 
-RÈGLES D'ENGAGEMENT STRICTES:
-1. N'interviens PAS dans les conversations entre utilisateurs sauf si tu es explicitement mentionné ou si une aide est clairement demandée.
-2. Si la conversation semble privée ou si ton intervention n'est pas explicitement sollicitée, reste totalement en retrait.
-3. Si tu dois répondre, utilise un ton neutre et concis, en te limitant strictement au sujet de la question posée.
-4. Évite absolument de détourner le sujet de leur conversation ou de proposer des informations non demandées.
-5. Privilégie l'absence de réponse en cas de doute sur la nécessité de ton intervention.
-6. le relevanceScore sera le plus élevé si ça parle de technologie et entraide
+RÈGLES D'ENGAGEMENT ADAPTÉES:
+1. Tu peux intervenir dans les conversations entre utilisateurs si tu penses pouvoir apporter une aide ou une information utile.
+2. Si la conversation semble privée, sois plus discret mais tu peux quand même intervenir si le sujet est technique ou lié à la technologie.
+3. Si tu dois répondre, utilise un ton amical et sympathique, en essayant d'apporter une valeur ajoutée à la conversation.
+4. Tu peux élargir légèrement le sujet si c'est pour apporter des informations pertinentes et utiles.
+5. En cas de doute, préfère l'engagement plutôt que le silence, surtout sur des sujets techniques.
+6. Le relevanceScore sera le plus élevé si ça parle de technologie, de développement, d'informatique ou d'entraide technique.
 
-EXCEPTION IMPORTANTE:
-Si un utilisateur parle de toi (Yassine) dans une conversation, même sans te mentionner directement, tu peux répondre poliment. C'est une exception à la règle générale de non-intervention.
+EXCEPTIONS IMPORTANTES:
+1. Si un utilisateur parle de toi (Yassine) dans une conversation, même sans te mentionner directement, tu dois répondre poliment.
+2. Si la conversation concerne de la technologie ou de l'entraide, tu dois être particulièrement réactif et engagé.
+3. Si quelqu'un semble avoir besoin d'aide, même sans te mentionner directement, n'hésite pas à proposer ton assistance.
+
 ATTENTION: Tous les messages ne parlent pas nécessairement de toi. Vérifie le contexte pour déterminer si le message fait référence à toi (le bot) ou à une autre personne qui s'appellerait Yassine.
 
-Tu es là pour assister uniquement quand on te le demande explicitement, pas pour t'insérer dans toutes les conversations.
+Tu es là pour être utile et engageant, particulièrement sur les sujets techniques et d'entraide.
 `
 
 const scheduler = new ToadScheduler()
@@ -214,12 +217,6 @@ export async function monitorMessage (message, client, buildResponseFn) {
 
   const scheduledTime = new Date(Date.now() + delayInMs)
 
-  // Vérifier si la limite de tâches actives est atteinte
-  if (await analysisService.isTaskLimitReached()) {
-    console.log(`[MessageMonitoring] Limite de tâches atteinte - Message ${messageId} ignoré`)
-    return
-  }
-
   // Vérifier si le message est une réponse entre utilisateurs
   let isReplyBetweenUsers = false
   if (message.reference) {
@@ -385,9 +382,8 @@ export async function monitorMessage (message, client, buildResponseFn) {
                     messageInfo.content, false, false, false, true
                   )
 
-                  // Si c'est un cas évident de non-réponse et que le score de pertinence est très faible, on annule
-                  // Seuil abaissé pour permettre plus de réponses
-                  if (!shouldRespondImmediate && evaluationResult.relevanceScore < 0.4) {
+                  // Seuil fortement abaissé pour permettre beaucoup plus de réponses et d'engagement
+                  if (!shouldRespondImmediate && evaluationResult.relevanceScore < 0.25) {
                     console.log(`[MessageMonitoring] Conversation entre utilisateurs avec score très faible (${evaluationResult.relevanceScore.toFixed(2)}) - Analyse annulée`)
                     pendingResponses.delete(messageId)
                     return
@@ -479,22 +475,45 @@ export async function monitorMessage (message, client, buildResponseFn) {
   // Ajouter une fonction pour supprimer le job quand il est terminé
   setTimeout(async () => {
     try {
-      console.log(`[MessageMonitoring] Suppression planifiée du job ${jobId} après exécution`)
-      scheduler.removeById(jobId)
-      pendingResponses.delete(messageId)
-      console.log(`[MessageMonitoring] Job ${jobId} supprimé avec succès`)
+      // Vérifier si le job existe toujours
+      if (scheduler.existsById(jobId)) {
+        console.log(`[MessageMonitoring] Suppression planifiée du job ${jobId} après exécution`)
+        scheduler.removeById(jobId)
+        console.log(`[MessageMonitoring] Job ${jobId} supprimé avec succès`)
+      } else {
+        console.log(`[MessageMonitoring] Job ${jobId} déjà supprimé du planificateur`)
+      }
 
-      // Supprimer également la tâche de la base de données si elle existe
+      // Supprimer le message des réponses en attente s'il existe encore
+      if (pendingResponses.has(messageId)) {
+        pendingResponses.delete(messageId)
+        console.log(`[MessageMonitoring] Message ${messageId} supprimé de la liste des messages en attente`)
+      }
+
+      // Mettre à jour le statut de la tâche dans la base de données
       try {
-        taskService.deleteTask(jobId).catch(err => {
-          console.log(`[MessageMonitoring] Tâche ${jobId} non trouvée en base de données ou déjà supprimée`)
+        const task = await prisma.task.findUnique({
+          where: { schedulerId: jobId }
         })
+
+        if (task) {
+          await prisma.task.update({
+            where: { schedulerId: jobId },
+            data: { 
+              status: 'completed',
+              completedAt: new Date(),
+              updatedAt: new Date()
+            }
+          })
+          console.log(`[MessageMonitoring] Tâche ${jobId} marquée comme terminée en base de données`)
+        } else {
+          console.log(`[MessageMonitoring] Tâche ${jobId} non trouvée en base de données`)
+        }
       } catch (dbError) {
-        console.log(`[MessageMonitoring] Erreur lors de la suppression de la tâche ${jobId} en base de données`)
+        console.error(`[MessageMonitoring] Erreur lors de la mise à jour de la tâche ${jobId} en base de données:`, dbError)
       }
     } catch (error) {
-      // Le job a peut-être déjà été supprimé, pas de problème
-      console.log(`[MessageMonitoring] Le job ${jobId} a déjà été supprimé ou n'existe pas`)
+      console.error(`[MessageMonitoring] Erreur lors du nettoyage du job ${jobId}:`, error)
     }
   }, delayInMs + 5000) // +5 secondes pour s'assurer que le job a eu le temps de s'exécuter
 }
@@ -532,7 +551,7 @@ export async function shutdown () {
   // Marquer les tâches comme arrêtées dans la base de données
   try {
     // Marquer toutes les tâches de surveillance de messages comme arrêtées
-    await prisma.task.updateMany({
+    const updatedTasks = await prisma.task.updateMany({
       where: {
         schedulerId: { startsWith: 'job-message-' },
         status: 'pending'
@@ -543,7 +562,10 @@ export async function shutdown () {
       }
     })
 
-    console.log('[MessageMonitoring] Tâches marquées comme arrêtées en base de données')
+    console.log(`[MessageMonitoring] ${updatedTasks.count} tâches marquées comme arrêtées en base de données`)
+
+    // Nettoyer les tâches obsolètes
+    await cleanupMonitoringTasks()
   } catch (dbError) {
     console.error('[MessageMonitoring] Erreur lors de la mise à jour des tâches en base de données:', dbError)
   }
@@ -573,12 +595,6 @@ async function createScheduledTask (client, channelId, guildId, relevanceScore, 
       return false
     }
 
-    // Vérifier le nombre de tâches actives et en attente
-    if (await analysisService.isTaskLimitReached()) {
-      console.log(`[MessageMonitoring] Limite de tâches atteinte. La tâche pour le canal ${channelId} ne sera pas créée.`)
-      return false
-    }
-
     if (guildId && !(await isGuildEnabled(guildId))) {
       console.log(`[MessageMonitoring] Le serveur ${guildId} est désactivé - Création de tâche annulée pour le canal ${channelId}`)
       return false
@@ -602,8 +618,8 @@ async function createScheduledTask (client, channelId, guildId, relevanceScore, 
       return false
     }
 
-    // Ne créer une tâche que si le score de pertinence est suffisant (seuil abaissé)
-    if (relevanceScore < 0.4) {
+    // Seuil très bas pour créer des tâches planifiées plus facilement et rendre le bot plus engageant
+    if (relevanceScore < 0.3) {
       console.log(`[MessageMonitoring] Score de pertinence insuffisant (${relevanceScore.toFixed(2)}) pour créer une tâche planifiée pour la conversation dans ${channelId}`)
       return false
     }
@@ -653,11 +669,60 @@ async function initialize() {
   await taskService.cleanupFinishedTasks();
   await taskService.cleanupExpiredTasks();
 
+  // Nettoyer spécifiquement les tâches de surveillance de messages
+  await cleanupMonitoringTasks();
+
   // Restaurer les tâches en attente
   const restoredCount = await restorePendingMessageTasks();
 
   console.log(`[MessageMonitoring] Service initialisé - ${restoredCount} tâches restaurées`);
   return restoredCount;
+}
+
+/**
+ * Nettoie les tâches de surveillance obsolètes
+ * @returns {Promise<number>} - Nombre de tâches nettoyées
+ */
+async function cleanupMonitoringTasks() {
+  try {
+    console.log('[MessageMonitoring] Nettoyage des tâches de surveillance obsolètes...');
+
+    // Supprimer les tâches expirées ou terminées de la base de données
+    const now = new Date();
+    const deletedTasks = await prisma.task.deleteMany({
+      where: {
+        schedulerId: { startsWith: 'job-message-' },
+        OR: [
+          { status: { in: ['completed', 'stopped', 'failed'] } },
+          { nextExecution: { lt: now } }
+        ]
+      }
+    });
+
+    console.log(`[MessageMonitoring] ${deletedTasks.count} tâches de surveillance obsolètes nettoyées de la base de données`);
+
+    // Nettoyer également le planificateur en mémoire
+    let memoryTasksCleanedCount = 0;
+    const jobIds = scheduler.getAllJobIds();
+
+    for (const jobId of jobIds) {
+      if (jobId.startsWith('job-message-') && !pendingResponses.has(jobId.replace('job-message-', ''))) {
+        try {
+          scheduler.removeById(jobId);
+          memoryTasksCleanedCount++;
+        } catch (err) {
+          console.log(`[MessageMonitoring] Erreur lors de la suppression du job ${jobId}: ${err.message}`);
+        }
+      }
+    }
+
+    console.log(`[MessageMonitoring] ${memoryTasksCleanedCount} tâches de surveillance obsolètes nettoyées du planificateur en mémoire`);
+
+    return deletedTasks.count + memoryTasksCleanedCount;
+  } catch (error) {
+    console.error('[MessageMonitoring] Erreur lors du nettoyage des tâches de surveillance:', error);
+    return 0;
+  }
 }
 
 export const messageMonitoringService = {
@@ -666,5 +731,6 @@ export const messageMonitoringService = {
   shutdown,
   createScheduledTask,
   initialize,
-  restorePendingMessageTasks
+  restorePendingMessageTasks,
+  cleanupMonitoringTasks
 }
