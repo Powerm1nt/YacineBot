@@ -84,6 +84,41 @@ export async function sendLongMessage(channel, content, options = {}) {
 }
 
 /**
+ * Récupère les rôles d'un utilisateur dans un serveur
+ * @param {Object} guild - Serveur Discord
+ * @param {string} userId - ID de l'utilisateur
+ * @returns {Promise<string>} - Chaîne formatée des rôles de l'utilisateur
+ */
+export async function getUserRoles(guild, userId) {
+  if (!guild || !userId) return '';
+
+  let userRoles = '';
+  try {
+    const member = await guild.members.fetch(userId);
+    if (member && member.roles.cache.size > 0) {
+      const roleNames = member.roles.cache
+        .filter(role => role.name !== '@everyone')
+        .map(role => role.name)
+        .join(', ');
+
+      if (roleNames) {
+        userRoles = `[User roles in this server: ${roleNames}] `;
+      }
+
+      // Vérifier si l'utilisateur est administrateur
+      const isAdmin = member.permissions.has('ADMINISTRATOR');
+      if (isAdmin) {
+        userRoles += `[User has ADMINISTRATOR permission] `;
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching user roles:', error);
+  }
+
+  return userRoles;
+}
+
+/**
  * Divise un contenu en plusieurs parties sans dépasser la limite Discord
  * @param {string} content - Contenu à diviser
  * @param {number} maxLength - Longueur maximale de chaque partie (défaut: 1900)

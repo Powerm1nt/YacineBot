@@ -10,6 +10,7 @@ import {
 } from '../utils/mentionUtils.js'
 import { logMentionsInfo } from '../utils/logUtils.js'
 import { getContextKey } from '../utils/commandUtils.js'
+import { getUserRoles } from '../utils/messageUtils.js'
 import {
   getContextData,
   saveContextResponse,
@@ -314,7 +315,15 @@ export async function buildResponse(input, message, additionalInstructions = '')
       console.error('Error checking bot channel permissions:', error)
     }
 
-    contextInfo += `[In channel #${message.channel.name} of server ${message.guild.name}] ${botRoles}${channelPerms}`
+    // Récupérer les rôles de l'auteur du message
+    let authorRoles = ''
+    try {
+      authorRoles = await getUserRoles(message.guild, message.author.id)
+    } catch (error) {
+      console.error('Error fetching author roles:', error)
+    }
+
+    contextInfo += `[In channel #${message.channel.name} of server ${message.guild.name}] ${botRoles}${channelPerms}${authorRoles}`
   } else {
     contextInfo += `[In private message] `
   }

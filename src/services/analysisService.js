@@ -1279,6 +1279,26 @@ export async function monitorMessage(message, client, buildResponseFn) {
             console.log(`[MessageMonitoring] Conversation entre utilisateurs avec mention du bot - Intervention autorisée`);
           }
 
+          // Récupérer les rôles de l'auteur du message si on est dans un serveur
+          if (message.guild) {
+            try {
+              const { getUserRoles } = await import('../utils/messageUtils.js');
+              // On passe les rôles à buildResponseFn via le contexte additionnel
+              const authorRoles = await getUserRoles(message.guild, message.author.id);
+              if (authorRoles) {
+                console.log(`[MessageMonitoring] Rôles de l'auteur récupérés: ${authorRoles}`);
+                // Ajouter les rôles au contexte additionnel s'il y en a
+                if (additionalContext) {
+                  additionalContext += `\n\n${authorRoles}`;
+                } else {
+                  additionalContext = authorRoles;
+                }
+              }
+            } catch (error) {
+              console.error('[MessageMonitoring] Erreur lors de la récupération des rôles de l\'auteur:', error);
+            }
+          }
+
           // Construire et envoyer la réponse avec contexte additionnel si nécessaire
           const response = await buildResponseFn(messageInfo.content, message, additionalContext);
 
