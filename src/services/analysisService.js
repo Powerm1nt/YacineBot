@@ -220,7 +220,8 @@ export async function executeScheduledAnalysis (taskData) {
 2. Informations utiles ou importantes contenues dans le message
 3. Potentiel d'apporter de la valeur à la conversation
 4. Adéquation au canal dans lequel le message est posté (si spécifié)
-5. Si le message parle de technologie ou d'entraide technique, attribue un score très élevé
+5. Si le message parle de technologie ou d'entraide technique, attribue un score un peu plus élevé
+6. regarde le nom du salon, ne soit pas hors sujet. si a réponse est inferieur a 1 char, n'envoi pas de message.
 
 RÈGLES SPÉCIFIQUES:
 - Favorise fortement les messages qui parlent de technologie, programmation, développement, informatique ou entraide technique
@@ -311,7 +312,7 @@ export async function analyzeConversationRelevance (messages) {
 Analyse la conversation fournie et réponds UNIQUEMENT au format JSON brut (sans formatage markdown, sans bloc de code) avec deux propriétés:
 - relevanceScore: un nombre entre 0 et 1 indiquant la pertinence globale de la conversation
 - topicSummary: un résumé concis (max 100 caractères) des principaux sujets abordés
-- le relevanceScore sera le plus élevé si ça parle de technologie et entraide
+- le relevanceScore sera plus élevé si ça parle de technologie et entraide
 
 IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, renvoie uniquement l'objet JSON brut.`
 
