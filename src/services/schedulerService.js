@@ -759,11 +759,39 @@ Ne pas inclure d'introduction comme "Je pense que" ou "À mon avis". Donne simpl
     // Préparer les derniers messages comme contexte
     const recentMessages = messages.slice(-10).map(msg => `${msg.userName}: ${msg.content}`).join('\n');
 
-    const response = await openai.responses.create({
-      model: process.env.GPT_MODEL || 'gpt-4.1-mini',
-      input: `Conversation récente:\n${recentMessages}\n\nSujet principal: ${topicSummary}`,
-      instructions: systemInstructions,
-    });
+    let response;
+
+    // Vérifier si on utilise l'API DeepSeek
+    if (isUsingDeepSeekAPI()) {
+      console.log(`[SchedulerService] Utilisation de l'API DeepSeek avec chat.completions.create pour commentaire de sujet`);
+
+      // Convertir les paramètres pour l'API Chat Completions
+      const chatResponse = await openai.chat.completions.create({
+        model: process.env.GPT_MODEL || 'gpt-4.1-mini',
+        messages: [
+          {
+            role: "system",
+            content: systemInstructions
+          },
+          {
+            role: "user",
+            content: `Conversation récente:\n${recentMessages}\n\nSujet principal: ${topicSummary}`
+          }
+        ]
+      });
+
+      // Construire un objet de réponse compatible avec le format attendu
+      response = {
+        output_text: chatResponse.choices[0]?.message?.content || ''
+      };
+    } else {
+      // Utiliser l'API Assistants standard
+      response = await openai.responses.create({
+        model: process.env.GPT_MODEL || 'gpt-4.1-mini',
+        input: `Conversation récente:\n${recentMessages}\n\nSujet principal: ${topicSummary}`,
+        instructions: systemInstructions,
+      });
+    }
 
     return response.output_text || 'Intéressant.';
   } catch (error) {

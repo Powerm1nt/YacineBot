@@ -176,6 +176,8 @@ PERSONNALITÉ: Tu es notre pote sur Discord, hyper sympa, un peu débile sur les
 
 COMPORTEMENT HUMAIN: tu peux utiliser les reactions de discord, si on te le demande, tu dis que tu peux le faire. ne réponds pas si c'est des propos incorrectes, par exemple a la place de répondre Désolé, "je peux pas répondre à ce genre de questions", tu ne réponds pas. Si tu juges qu'une réponse n'est pas nécessaire (comme pour un simple accusé de réception, un message banal ou si rien n'apporte de valeur), tu peux retourner une chaîne vide pour ne pas répondre du tout. Cela rendra ton comportement plus humain et naturel. Ne réponds que lorsque c'est pertinent.
 
+IMPORTANT - FORMAT DE RÉPONSE: Ne jamais écrire les informations d'actions en italique (entre * ou _). Ne pas ajouter d'actions ou de descriptions de comportement dans le message. Si tu es sur le point d'écrire un message contenant des actions en italique, ne l'envoie pas du tout.
+
 CONTEXTE DE SALON: Adapte tes réponses au contexte du salon. Si tu es dans un salon spécifique comme #général, #jeux, #tech, etc., ajuste ton comportement en conséquence. Certains salons peuvent nécessiter des réponses plus professionnelles, d'autres plus décontractées.
 
 INFORMATIONS SUR TON STATUT DISCORD: Quand tu es sur un serveur Discord, prends en compte tes rôles et permissions. Si on te demande tes rôles ou permissions, consulte les informations contextuelles du message pour voir dans quel serveur tu es, puis explique les privilèges qui te sont accordés par tes rôles. Tu peux lire et répondre aux messages dans les canaux auxquels tu as accès. Si tu as des rôles d'administrateur ou de modérateur, tu dois indiquer que tu as ces privilèges mais que tu ne les utilises que sous instructions explicites des administrateurs du serveur.
@@ -867,10 +869,15 @@ export async function handleMessage(message) {
         clearInterval(typingInterval)
 
         const trimmedResponse = res.trim()
-        if (trimmedResponse !== '' && trimmedResponse !== '\' \'\' \'' && trimmedResponse.length > 1) {
+        // Vérifier si le message contient des actions en italique (entre * ou _)
+        const containsItalics = /(\*[^*]+\*|_[^_]+_)/.test(trimmedResponse)
+
+        if (trimmedResponse !== '' && trimmedResponse !== '\' \'\' \'' && trimmedResponse.length > 1 && !containsItalics) {
           console.log(`[AI] Envoi de la réponse au message ${message.id} - Longueur: ${res.length} caractères`)
           await message.reply(res)
           console.log(`[AI] Réponse envoyée avec succès au message ${message.id}`)
+        } else if (containsItalics) {
+          console.log(`[AI] Réponse contenant des actions en italique détectée, aucun message envoyé`)
         } else {
           console.log(`[AI] Réponse vide, trop courte ou invalide détectée ("${trimmedResponse}"), aucun message envoyé`)
         }

@@ -42,6 +42,7 @@ RÈGLES D'ENGAGEMENT ADAPTÉES:
 7. Si le message parle de technologie ou d'entraide technique, attribue un score un peu plus élevé
 8. regarde le nom du salon, ne soit pas hors sujet. si a réponse est inferieur a 1 char, n'envoi pas de message.
 9. evite de reagir a des emojis que tu ne connais pas, evite de répondre si c'est pour des messages trop anodin, ou alors utilise les reactions discord pour réagir au message.
+10. Ne pas écrire les informations d'actions en italique (entre * ou _), ne pas les ajouter dans le message. Sinon ne pas envoyer le message.
 EXCEPTIONS IMPORTANTES:
 1. Si un utilisateur parle de toi (Yassine) dans une conversation, même sans te mentionner directement, tu dois répondre poliment.
 2. Si la conversation concerne de la technologie ou de l'entraide, tu dois être particulièrement réactif et engagé.
@@ -266,10 +267,12 @@ export async function executeScheduledAnalysis (taskData) {
 4. Adéquation au canal dans lequel le message est posté (si spécifié)
 5. Si le message parle de technologie ou d'entraide technique, attribue un score un peu plus élevé
 6. regarde le nom du salon, ne soit pas hors sujet. si a réponse est inferieur a 1 char, n'envoi pas de message.
+7. Ne pas écrire les informations d'actions en italique (entre * ou _), ne pas les ajouter dans le message. Sinon ne pas envoyer le message.
 
 RÈGLES SPÉCIFIQUES:
 - Favorise fortement les messages qui parlent de technologie, programmation, développement, informatique ou entraide technique
 - Attribue un score plus élevé aux messages qui semblent demander de l'aide ou qui pourraient bénéficier d'une réponse
+- Si le message contient des actions en italique, attribue un score de 0 pour éviter de l'envoyer
 
 Réponds UNIQUEMENT au format JSON brut (sans formatage markdown, sans bloc de code) avec deux propriétés:
 - relevanceScore: un nombre entre 0 et 1 (0 = non pertinent, 1 = très pertinent)
@@ -386,6 +389,7 @@ Analyse la conversation fournie et réponds UNIQUEMENT au format JSON brut (sans
 - relevanceScore: un nombre entre 0 et 1 indiquant la pertinence globale de la conversation
 - topicSummary: un résumé concis (max 100 caractères) des principaux sujets abordés
 - le relevanceScore sera plus élevé si ça parle de technologie et entraide
+- Ne pas écrire les informations d'actions en italique (entre * ou _), ne pas les ajouter dans le message. Sinon ne pas envoyer le message.
 
 IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, renvoie uniquement l'objet JSON brut.`
 
@@ -1279,8 +1283,14 @@ export async function monitorMessage(message, client, buildResponseFn) {
 
           // Construire et envoyer la réponse avec contexte additionnel si nécessaire
           const response = await buildResponseFn(messageInfo.content, message, additionalContext);
-          if (response && response.trim() !== '' && response !== '\' \'\' \'' && response.trim().length > 1) {
+
+          // Vérifier si le message contient des actions en italique (entre * ou _)
+          const containsItalics = response ? /(\*[^*]+\*|_[^_]+_)/.test(response.trim()) : false;
+
+          if (response && response.trim() !== '' && response !== '\' \'\' \'' && response.trim().length > 1 && !containsItalics) {
             await message.reply(response);
+          } else if (containsItalics) {
+            console.log(`[MessageMonitoring] Réponse contenant des actions en italique détectée, aucun message envoyé`);
           } else {
             console.log(`[MessageMonitoring] Réponse vide, trop courte ou invalide détectée, aucun message envoyé`);
           }
