@@ -221,7 +221,7 @@ export async function saveContextResponse(message, responseId) {
 
     if (message.content) {
       // Analyser la pertinence du message de l'utilisateur
-      let relevanceScore = 0.5;
+      let relevanceScore = 0.2;
       let hasKeyInfo = false;
 
       try {

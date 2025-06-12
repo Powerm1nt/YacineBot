@@ -150,7 +150,7 @@ import { prisma } from '../services/prisma.js';
     // Si la conversation est active, répondre avec un seuil très bas pour maximiser les interactions
     if (conversationService.isActiveConversation(channelId, guildId)) {
       // On utilise un seuil très bas pour favoriser l'engagement et la participation
-      const moderateThreshold = 0.5;
+      const moderateThreshold = 0.6;
       shouldRespond = relevanceAnalysis.relevanceScore >= moderateThreshold || relevanceAnalysis.hasKeyInfo;
       console.log(`[MessageEvaluator] Conversation active - Seuil de pertinence abaissé à ${moderateThreshold}`);
 
