@@ -8,6 +8,8 @@ Un bot Discord qui utilise l'API OpenAI avec Supabase et Prisma pour la persista
 - Répond aux réponses directes à ses messages
 - Supporte la réinitialisation des conversations avec "reset conversation"
 - Utilise l'API OpenAI Responses pour une génération de réponses plus rapide
+- Analyse les images et documents PDF partagés dans les conversations
+- Recherche et partage des GIFs via l'API Tenor
 
 
 ## Configuration Docker
@@ -168,6 +170,7 @@ Les variables suivantes peuvent être configurées dans le fichier `.env` :
 - `DISCORD_TOKEN` : Token d'authentification Discord
 - `ENABLE_AUTO_MESSAGES` : Activer/désactiver les messages automatiques
 - `MIN_DELAY_MINUTES`, `MAX_DELAY_MINUTES` : Plage de délai pour les messages automatiques
+- `TENOR_API_KEY` : Clé API pour Tenor (service de GIFs). Une clé par défaut est fournie, mais il est recommandé d'obtenir votre propre clé pour un usage en production.
 - Et plus encore...
 
 Consultez le fichier `.env.example` pour la liste complète des variables disponibles.
@@ -194,3 +197,80 @@ yarn start
 
 ## Remarques
 Ce bot utilise l'API OpenAI Responses et conserve le contexte des conversations entre les messages. La migration depuis l'API Assistants (dépréciée) a été effectuée pour assurer la pérennité de l'application. Les données sont stockées dans une base de données Supabase pour une persistance efficace.
+
+## Fonctionnalité GIF (Tenor API)
+
+Le bot intègre désormais la possibilité de rechercher et partager des GIFs via l'API Tenor de Google. Cette fonctionnalité est implémentée avec une architecture MCP (Message Consumer Processor) pour une meilleure séparation des responsabilités.
+
+### Architecture MCP
+
+L'implémentation utilise le pattern MCP (Message Consumer Processor) pour communiquer avec l'API Tenor :
+
+1. Le module `tenorApiMcp.js` gère toutes les communications avec l'API Tenor
+2. Les requêtes sont envoyées sous forme de messages avec un type et une charge utile (payload)
+3. Le service `attachmentService.js` utilise le MCP pour effectuer les opérations liées aux GIFs
+
+Cette architecture permet :
+- Une meilleure séparation des responsabilités
+- Une facilité de test et de maintenance
+- Une extensibilité pour ajouter de nouvelles fonctionnalités
+
+### Configuration de l'API Tenor
+
+1. Par défaut, une clé API limitée est fournie pour les tests
+2. Pour un usage en production, obtenez votre propre clé API Google Cloud avec l'API Tenor activée
+3. Ajoutez votre clé dans le fichier `.env` : `TENOR_API_KEY=votre_clé_api`
+
+### Utilisation des fonctions GIF
+
+```javascript
+// Méthode 1: Via le service attachmentService (recommandé)
+import { attachmentService } from './services/attachmentService.js';
+
+// Rechercher des GIFs
+const gifs = await attachmentService.searchGifs('happy', 5); // Recherche 5 GIFs "happy"
+
+// Obtenir un GIF aléatoire
+const randomGif = await attachmentService.getRandomGif('cat'); // GIF aléatoire de chat
+
+// Obtenir l'URL d'un GIF
+const gifUrl = attachmentService.getGifUrl(gifObject, 'gif'); // Format complet
+const mediumUrl = attachmentService.getGifUrl(gifObject, 'mediumgif'); // Format moyen
+const tinyUrl = attachmentService.getGifUrl(gifObject, 'tinygif'); // Format miniature
+
+// Préparer un GIF pour Discord
+const discordGif = attachmentService.prepareGifForDiscord(gifObject);
+// Utilisation dans un message Discord :
+// message.channel.send({ content: 'Voici un GIF!', files: [discordGif.url] });
+
+// Méthode 2: Utilisation directe du MCP (pour des cas avancés)
+import { tenorApiMcp } from './utils/tenorApiMcp.js';
+
+// Rechercher des GIFs
+const searchMessage = {
+  type: tenorApiMcp.MESSAGE_TYPES.SEARCH_GIFS,
+  payload: {
+    searchTerm: 'coding',
+    limit: 5
+  }
+};
+const searchResponse = await tenorApiMcp.processMessage(searchMessage);
+const gifs = searchResponse.payload;
+
+// Obtenir un GIF aléatoire
+const randomMessage = {
+  type: tenorApiMcp.MESSAGE_TYPES.GET_RANDOM_GIF,
+  payload: {
+    searchTerm: 'happy'
+  }
+};
+const randomResponse = await tenorApiMcp.processMessage(randomMessage);
+const randomGif = randomResponse.payload;
+```
+
+### Scripts de test
+
+Deux scripts de test sont disponibles pour démontrer l'utilisation de ces fonctions :
+
+1. `scripts/test-gif-api.js` - Teste les fonctions de base du service attachmentService
+2. `scripts/test-tenor-mcp.js` - Teste l'implémentation MCP et son intégration avec attachmentService

@@ -145,8 +145,6 @@ STYLE: Envoi des messages très courts, comme dans une conversation lambda entre
 
 PERSONNALITÉ: Tu es notre pote sur Discord, hyper sympa, un peu débile sur les bords. Assure-toi de varier tes interactions pour rester engageant. EVITE le cringe, et ne mets pas des hashtags ou des trucs façons linkedin.
 
-MAIN CHARACTER: Tu dois être comme le celebre youtubeur Asterion, utilise les meilleurs répliques pour pouvoir baser ton comportement et ta personalité la dessus.
-
 COMPORTEMENT HUMAIN: tu peux utiliser les reactions de discord, si on te le demande, tu dis que tu peux le faire. ne réponds pas si c'est des propos incorrectes, par exemple a la place de répondre Désolé, "je peux pas répondre à ce genre de questions", tu ne réponds pas. Si tu juges qu'une réponse n'est pas nécessaire (comme pour un simple accusé de réception, un message banal ou si rien n'apporte de valeur), tu peux retourner une chaîne vide pour ne pas répondre du tout. Cela rendra ton comportement plus humain et naturel. Ne réponds que lorsque c'est pertinent.
 
 IMPORTANT - FORMAT DE RÉPONSE: Ne jamais écrire les informations d'actions en italique (entre * ou _). Ne pas ajouter d'actions ou de descriptions de comportement dans le message. Si tu es sur le point d'écrire un message contenant des actions en italique, ne l'envoie pas du tout.
@@ -172,14 +170,19 @@ RÈGLES D'ENGAGEMENT ADAPTÉES:
 7. Si le message parle de technologie ou d'entraide technique, attribue un score un peu plus élevé
 8. regarde le nom du salon, ne soit pas hors sujet. si a réponse est inferieur a 1 char, n'envoi pas de message.
 9. evite de reagir a des emojis que tu ne connais pas, evite de répondre si c'est pour des messages trop anodin, ou alors utilise les reactions discord pour réagir au message.
-10. ne réponds pas aux mentions indirectes (messages commencant par une mention qui ne t'ai pas destiné) sauf si le message a un bon niveau de relevanceScore.
-
+10. ne réponds pas aux mentions indirectes (messages commencant par une mention qui ne t'ai pas destiné) sauf si le message a un haut niveau de relevanceScore.
+11. tu peux mentionner ton créateur si c'est pertinent mais n'en n'abuses pas trop.
+12. ne réponds pas aux messages insignifiants, ou trop hors contexte.
+13. si le message n'est pas correcte, ne réponds pas.
+14. disable Désolé, je ne peux pas répondre à ce genre de messages., ne réponds pas.
 EXCEPTIONS IMPORTANTES:
 1. Si un utilisateur parle de toi (Yassine) dans une conversation, même sans te mentionner directement, tu dois répondre poliment.
 2. Si la conversation concerne de la technologie ou de l'entraide, tu dois être particulièrement réactif et engagé.
 3. réponds toujours à lutecy, c'est ta meilleure pote (c'est ta crush)! son id c'est 912702371132497940 ou <@912702371132497940>
 
-ANALYSE DE PIÈCES JOINTES: Je peux analyser les images et les documents PDF que les utilisateurs m'envoient. Quand je reçois une pièce jointe, je la décris en détail. Pour les images, je décris ce que je vois, y compris les éléments visuels, les personnes, le texte visible, et le contexte. Pour les PDFs, je résume leur contenu et les informations importantes qu'ils contiennent. N'hésite pas à m'envoyer des images ou des PDFs pour que je les analyse.`
+ANALYSE DE PIÈCES JOINTES: Je peux analyser les images et les documents PDF que les utilisateurs m'envoient. Quand je reçois une pièce jointe, je la décris en détail. Pour les images, je décris ce que je vois, y compris les éléments visuels, les personnes, le texte visible, et le contexte. Pour les PDFs, je résume leur contenu et les informations importantes qu'ils contiennent. N'hésite pas à m'envoyer des images ou des PDFs pour que je les analyse.
+
+GIFS: Si un utilisateur me demande d'envoyer un GIF sur un sujet particulier, je peux rechercher et partager un GIF correspondant. Par exemple, si on me demande "envoie un gif de chat" ou "montre-moi un gif drôle", je peux répondre avec un GIF approprié. J'utilise l'API Tenor pour trouver des GIFs pertinents.`
 
 // Initialiser le client OpenAI
 let openAIClient = null;
@@ -544,6 +547,43 @@ export async function buildResponse(input, message, additionalInstructions = '')
   }
 }
 
+// Fonction pour détecter si un message demande un GIF et extraire le terme de recherche
+export function detectGifRequest(messageContent) {
+  if (!messageContent) return null;
+
+  const messageContentLower = messageContent.toLowerCase();
+
+  // Patterns pour détecter une demande de GIF
+  const gifPatterns = [
+    // Français
+    /envo(ie|yer|i) (un |une |des |le |la |les )?(gif|gifs) (de |d'|du |des |sur |avec |à propos de |concernant |montrant )([a-zàáâäæçèéêëìíîïòóôöœùúûüÿ0-9\s'-]+)/i,
+    /montre (un |une |des |le |la |les )?(gif|gifs) (de |d'|du |des |sur |avec |à propos de |concernant |montrant )([a-zàáâäæçèéêëìíîïòóôöœùúûüÿ0-9\s'-]+)/i,
+    /cherche (un |une |des |le |la |les )?(gif|gifs) (de |d'|du |des |sur |avec |à propos de |concernant |montrant )([a-zàáâäæçèéêëìíîïòóôöœùúûüÿ0-9\s'-]+)/i,
+    /trouve (un |une |des |le |la |les )?(gif|gifs) (de |d'|du |des |sur |avec |à propos de |concernant |montrant )([a-zàáâäæçèéêëìíîïòóôöœùúûüÿ0-9\s'-]+)/i,
+    /(gif|gifs) (de |d'|du |des |sur |avec |à propos de |concernant |montrant )([a-zàáâäæçèéêëìíîïòóôöœùúûüÿ0-9\s'-]+)/i,
+
+    // English
+    /send (a |an |the |some )?(gif|gifs) (of |about |with |showing |related to )([a-z0-9\s'-]+)/i,
+    /show (a |an |the |some )?(gif|gifs) (of |about |with |showing |related to )([a-z0-9\s'-]+)/i,
+    /find (a |an |the |some )?(gif|gifs) (of |about |with |showing |related to )([a-z0-9\s'-]+)/i,
+    /search (a |an |the |some )?(gif|gifs) (of |about |with |showing |related to )([a-z0-9\s'-]+)/i,
+    /(gif|gifs) (of |about |with |showing |related to )([a-z0-9\s'-]+)/i
+  ];
+
+  for (const pattern of gifPatterns) {
+    const match = messageContentLower.match(pattern);
+    if (match) {
+      // Le terme de recherche est dans le dernier groupe de capture
+      const searchTerm = match[match.length - 1].trim();
+      if (searchTerm && searchTerm.length > 0) {
+        return searchTerm;
+      }
+    }
+  }
+
+  return null;
+}
+
 // Fonction pour gérer les messages entrants
 export async function handleMessage(message) {
   try {
@@ -752,6 +792,49 @@ export async function handleMessage(message) {
       return
     }
 
+    // Vérifier si le message demande un GIF
+    const gifSearchTerm = detectGifRequest(message.content);
+    if (gifSearchTerm) {
+      console.log(`[AI] Demande de GIF détectée avec le terme: "${gifSearchTerm}"`);
+
+      try {
+        // Indiquer que le bot est en train d'écrire
+        await message.channel.sendTyping();
+
+        // Rechercher un GIF aléatoire correspondant au terme
+        const randomGif = await attachmentService.getRandomGif(gifSearchTerm);
+
+        if (randomGif) {
+          // Préparer le GIF pour Discord
+          const discordGif = attachmentService.prepareGifForDiscord(randomGif);
+
+          if (discordGif && discordGif.url) {
+            console.log(`[AI] GIF trouvé: "${randomGif.title}" - URL: ${discordGif.url}`);
+
+            // Envoyer le GIF avec un message
+            await message.reply({ 
+              content: `Voici un GIF de "${gifSearchTerm}" pour toi!`, 
+              files: [discordGif.url] 
+            });
+
+            console.log(`[AI] GIF envoyé avec succès en réponse au message ${message.id}`);
+            return; // Sortir de la fonction après avoir envoyé le GIF
+          } else {
+            console.log(`[AI] GIF trouvé mais URL invalide`);
+            // Continuer avec une réponse normale
+          }
+        } else {
+          console.log(`[AI] Aucun GIF trouvé pour le terme: "${gifSearchTerm}"`);
+          // Informer l'utilisateur qu'aucun GIF n'a été trouvé
+          await message.reply(`Désolé, je n'ai pas trouvé de GIF pour "${gifSearchTerm}". Essaie avec un autre terme!`);
+          return; // Sortir de la fonction après avoir informé l'utilisateur
+        }
+      } catch (error) {
+        console.error('Erreur lors de la recherche ou de l\'envoi du GIF:', error);
+        // Continuer avec une réponse normale en cas d'erreur
+      }
+    }
+
     // Le message a déjà été stocké et ajouté à la surveillance plus haut dans le code
     console.log(`[AI] Préparation de la réponse au message ${message.id}`)
 
@@ -907,5 +990,6 @@ export const aiService = {
   addRelevantReaction,
   setupCleanupInterval,
   systemInstructions,
-  getOpenAIClient
+  getOpenAIClient,
+  detectGifRequest
 }

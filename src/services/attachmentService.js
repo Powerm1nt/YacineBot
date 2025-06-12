@@ -1,5 +1,5 @@
 /**
- * Service d'analyse des pièces jointes (images, PDFs, etc.)
+ * Service d'analyse des pièces jointes (images, PDFs, etc.) et de gestion des GIFs
  */
 import fetch from 'node-fetch';
 import { createReadStream } from 'fs';
@@ -7,6 +7,7 @@ import { Readable } from 'stream';
 import { FormData } from 'formdata-node';
 import { OpenAI } from 'openai/client.mjs';
 import dotenv from 'dotenv';
+import { tenorApiMcp } from '../utils/tenorApiMcp.js';
 
 // Regex pour détecter les URL d'images dans un texte
 const IMAGE_URL_REGEX = /(https?:\/\/\S+\.(jpg|jpeg|png|gif|webp)(\?\S*)?)/gi;
@@ -291,6 +292,108 @@ async function analyzeMessageAttachments(message) {
   }
 }
 
+/**
+ * Recherche des GIFs sur Tenor en fonction d'un terme de recherche
+ * @param {string} searchTerm - Le terme de recherche pour les GIFs
+ * @param {number} limit - Nombre maximum de résultats (défaut: 8)
+ * @returns {Promise<Array>} - Liste des GIFs correspondants
+ */
+async function searchGifs(searchTerm, limit = 8) {
+  try {
+    if (!searchTerm) {
+      throw new Error('Terme de recherche requis pour chercher des GIFs');
+    }
+
+    console.log(`[AttachmentService] Recherche de GIFs pour: "${searchTerm}"`);
+
+    // Utiliser le MCP pour communiquer avec l'API Tenor
+    const message = {
+      type: tenorApiMcp.MESSAGE_TYPES.SEARCH_GIFS,
+      payload: {
+        searchTerm,
+        limit,
+        mediaFilter: 'gif,tinygif,mediumgif'
+      }
+    };
+
+    const response = await tenorApiMcp.processMessage(message);
+    return response.payload || [];
+  } catch (error) {
+    console.error('Erreur lors de la recherche de GIFs:', error);
+    throw error;
+  }
+}
+
+/**
+ * Obtient un GIF aléatoire correspondant à un terme de recherche
+ * @param {string} searchTerm - Le terme de recherche pour les GIFs
+ * @returns {Promise<Object|null>} - Un GIF aléatoire ou null si aucun n'est trouvé
+ */
+async function getRandomGif(searchTerm) {
+  try {
+    if (!searchTerm) {
+      console.log(`[AttachmentService] Terme de recherche manquant pour obtenir un GIF aléatoire`);
+      return null;
+    }
+
+    console.log(`[AttachmentService] Recherche d'un GIF aléatoire pour: "${searchTerm}"`);
+
+    // Utiliser le MCP pour obtenir un GIF aléatoire
+    const message = {
+      type: tenorApiMcp.MESSAGE_TYPES.GET_RANDOM_GIF,
+      payload: {
+        searchTerm,
+        limit: 20 // Récupérer plus de GIFs pour une meilleure variété
+      }
+    };
+
+    const response = await tenorApiMcp.processMessage(message);
+    return response.payload;
+  } catch (error) {
+    console.error('Erreur lors de la récupération d\'un GIF aléatoire:', error);
+    return null;
+  }
+}
+
+/**
+ * Obtient l'URL d'un GIF à partir d'un objet GIF Tenor
+ * @param {Object} gif - L'objet GIF retourné par l'API Tenor
+ * @param {string} format - Format souhaité ('gif', 'mediumgif', 'tinygif', etc.)
+ * @returns {string|null} - L'URL du GIF ou null si non disponible
+ */
+function getGifUrl(gif, format = 'gif') {
+  if (!gif || !gif.media_formats || !gif.media_formats[format]) {
+    return null;
+  }
+
+  return gif.media_formats[format].url;
+}
+
+/**
+ * Prépare un objet GIF pour l'envoi dans un message Discord
+ * @param {Object} gif - L'objet GIF retourné par l'API Tenor
+ * @returns {Object} - Objet contenant les informations du GIF pour Discord
+ */
+function prepareGifForDiscord(gif) {
+  if (!gif) return null;
+
+  // Récupérer différents formats d'URL
+  const gifUrl = getGifUrl(gif, 'gif');
+  const mediumGifUrl = getGifUrl(gif, 'mediumgif') || gifUrl;
+  const tinyGifUrl = getGifUrl(gif, 'tinygif') || mediumGifUrl;
+
+  if (!gifUrl) return null;
+
+  return {
+    url: gifUrl,
+    previewUrl: mediumGifUrl || tinyGifUrl,
+    thumbnailUrl: tinyGifUrl,
+    title: gif.title || 'GIF from Tenor',
+    content_description: gif.content_description || '',
+    source: 'Tenor'
+  };
+}
+
 export const attachmentService = {
   analyzeMessageAttachments,
   analyzeAttachment,
@@ -298,5 +401,10 @@ export const attachmentService = {
   analyzePDF,
   analyzeMessageContent,
   analyzeImageUrlsFromText,
-  extractImageUrls
+  extractImageUrls,
+  // Nouvelles fonctions pour les GIFs
+  searchGifs,
+  getRandomGif,
+  getGifUrl,
+  prepareGifForDiscord
 };
