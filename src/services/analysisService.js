@@ -314,7 +314,8 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
             role: "user",
             content: `${channelContext}${contextInfo ? 'Contexte: ' + contextInfo + '\n\n' : ''}Message à analyser: ${content}`
           }
-        ]
+        ],
+        max_tokens: 500 // Limite appropriée pour l'analyse de messages
       });
 
       // Construire un objet de réponse compatible avec le format attendu
@@ -327,6 +328,7 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
         model: process.env.ANALYSIS_MODEL || 'gpt-4.1-nano',
         input: `${channelContext}${contextInfo ? 'Contexte: ' + contextInfo + '\n\n' : ''}Message à analyser: ${content}`,
         instructions: systemInstructions,
+        max_tokens: 500 // Limite appropriée pour l'analyse de messages
       });
     }
 
@@ -412,7 +414,8 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
             role: "user",
             content: `Conversation à analyser:\n${messageContent}`
           }
-        ]
+        ],
+        max_tokens: 500 // Limite appropriée pour l'analyse de conversation
       });
 
       // Construire un objet de réponse compatible avec le format attendu
@@ -425,6 +428,7 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
         model: process.env.ANALYSIS_MODEL || 'gpt-4.1-nano',
         input: `Conversation à analyser:\n${messageContent}`,
         instructions: systemInstructions,
+        max_tokens: 500 // Limite appropriée pour l'analyse de conversation
       });
     }
 

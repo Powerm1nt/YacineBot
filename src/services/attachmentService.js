@@ -72,6 +72,7 @@ async function analyzeImage(imageData) {
           ]
         }
       ],
+      max_tokens: 1500 // Limite appropriée pour les descriptions d'images détaillées
     });
 
     return response.choices[0]?.message?.content || "Je n'ai pas pu analyser cette image.";

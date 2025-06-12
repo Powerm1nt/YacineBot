@@ -716,7 +716,8 @@ Ne pas inclure d'introduction comme "Alors," ou "Au fait,". Donne simplement la 
             role: "user",
             content: `Conversation récente:\n${recentMessages}\n\nSujet principal: ${topicSummary}`
           }
-        ]
+        ],
+        max_tokens: 100 // Limite appropriée pour les questions courtes
       });
 
       // Construire un objet de réponse compatible avec le format attendu
@@ -729,6 +730,7 @@ Ne pas inclure d'introduction comme "Alors," ou "Au fait,". Donne simplement la 
         model: process.env.GPT_MODEL || 'gpt-4.1-mini',
         input: `Conversation récente:\n${recentMessages}\n\nSujet principal: ${topicSummary}`,
         instructions: systemInstructions,
+        max_tokens: 100 // Limite appropriée pour les questions courtes
       });
     }
 
@@ -781,7 +783,8 @@ Ne pas inclure d'introduction comme "Je pense que" ou "À mon avis". Donne simpl
             role: "user",
             content: `Conversation récente:\n${recentMessages}\n\nSujet principal: ${topicSummary}`
           }
-        ]
+        ],
+        max_tokens: 100 // Limite appropriée pour les commentaires courts
       });
 
       // Construire un objet de réponse compatible avec le format attendu
@@ -794,6 +797,7 @@ Ne pas inclure d'introduction comme "Je pense que" ou "À mon avis". Donne simpl
         model: process.env.GPT_MODEL || 'gpt-4.1-mini',
         input: `Conversation récente:\n${recentMessages}\n\nSujet principal: ${topicSummary}`,
         instructions: systemInstructions,
+        max_tokens: 100 // Limite appropriée pour les commentaires courts
       });
     }
 

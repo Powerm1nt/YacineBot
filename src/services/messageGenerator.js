@@ -60,7 +60,8 @@ Utilise le tutoiement et un ton décontracté entre amis.`;
             role: "user",
             content: `Génère une question ${randomCategory} pour ${username}`
           }
-        ]
+        ],
+        max_tokens: 100 // Limite appropriée pour les questions courtes
       });
 
       // Construire un objet de réponse compatible avec le format attendu
@@ -73,6 +74,7 @@ Utilise le tutoiement et un ton décontracté entre amis.`;
         model: process.env.GPT_MODEL || 'gpt-4.1-mini',
         input: `Génère une question ${randomCategory} pour ${username}`,
         instructions: systemPrompt,
+        max_tokens: 100 // Limite appropriée pour les questions courtes
       });
     }
 
@@ -129,7 +131,8 @@ Ne pas ajouter d'introduction, donne juste la question.`;
             role: "user",
             content: `Génère une question ${randomCategory} pour un groupe`
           }
-        ]
+        ],
+        max_tokens: 100 // Limite appropriée pour les questions courtes
       });
 
       // Construire un objet de réponse compatible avec le format attendu
@@ -142,6 +145,7 @@ Ne pas ajouter d'introduction, donne juste la question.`;
         model: process.env.GPT_MODEL || 'gpt-4.1-mini',
         input: `Génère une question ${randomCategory} pour un groupe`,
         instructions: systemPrompt,
+        max_tokens: 100 // Limite appropriée pour les questions courtes
       });
     }
 

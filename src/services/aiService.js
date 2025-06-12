@@ -461,6 +461,7 @@ export async function buildResponse(input, message, additionalInstructions = '')
             content: responseParams.input
           }
         ],
+        max_tokens: 1000, // Limite appropriée pour les réponses de conversation
         // Ajouter d'autres paramètres si nécessaire
       };
 
@@ -480,6 +481,8 @@ export async function buildResponse(input, message, additionalInstructions = '')
       };
     } else {
       // Utiliser l'API Assistants standard
+      // Ajouter max_tokens au responseParams
+      responseParams.max_tokens = 1000; // Limite appropriée pour les réponses de conversation
       response = await ai.responses.create(responseParams);
     }
 
