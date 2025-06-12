@@ -338,6 +338,14 @@ export async function syncMemoryCache() {
 }
 
 // Exporter un objet pour les imports nommés
+/**
+ * Retourne le nombre de tâches actives dans le système
+ * @returns {number} Nombre de tâches actives
+ */
+export function getActiveTaskCount() {
+  return tasksMemoryCache.size;
+}
+
 export const taskService = {
   saveTask,
   getAllTasks,
@@ -348,5 +356,6 @@ export const taskService = {
   deleteAllTasks,
   deleteTasksByType,
   cleanupExpiredTasks,
-  syncMemoryCache
+  syncMemoryCache,
+  getActiveTaskCount
 };

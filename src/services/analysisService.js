@@ -241,12 +241,21 @@ export async function updateConversationRelevance(channelId, guildId = null, cli
     // Vérifier si le bot a les permissions d'écriture dans ce canal
     if (client) {
       try {
-        const channel = await client.channels.fetch(channelId);
+        const formattedChannelId = channelId.split("_")[1];
+        const channel = await client.channels.fetch(formattedChannelId);
         if (channel) {
-          const botPermissions = channel.permissionsFor(process.env.CLIENT_ID);
-          if (!botPermissions || !botPermissions.has('SEND_MESSAGES')) {
-            console.log(`[AnalysisService] Pas de permission d'écriture dans le canal ${channelId} - Analyse annulée`);
-            return null;
+          // Vérifier si le canal est dans une guilde (serveur)
+          if (channel.guild) {
+            // Obtenir l'objet membre de la guilde qui représente le bot
+            const botMember = channel.guild.members.me || await channel.guild.members.fetch(client.user.id);
+            const botPermissions = channel.permissionsFor(botMember);
+            if (!botPermissions || !botPermissions.has('SEND_MESSAGES')) {
+              console.log(`[AnalysisService] Pas de permission d'écriture dans le canal ${channelId} - Analyse annulée`);
+              return null;
+            }
+          } else {
+            // Pour les canaux hors guilde (DM par exemple), on suppose que le bot peut écrire
+            console.log(`[AnalysisService] Canal ${channelId} hors serveur - Permission d'écriture supposée`);
           }
         }
       } catch (permError) {
@@ -432,6 +441,23 @@ export async function getSharedConversations(userId) {
   }
 }
 
+/**
+ * Vérifie si le système a atteint la limite de tâches actives
+ * @returns {boolean} - true si la limite est atteinte, false sinon
+ */
+function isTaskLimitReached() {
+  try {
+    // Import dynamique pour éviter les références circulaires
+    const MAX_ACTIVE_TASKS = parseInt(process.env.MAX_ACTIVE_TASKS || '100', 10);
+
+    // Vérifier avec taskService combien de tâches sont actives
+    return taskService.getActiveTaskCount() >= MAX_ACTIVE_TASKS;
+  } catch (error) {
+    console.error('Erreur lors de la vérification de la limite de tâches:', error);
+    return false; // Par défaut, on suppose que la limite n'est pas atteinte
+  }
+}
+
 export const analysisService = {
   analyzeMessageRelevance,
   analyzeConversationRelevance,
@@ -439,5 +465,6 @@ export const analysisService = {
   shareConversation,
   getSharedConversations,
   isWaitingForMoreMessages,
-  startMessageBatchDelay
+  startMessageBatchDelay,
+  isTaskLimitReached
 };
