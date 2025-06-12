@@ -243,6 +243,66 @@ function isActiveHour (startHour = 8, endHour = 23) {
 }
 
 /**
+ * Initialise les gestionnaires de tâches spécifiques
+ */
+export async function initTaskHandlers() {
+  console.log('[Scheduler] Initialisation des gestionnaires de tâches spécifiques...');
+
+  // Gestionnaire pour les tâches d'analyse
+  const analysisTaskHandler = new AsyncTask(
+    'analysis-task-handler',
+    async () => {
+      try {
+        // Récupérer toutes les tâches d'analyse en attente
+        const analysisTasks = await taskService.getTasksByType('analysis');
+
+        if (analysisTasks.length === 0) {
+          return;
+        }
+
+        console.log(`[Scheduler] ${analysisTasks.length} tâches d'analyse à traiter`);
+
+        // Traiter chaque tâche d'analyse
+        for (const task of analysisTasks) {
+          // Vérifier si la tâche est prête à être exécutée
+          if (new Date(task.nextExecution) <= new Date()) {
+            console.log(`[Scheduler] Traitement de la tâche d'analyse ${task.schedulerId}`);
+
+            try {
+              // Mettre à jour le statut de la tâche
+              await taskService.updateTaskStatus(task.schedulerId, 'running');
+
+              // Exécuter l'analyse
+              const { executeScheduledAnalysis } = await import('./analysisService.js');
+              const analysisResult = await executeScheduledAnalysis(task.data);
+
+              console.log(`[Scheduler] Analyse terminée - Résultat: ${JSON.stringify(analysisResult)}`);
+
+              // Marquer la tâche comme terminée
+              await taskService.updateTaskStatus(task.schedulerId, 'completed');
+
+              // Supprimer la tâche terminée
+              await taskService.deleteTask(task.schedulerId);
+            } catch (error) {
+              console.error(`[Scheduler] Erreur lors du traitement de la tâche d'analyse ${task.schedulerId}:`, error);
+              await taskService.updateTaskStatus(task.schedulerId, 'failed');
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[Scheduler] Erreur dans le gestionnaire de tâches d\'analyse:', error);
+      }
+    }
+  );
+
+  // Ajouter la tâche au planificateur pour qu'elle s'exécute toutes les 5 secondes
+  const analysisJob = new SimpleIntervalJob({ seconds: 5 }, analysisTaskHandler);
+  scheduler.addSimpleIntervalJob(analysisJob);
+
+  console.log('[Scheduler] Gestionnaires de tâches spécifiques initialisés');
+}
+
+/**
  * Initialise le planificateur de tâches avec une approche basée prioritairement sur la base de données
  * @param {Object} client - Client Discord
  */
@@ -291,6 +351,9 @@ export async function initScheduler(client) {
     // Synchroniser le cache mémoire avec la base de données
     const restoredCount = await taskService.syncMemoryCache();
     console.log(`[Scheduler] Service de tâches initialisé: ${cleanedExpired + finishedTasksResult.count} tâches nettoyées, ${restoredCount} tâches restaurées en mémoire`);
+
+    // Initialiser les gestionnaires de tâches spécifiques
+    await initTaskHandlers();
 
     // Supprimer les anciennes tâches de type random-question-task qui n'existent plus
     try {
