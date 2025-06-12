@@ -95,6 +95,13 @@ export async function monitorMessage(message, client, buildResponseFn) {
 
   const scheduledTime = new Date(Date.now() + delayInMs);
 
+  // Vérifier si la limite de tâches actives est atteinte
+  const MAX_ACTIVE_TASKS = parseInt(process.env.MAX_ACTIVE_TASKS || '100', 10);
+  if (pendingResponses.size >= MAX_ACTIVE_TASKS) {
+    console.log(`[MessageMonitoring] Limite de tâches atteinte (${MAX_ACTIVE_TASKS}) - Message ${messageId} ignoré`);
+    return;
+  }
+
   // Vérifier si le message est une réponse entre utilisateurs
   let isReplyBetweenUsers = false;
   if (message.reference) {
@@ -352,6 +359,19 @@ async function createScheduledTask(client, channelId, guildId, relevanceScore, t
       console.log(`[MessageMonitoring] Le service de planification est désactivé - Création de tâche annulée pour le canal ${channelId}`);
       return false;
     }
+
+        // Vérifier le nombre de tâches actives et en attente
+        const MAX_ACTIVE_TASKS = parseInt(process.env.MAX_ACTIVE_TASKS || '100', 10);
+        const activeTasks = await prisma.task.count({
+          where: {
+            status: { in: ['active', 'pending'] }
+          }
+        });
+
+        if (activeTasks >= MAX_ACTIVE_TASKS) {
+          console.log(`[MessageMonitoring] Limite de tâches atteinte (${activeTasks}/${MAX_ACTIVE_TASKS}). La tâche pour le canal ${channelId} ne sera pas créée.`);
+          return false;
+        }
 
     if (guildId && !(await isGuildEnabled(guildId))) {
       console.log(`[MessageMonitoring] Le serveur ${guildId} est désactivé - Création de tâche annulée pour le canal ${channelId}`);

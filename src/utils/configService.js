@@ -131,6 +131,22 @@ export async function setSchedulerEnabled(enabled) {
   }
 }
 
+/**
+ * Vérifie si le système est en état de surcharge de tâches
+ * @returns {Promise<boolean>} - true si la limite de tâches est atteinte
+ */
+export async function isTaskLimitReached() {
+  try {
+    // Importer dynamiquement pour éviter les références circulaires
+    const { taskService } = await import('../services/taskService.js');
+    const MAX_ACTIVE_TASKS = parseInt(process.env.MAX_ACTIVE_TASKS || '100', 10);
+    return taskService.getActiveTaskCount() >= MAX_ACTIVE_TASKS;
+  } catch (error) {
+    console.error('Erreur lors de la vérification de la limite de tâches:', error);
+    return false;
+  }
+}
+
 export async function isSchedulerEnabled() {
   const config = await loadConfig();
 
