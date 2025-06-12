@@ -32,7 +32,8 @@
     "dotenv": "^16.5.0",
     "node-fetch": "^3.3.2",
     "openai": "^5.1.1",
-    "toad-scheduler": "^3.1.0"
+    "toad-scheduler": "^3.1.0",
+    "formdata-node": "^5.0.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.10",

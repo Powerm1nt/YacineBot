@@ -64,9 +64,30 @@ export function startMessageBatchDelay(channelId, guildId = null) {
  * @param {string} contextInfo - Informations de contexte (optionnel)
  * @returns {Promise<Object>} - Résultat d'analyse avec score et hasKeyInfo
  */
-  export async function analyzeMessageRelevance(content, contextInfo = '', isFromBot = false, channelName = '') {
+  export async function analyzeMessageRelevance(content, contextInfo = '', isFromBot = false, channelName = '', guildId = null) {
   try {
-    console.log(`[AnalysisService] Analyse de pertinence demandée - Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}", Contexte: ${contextInfo ? 'Fourni' : 'Non fourni'}, Bot: ${isFromBot}, Canal: ${channelName || 'Non spécifié'}`);
+    console.log(`[AnalysisService] Analyse de pertinence demandée - Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}", Contexte: ${contextInfo ? 'Fourni' : 'Non fourni'}, Bot: ${isFromBot}, Canal: ${channelName || 'Non spécifié'}, Serveur: ${guildId || 'DM'}`);
+
+    // Vérifier si le guild est activé (pour les messages de serveur)
+    if (guildId) {
+      const { isGuildEnabled, isSchedulerEnabled, isAnalysisEnabled } = await import('../utils/configService.js');
+
+      // Vérifier si le service de planification et l'analyse sont activés
+      if (!(await isSchedulerEnabled())) {
+        console.log(`[AnalysisService] Le service de planification est désactivé - Analyse annulée`);
+        return { relevanceScore: 0, hasKeyInfo: false };
+      }
+
+      if (!(await isAnalysisEnabled())) {
+        console.log(`[AnalysisService] L'analyse de pertinence est désactivée - Analyse annulée`);
+        return { relevanceScore: 0, hasKeyInfo: false };
+      }
+
+      if (!(await isGuildEnabled(guildId))) {
+        console.log(`[AnalysisService] Le serveur ${guildId} est désactivé - Analyse annulée`);
+        return { relevanceScore: 0, hasKeyInfo: false };
+      }
+    }
 
     if (!content || content.trim() === '') {
       console.log('[AnalysisService] Contenu vide, retour score zéro');
@@ -210,6 +231,27 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
 export async function updateConversationRelevance(channelId, guildId = null, client = null) {
   try {
     console.log(`[AnalysisService] Mise à jour de la pertinence de conversation - Canal: ${channelId}, Serveur: ${guildId || 'DM'}`);
+
+    // Vérifier si le guild est activé (pour les messages de serveur)
+    if (guildId) {
+      const { isGuildEnabled, isSchedulerEnabled, isAnalysisEnabled } = await import('../utils/configService.js');
+
+      // Vérifier si le service de planification et l'analyse sont activés
+      if (!(await isSchedulerEnabled())) {
+        console.log(`[AnalysisService] Le service de planification est désactivé - Analyse annulée pour le canal ${channelId}`);
+        return null;
+      }
+
+      if (!(await isAnalysisEnabled())) {
+        console.log(`[AnalysisService] L'analyse de pertinence est désactivée - Analyse annulée pour le canal ${channelId}`);
+        return null;
+      }
+
+      if (!(await isGuildEnabled(guildId))) {
+        console.log(`[AnalysisService] Le serveur ${guildId} est désactivé - Analyse annulée pour le canal ${channelId}`);
+        return null;
+      }
+    }
 
     // Récupérer la conversation et ses messages
     const conversation = await prisma.conversation.findUnique({

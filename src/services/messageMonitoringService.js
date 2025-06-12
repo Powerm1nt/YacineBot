@@ -42,6 +42,22 @@ export async function monitorMessage(message, client, buildResponseFn) {
   const guildId = message.guild?.id || null;
 
   console.log(`[MessageMonitoring] Nouveau message reçu - ID: ${messageId}, Canal: ${channelId}, Utilisateur: ${userId}, Serveur: ${guildId || 'DM'}, Contenu: "${message.content.substring(0, 50)}${message.content.length > 50 ? '...' : ''}"`); 
+
+  // Importer configService pour vérifier si le guild est activé
+  const { isGuildEnabled, isSchedulerEnabled } = await import('../utils/configService.js');
+
+  // Vérifier si le service de planification est activé
+  if (!(await isSchedulerEnabled())) {
+    console.log(`[MessageMonitoring] Le service de planification est désactivé - Message ${messageId} ignoré`);
+    return;
+  }
+
+  // Vérifier si le guild est activé (pour les messages de serveur)
+  if (guildId && !(await isGuildEnabled(guildId))) {
+    console.log(`[MessageMonitoring] Le serveur ${guildId} est désactivé - Message ${messageId} ignoré`);
+    return;
+  }
+
   console.log(`[MessageMonitoring] Message ${messageId} ajouté pour analyse différée`);
 
   // Vérifier si le message est déjà en attente d'analyse
@@ -153,6 +169,28 @@ export async function monitorMessage(message, client, buildResponseFn) {
           }
         } catch (dbError) {
           console.error(`[MessageMonitoring] Erreur lors de la mise à jour du statut d'analyse du message:`, dbError);
+        }
+
+        // Vérifier si le service est toujours activé avant d'évaluer le message
+        const { isGuildEnabled, isSchedulerEnabled, isAutoRespondEnabled } = await import('../utils/configService.js');
+
+        // Vérifier si les services sont activés
+        if (!(await isSchedulerEnabled())) {
+          console.log(`[MessageMonitoring] Le service de planification est désactivé - Analyse annulée pour le message ${messageId}`);
+          pendingResponses.delete(messageId);
+          return;
+        }
+
+        if (guildId && !(await isGuildEnabled(guildId))) {
+          console.log(`[MessageMonitoring] Le serveur ${guildId} est désactivé - Analyse annulée pour le message ${messageId}`);
+          pendingResponses.delete(messageId);
+          return;
+        }
+
+        if (!(await isAutoRespondEnabled())) {
+          console.log(`[MessageMonitoring] La réponse automatique est désactivée - Analyse annulée pour le message ${messageId}`);
+          pendingResponses.delete(messageId);
+          return;
         }
 
         // Évaluer si le message mérite une réponse maintenant
@@ -297,6 +335,24 @@ export function shutdown() {
 async function createScheduledTask(client, channelId, guildId, relevanceScore, topicSummary) {
   try {
     console.log(`[MessageMonitoring] Tentative de création de tâche planifiée - Canal: ${channelId}, Serveur: ${guildId || 'DM'}, Score: ${relevanceScore.toFixed(2)}, Sujet: "${topicSummary}"`); 
+
+    // Vérifier si les services sont activés avant de créer une tâche
+    const { isGuildEnabled, isSchedulerEnabled, isAutoRespondEnabled } = await import('../utils/configService.js');
+
+    if (!(await isSchedulerEnabled())) {
+      console.log(`[MessageMonitoring] Le service de planification est désactivé - Création de tâche annulée pour le canal ${channelId}`);
+      return false;
+    }
+
+    if (guildId && !(await isGuildEnabled(guildId))) {
+      console.log(`[MessageMonitoring] Le serveur ${guildId} est désactivé - Création de tâche annulée pour le canal ${channelId}`);
+      return false;
+    }
+
+    if (!(await isAutoRespondEnabled())) {
+      console.log(`[MessageMonitoring] La réponse automatique est désactivée - Création de tâche annulée pour le canal ${channelId}`);
+      return false;
+    }
 
     // Ne créer une tâche que si le score de pertinence est suffisant (seuil abaissé)
     if (relevanceScore < 0.3) {

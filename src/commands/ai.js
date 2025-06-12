@@ -20,6 +20,7 @@ import { convertBigIntsToStrings } from '../utils/jsonUtils.js'
 import { isSchedulerEnabled } from '../utils/configService.js'
 import { messageMonitoringService } from '../services/messageMonitoringService.js'
 import { messageEvaluator } from '../utils/messageEvaluator.js'
+import { attachmentService } from '../services/attachmentService.js'
 
 import dotenv from 'dotenv'
 dotenv.config()
@@ -104,7 +105,9 @@ CONSIGNE CRUCIALE POUR LES MENTIONS: Pour mentionner quelqu'un, tu DOIS extraire
 
 INTERDICTION ABSOLUE: Tu ne dois JAMAIS te mentionner toi-même avec ton ID ${process.env.CLIENT_ID}.
 
-FORMATAGE: Tu dois utiliser du markdown si tu as besoin de mettre des liens, des images, des emojis, etc.`
+FORMATAGE: Tu dois utiliser du markdown si tu as besoin de mettre des liens, des images, des emojis, etc.
+
+ANALYSE DE PIÈCES JOINTES: Je peux analyser les images et les documents PDF que les utilisateurs m'envoient. Quand je reçois une pièce jointe, je la décris en détail. Pour les images, je décris ce que je vois, y compris les éléments visuels, les personnes, le texte visible, et le contexte. Pour les PDFs, je résume leur contenu et les informations importantes qu'ils contiennent. N'hésite pas à m'envoyer des images ou des PDFs pour que je les analyse.`
 
 export async function ai (client) {
   const ai = new OpenAI({
@@ -203,6 +206,21 @@ export async function ai (client) {
       contextInfo += `[In private message] `;
     }
 
+    // Analyser les éventuelles pièces jointes du message
+    let attachmentAnalysis = '';
+    if (message.attachments && message.attachments.size > 0) {
+      console.log(`[AI] Message contient ${message.attachments.size} pièce(s) jointe(s). Analyse en cours...`);
+      try {
+        attachmentAnalysis = await attachmentService.analyzeMessageAttachments(message);
+        if (attachmentAnalysis) {
+          console.log(`[AI] Analyse des pièces jointes terminée - Longueur du résultat: ${attachmentAnalysis.length} caractères`);
+        }
+      } catch (attachmentError) {
+        console.error('Erreur lors de l\'analyse des pièces jointes:', attachmentError);
+        attachmentAnalysis = "J'ai rencontré un problème lors de l'analyse des pièces jointes.";
+      }
+    }
+
     const processedInput = await replaceMentionsWithNames(input, client)
     const mentionedUserIds = extractUserIdsFromText(processedInput)
 
@@ -235,7 +253,12 @@ export async function ai (client) {
       contextTypeInfo = '[SERVER CONVERSATION] '
     }
 
-    const userInput = contextTypeInfo + contextInfo + userContext + processedInput
+    // Ajouter l'analyse des pièces jointes à l'entrée utilisateur si disponible
+    let userInput = contextTypeInfo + contextInfo + userContext + processedInput;
+
+    if (attachmentAnalysis) {
+      userInput += `\n\n[PIÈCES JOINTES ANALYSÉES]\n${attachmentAnalysis}`;
+    }
 
     try {
       const participants = contextData.participants || []
@@ -365,7 +388,9 @@ export async function ai (client) {
         return
       }
 
-      if (message.author.id === client.user.id || !message.content?.length) return
+      // Permettre les messages sans contenu textuel mais avec des pièces jointes
+      if (message.author.id === client.user.id) return;
+      if (!message.content?.length && (!message.attachments || message.attachments.size === 0)) return;
 
       // Ne pas répondre aux messages des bots
       if (message.author.bot) {
@@ -416,7 +441,9 @@ export async function ai (client) {
       }
 
       // Vérifier si nous devons répondre à ce message
-      const shouldRespond = isDirectMention || isReply || isDM
+      // Vérifier également si le message contient des pièces jointes
+      const hasAttachments = message.attachments && message.attachments.size > 0;
+      const shouldRespond = isDirectMention || isReply || isDM || hasAttachments
 
       // Capturer et enregistrer le message dans tous les cas pour l'analyse future
       // Récupérer les informations de contexte
