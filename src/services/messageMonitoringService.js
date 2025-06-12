@@ -7,6 +7,8 @@ import { format } from 'date-fns';
 import { taskService } from './taskService.js';
 import { randomUUID } from 'crypto';
 import { prisma } from './prisma.js';
+import { analysisService } from './analysisService.js';
+import { isGuildEnabled, isSchedulerEnabled, isGuildAnalysisEnabled, isAutoRespondEnabled, isGuildAutoRespondEnabled } from '../utils/configService.js';
 
 // Système d'instructions pour le service de surveillance des messages
 const systemPrompt = `
@@ -53,8 +55,7 @@ export async function monitorMessage(message, client, buildResponseFn) {
     }
   }
 
-  // Importer configService pour vérifier si le guild est activé
-  const { isGuildEnabled, isSchedulerEnabled } = await import('../utils/configService.js');
+  // Utiliser les fonctions de configService importées en haut du fichier
 
   // Vérifier si le service de planification est activé
   if (!(await isSchedulerEnabled())) {
@@ -68,6 +69,12 @@ export async function monitorMessage(message, client, buildResponseFn) {
     return;
   }
 
+  // Vérifier si l'analyse de message est activée pour ce serveur
+  if (guildId && !(await isGuildAnalysisEnabled(guildId))) {
+    console.log(`[MessageMonitoring] L'analyse de message est désactivée pour le serveur ${guildId} - Message ${messageId} ignoré`);
+    return;
+  }
+
   console.log(`[MessageMonitoring] Message ${messageId} ajouté pour analyse différée`);
 
   // Vérifier si le message est déjà en attente d'analyse
@@ -75,9 +82,6 @@ export async function monitorMessage(message, client, buildResponseFn) {
     console.log(`[MessageMonitoring] Message ${messageId} déjà en attente d'analyse - ignoré`);
     return;
   }
-
-  // Importer analysisService pour vérifier si un délai d'attente est actif
-  const { analysisService } = await import('./analysisService.js');
 
   // Planifier l'analyse du message avec un délai entre 30 secondes et 3 minutes
   // ou plus si un délai d'attente est actif sur ce canal
@@ -97,9 +101,8 @@ export async function monitorMessage(message, client, buildResponseFn) {
   const scheduledTime = new Date(Date.now() + delayInMs);
 
   // Vérifier si la limite de tâches actives est atteinte
-  const MAX_ACTIVE_TASKS = parseInt(process.env.MAX_ACTIVE_TASKS || '100', 10);
-  if (pendingResponses.size >= MAX_ACTIVE_TASKS) {
-    console.log(`[MessageMonitoring] Limite de tâches atteinte (${MAX_ACTIVE_TASKS}) - Message ${messageId} ignoré`);
+  if (await analysisService.isTaskLimitReached()) {
+    console.log(`[MessageMonitoring] Limite de tâches atteinte - Message ${messageId} ignoré`);
     return;
   }
 
@@ -189,7 +192,6 @@ export async function monitorMessage(message, client, buildResponseFn) {
         }
 
         // Vérifier si le service est toujours activé avant d'évaluer le message
-        const { isGuildEnabled, isSchedulerEnabled, isAutoRespondEnabled } = await import('../utils/configService.js');
 
         // Vérifier si les services sont activés
         if (!(await isSchedulerEnabled())) {
@@ -204,10 +206,30 @@ export async function monitorMessage(message, client, buildResponseFn) {
           return;
         }
 
+        // Vérifier si l'analyse de message est activée pour ce serveur
+        if (guildId && !(await isGuildAnalysisEnabled(guildId))) {
+          console.log(`[MessageMonitoring] L'analyse de message est désactivée pour le serveur ${guildId} - Analyse annulée pour le message ${messageId}`);
+          pendingResponses.delete(messageId);
+          return;
+        }
+
+        // Vérifier si la réponse auto est activée globalement
         if (!(await isAutoRespondEnabled())) {
           console.log(`[MessageMonitoring] La réponse automatique est désactivée - Analyse annulée pour le message ${messageId}`);
           pendingResponses.delete(messageId);
           return;
+        }
+
+        // Vérifier si la réponse auto est activée pour ce serveur
+        if (guildId && !(await isGuildAutoRespondEnabled(guildId))) {
+          console.log(`[MessageMonitoring] La réponse automatique est désactivée pour le serveur ${guildId} - Analyse annulée pour le message ${messageId}`);
+          pendingResponses.delete(messageId);
+          return;
+        }
+
+        // Vérifier si c'est une conversation entre utilisateurs
+        if (isReplyBetweenUsers) {
+          console.log(`[MessageMonitoring] Message ${messageId} détecté comme conversation entre utilisateurs - Réduction du score de pertinence`);
         }
 
         // Évaluer si le message mérite une réponse maintenant
@@ -263,6 +285,21 @@ export async function monitorMessage(message, client, buildResponseFn) {
             } catch (replyError) {
               console.error(`[MessageMonitoring] Erreur lors de la récupération du message référencé:`, replyError);
             }
+          }
+
+          // Si c'est une conversation entre utilisateurs, ne pas intervenir à moins qu'il ne s'agisse d'une mention du bot
+          if (isReplyBetweenUsers) {
+            // Vérifier si le message parle du bot (Yassine)
+            const botNameVariants = ['yassine', 'yascine', 'yasine', 'yacine', 'le bot'];
+            const contentLower = messageInfo.content.toLowerCase();
+            const botMentioned = botNameVariants.some(variant => contentLower.includes(variant));
+
+            if (!botMentioned) {
+              console.log(`[MessageMonitoring] Conversation entre utilisateurs sans mention du bot - Non-intervention`);
+              pendingResponses.delete(messageId);
+              return;
+            }
+            console.log(`[MessageMonitoring] Conversation entre utilisateurs avec mention du bot - Intervention autorisée`);
           }
 
           // Construire et envoyer la réponse avec contexte additionnel si nécessaire
@@ -354,7 +391,6 @@ async function createScheduledTask(client, channelId, guildId, relevanceScore, t
     console.log(`[MessageMonitoring] Tentative de création de tâche planifiée - Canal: ${channelId}, Serveur: ${guildId || 'DM'}, Score: ${relevanceScore.toFixed(2)}, Sujet: "${topicSummary}"`); 
 
     // Vérifier si les services sont activés avant de créer une tâche
-    const { isGuildEnabled, isSchedulerEnabled, isAutoRespondEnabled } = await import('../utils/configService.js');
 
     if (!(await isSchedulerEnabled())) {
       console.log(`[MessageMonitoring] Le service de planification est désactivé - Création de tâche annulée pour le canal ${channelId}`);
@@ -362,15 +398,8 @@ async function createScheduledTask(client, channelId, guildId, relevanceScore, t
     }
 
         // Vérifier le nombre de tâches actives et en attente
-        const MAX_ACTIVE_TASKS = parseInt(process.env.MAX_ACTIVE_TASKS || '100', 10);
-        const activeTasks = await prisma.task.count({
-          where: {
-            status: { in: ['active', 'pending'] }
-          }
-        });
-
-        if (activeTasks >= MAX_ACTIVE_TASKS) {
-          console.log(`[MessageMonitoring] Limite de tâches atteinte (${activeTasks}/${MAX_ACTIVE_TASKS}). La tâche pour le canal ${channelId} ne sera pas créée.`);
+        if (await analysisService.isTaskLimitReached()) {
+          console.log(`[MessageMonitoring] Limite de tâches atteinte. La tâche pour le canal ${channelId} ne sera pas créée.`);
           return false;
         }
 
@@ -379,8 +408,21 @@ async function createScheduledTask(client, channelId, guildId, relevanceScore, t
       return false;
     }
 
+    // Vérifier si l'analyse de message est activée pour ce serveur
+    if (guildId && !(await isGuildAnalysisEnabled(guildId))) {
+      console.log(`[MessageMonitoring] L'analyse de message est désactivée pour le serveur ${guildId} - Création de tâche annulée pour le canal ${channelId}`);
+      return false;
+    }
+
+    // Vérifier si la réponse auto est activée globalement
     if (!(await isAutoRespondEnabled())) {
       console.log(`[MessageMonitoring] La réponse automatique est désactivée - Création de tâche annulée pour le canal ${channelId}`);
+      return false;
+    }
+
+    // Vérifier si la réponse auto est activée pour ce serveur
+    if (guildId && !(await isGuildAutoRespondEnabled(guildId))) {
+      console.log(`[MessageMonitoring] La réponse automatique est désactivée pour le serveur ${guildId} - Création de tâche annulée pour le canal ${channelId}`);
       return false;
     }
 

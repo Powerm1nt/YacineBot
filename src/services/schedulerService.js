@@ -3,7 +3,7 @@ import { OpenAI } from 'openai/client.mjs'
 import { format, addMinutes, getHours } from 'date-fns'
 import dotenv from 'dotenv'
 import { randomUUID } from 'crypto'
-import { isGuildEnabled, isChannelTypeEnabled, isSchedulerEnabled, isAnalysisEnabled, isAutoRespondEnabled } from '../utils/configService.js'
+import { isGuildEnabled, isChannelTypeEnabled, isSchedulerEnabled, isAnalysisEnabled, isAutoRespondEnabled, isGuildAnalysisEnabled, isGuildAutoRespondEnabled } from '../utils/configService.js'
 import { analysisService } from './analysisService.js'
 import { taskService } from './taskService.js'
 import { messageTaskService } from './messageTaskService.js'
@@ -113,7 +113,13 @@ function selectRandomGuildChannel(client) {
   // Récupérer tous les serveurs avec lesquels le bot est présent
   const guilds = Array.from(client.guilds.cache.values())
     // Filtrer pour ne garder que les serveurs activés dans la configuration
-    .filter(guild => isGuildEnabled(guild.id));
+    // et où l'analyse/auto-réponse est activée
+    .filter(async guild => {
+      const enabled = await isGuildEnabled(guild.id);
+      const analysisEnabled = await isGuildAnalysisEnabled(guild.id);
+      const autoRespondEnabled = await isGuildAutoRespondEnabled(guild.id);
+      return enabled && analysisEnabled && autoRespondEnabled;
+    });
 
   if (guilds.length === 0) {
     console.log('Aucun serveur disponible ou activé dans la configuration');
