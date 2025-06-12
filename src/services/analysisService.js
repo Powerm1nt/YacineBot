@@ -443,12 +443,15 @@ export async function getSharedConversations(userId) {
 
 /**
  * Vérifie si le système a atteint la limite de tâches actives
- * @returns {boolean} - true si la limite est atteinte, false sinon
+ * @returns {Promise<boolean>} - true si la limite est atteinte, false sinon
  */
-function isTaskLimitReached() {
+async function isTaskLimitReached() {
   try {
     // Import dynamique pour éviter les références circulaires
     const MAX_ACTIVE_TASKS = parseInt(process.env.MAX_ACTIVE_TASKS || '100', 10);
+
+    // Import dynamique du taskService
+    const { taskService } = await import('./taskService.js');
 
     // Vérifier avec taskService combien de tâches sont actives
     return taskService.getActiveTaskCount() >= MAX_ACTIVE_TASKS;

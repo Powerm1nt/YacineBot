@@ -78,14 +78,102 @@ export async function setGuildConfig(guildId, guildConfig) {
   }
 }
 
+/**
+ * Active ou désactive l'analyse de message pour un serveur spécifique
+ * @param {string} guildId - ID du serveur
+ * @param {boolean} enabled - État de l'analyse pour ce serveur
+ * @returns {Promise<boolean>} - Succès de l'opération
+ */
+export async function setGuildAnalysisEnabled(guildId, enabled) {
+  try {
+    console.log(`[ConfigService] Modification de l'état de l'analyse pour le serveur ${guildId}: ${enabled ? 'activation' : 'désactivation'}`);
+    const config = await loadConfig();
+
+    if (!config.scheduler) {
+      config.scheduler = defaultConfig.scheduler;
+    }
+    if (!config.scheduler.guilds) {
+      config.scheduler.guilds = {};
+    }
+    if (!config.scheduler.guilds[guildId]) {
+      config.scheduler.guilds[guildId] = { enabled: true };
+    }
+
+    config.scheduler.guilds[guildId].analysisEnabled = enabled;
+
+    return saveConfig(config);
+  } catch (error) {
+    console.error(`[ConfigService] Erreur lors de la mise à jour de l'état de l'analyse pour le serveur ${guildId}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Active ou désactive la réponse automatique pour un serveur spécifique
+ * @param {string} guildId - ID du serveur
+ * @param {boolean} enabled - État de la réponse automatique pour ce serveur
+ * @returns {Promise<boolean>} - Succès de l'opération
+ */
+export async function setGuildAutoRespondEnabled(guildId, enabled) {
+  try {
+    console.log(`[ConfigService] Modification de l'état de la réponse automatique pour le serveur ${guildId}: ${enabled ? 'activation' : 'désactivation'}`);
+    const config = await loadConfig();
+
+    if (!config.scheduler) {
+      config.scheduler = defaultConfig.scheduler;
+    }
+    if (!config.scheduler.guilds) {
+      config.scheduler.guilds = {};
+    }
+    if (!config.scheduler.guilds[guildId]) {
+      config.scheduler.guilds[guildId] = { enabled: true };
+    }
+
+    config.scheduler.guilds[guildId].autoRespond = enabled;
+
+    return saveConfig(config);
+  } catch (error) {
+    console.error(`[ConfigService] Erreur lors de la mise à jour de l'état de la réponse automatique pour le serveur ${guildId}:`, error);
+    return false;
+  }
+}
+
 export async function getGuildConfig(guildId) {
   const config = await loadConfig();
-  return config.scheduler?.guilds?.[guildId] || { enabled: true };
+  return config.scheduler?.guilds?.[guildId] || { enabled: true, analysisEnabled: true, autoRespond: true };
 }
 
 export async function isGuildEnabled(guildId) {
   const guildConfig = await getGuildConfig(guildId);
   return guildConfig.enabled !== false;
+}
+
+/**
+ * Vérifie si l'analyse de pertinence est activée pour un serveur spécifique
+ * @param {string} guildId - ID du serveur
+ * @returns {Promise<boolean>} - true si l'analyse est activée pour ce serveur
+ */
+export async function isGuildAnalysisEnabled(guildId) {
+  const guildConfig = await getGuildConfig(guildId);
+  // Si la config du serveur ne précise pas, on utilise la config globale
+  if (guildConfig.analysisEnabled === undefined) {
+    return await isAnalysisEnabled();
+  }
+  return guildConfig.analysisEnabled !== false;
+}
+
+/**
+ * Vérifie si la réponse automatique est activée pour un serveur spécifique
+ * @param {string} guildId - ID du serveur
+ * @returns {Promise<boolean>} - true si la réponse automatique est activée pour ce serveur
+ */
+export async function isGuildAutoRespondEnabled(guildId) {
+  const guildConfig = await getGuildConfig(guildId);
+  // Si la config du serveur ne précise pas, on utilise la config globale
+  if (guildConfig.autoRespond === undefined) {
+    return await isAutoRespondEnabled();
+  }
+  return guildConfig.autoRespond !== false;
 }
 
 export async function setChannelTypeEnabled(channelType, enabled) {
@@ -131,21 +219,6 @@ export async function setSchedulerEnabled(enabled) {
   }
 }
 
-/**
- * Vérifie si le système est en état de surcharge de tâches
- * @returns {Promise<boolean>} - true si la limite de tâches est atteinte
- */
-export async function isTaskLimitReached() {
-  try {
-    // Importer dynamiquement pour éviter les références circulaires
-    const { taskService } = await import('../services/taskService.js');
-    const MAX_ACTIVE_TASKS = parseInt(process.env.MAX_ACTIVE_TASKS || '100', 10);
-    return taskService.getActiveTaskCount() >= MAX_ACTIVE_TASKS;
-  } catch (error) {
-    console.error('Erreur lors de la vérification de la limite de tâches:', error);
-    return false;
-  }
-}
 
 export async function isSchedulerEnabled() {
   const config = await loadConfig();

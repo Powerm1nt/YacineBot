@@ -8,7 +8,13 @@ import {
   isAnalysisEnabled,
   setAutoRespondEnabled,
   isAutoRespondEnabled,
-  defaultConfig
+  defaultConfig,
+  setGuildConfig,
+  getGuildConfig,
+  setGuildAnalysisEnabled,
+  isGuildAnalysisEnabled,
+  setGuildAutoRespondEnabled,
+  isGuildAutoRespondEnabled
 } from '../utils/configService.js'
 
 // Helper functions for settings not yet implemented in configService
@@ -77,7 +83,9 @@ const EMOJIS = {
   ANALYSIS: '🔍',
   AUTO_RESPOND: '🤖',
   AUTO_QUESTION: '❓',
-  SHARING: '🔄'
+  SHARING: '🔄',
+  SERVER: '🏢',
+  SERVER_CONFIG: '🛠️'
 };
 
 async function safeDeleteMessage(message) {
@@ -164,7 +172,22 @@ async function showConfigList(client, message, showFull) {
       if (config.scheduler.guilds && Object.keys(config.scheduler.guilds).length > 0) {
         configMessage += '📋 **Serveurs configurés:**\n';
         for (const [guildId, guildConfig] of Object.entries(config.scheduler.guilds)) {
-          configMessage += `▫️ Serveur ${guildId}: ${guildConfig.enabled !== false ? '✅ activé' : '⭕ désactivé'}\n`;
+          // Récupérer le nom du serveur si possible
+          let serverName = guildId;
+          try {
+            const guild = client.guilds.cache.get(guildId);
+            if (guild) serverName = guild.name;
+          } catch (error) {}
+
+          configMessage += `▫️ Serveur ${serverName}: ${guildConfig.enabled !== false ? '✅ activé' : '⭕ désactivé'}\n`;
+
+          // Afficher la configuration spécifique au serveur
+          if (guildConfig.analysisEnabled !== undefined) {
+            configMessage += `   - Analyse des messages: ${guildConfig.analysisEnabled ? '✅ activée' : '⭕ désactivée'}\n`;
+          }
+          if (guildConfig.autoRespond !== undefined) {
+            configMessage += `   - Réponses automatiques: ${guildConfig.autoRespond ? '✅ activées' : '⭕ désactivées'}\n`;
+          }
         }
         configMessage += '\n';
       }
