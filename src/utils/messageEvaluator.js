@@ -84,7 +84,7 @@ import { prisma } from '../services/prisma.js';
 
     if (botMentioned) {
       console.log(`[MessageEvaluator] Mention du bot détectée dans le message - Augmentation du score de pertinence`);
-      return { relevanceScore: 0.80, hasKeyInfo: true, shouldRespond: true };
+      return { relevanceScore: 0.75, hasKeyInfo: true, shouldRespond: true };
     }
 
     // Si c'est une réponse entre utilisateurs, ne pas intervenir en mettant le score à 0

@@ -1151,7 +1151,7 @@ async function restorePendingTasks(client) {
           await createAnalysisTask(client, task.taskNumber || 1);
           restoredCount++;
         } else if (task.schedulerId.includes('conversation-task')) {
-          // Les tâches de conversation sont gérées par messageMonitoringService
+          // Les tâches de conversation sont gérées par analysisService (anciennement messageMonitoringService)
           console.log(`[Scheduler] Tâche de conversation ${task.schedulerId} restaurée, sera traitée par l'analyseur`);
 
           // S'assurer que la tâche est à jour dans le cache mémoire des tâches actives
@@ -1189,4 +1189,3 @@ async function restorePendingTasks(client) {
     return 0;
   }
 }
-
