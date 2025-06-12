@@ -64,9 +64,15 @@ export function startMessageBatchDelay(channelId, guildId = null) {
  * @param {string} contextInfo - Informations de contexte (optionnel)
  * @returns {Promise<Object>} - Résultat d'analyse avec score et hasKeyInfo
  */
-  export async function analyzeMessageRelevance(content, contextInfo = '', isFromBot = false, channelName = '', guildId = null) {
+  export async function analyzeMessageRelevance(content, contextInfo = '', isFromBot = false, channelName = '', guildId = null, channelPermissions = null) {
   try {
     console.log(`[AnalysisService] Analyse de pertinence demandée - Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}", Contexte: ${contextInfo ? 'Fourni' : 'Non fourni'}, Bot: ${isFromBot}, Canal: ${channelName || 'Non spécifié'}, Serveur: ${guildId || 'DM'}`);
+
+    // Vérifier si le bot a les permissions d'écriture dans ce canal
+    if (channelPermissions && !channelPermissions.has('SEND_MESSAGES')) {
+      console.log(`[AnalysisService] Pas de permission d'écriture dans le canal - Analyse annulée`);
+      return { relevanceScore: 0, hasKeyInfo: false };
+    }
 
     // Vérifier si le guild est activé (pour les messages de serveur)
     if (guildId) {
@@ -231,6 +237,22 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
 export async function updateConversationRelevance(channelId, guildId = null, client = null) {
   try {
     console.log(`[AnalysisService] Mise à jour de la pertinence de conversation - Canal: ${channelId}, Serveur: ${guildId || 'DM'}`);
+
+    // Vérifier si le bot a les permissions d'écriture dans ce canal
+    if (client) {
+      try {
+        const channel = await client.channels.fetch(channelId);
+        if (channel) {
+          const botPermissions = channel.permissionsFor(client.user.id);
+          if (!botPermissions || !botPermissions.has('SEND_MESSAGES')) {
+            console.log(`[AnalysisService] Pas de permission d'écriture dans le canal ${channelId} - Analyse annulée`);
+            return null;
+          }
+        }
+      } catch (permError) {
+        console.error('[AnalysisService] Erreur lors de la vérification des permissions:', permError);
+      }
+    }
 
     // Vérifier si le guild est activé (pour les messages de serveur)
     if (guildId) {

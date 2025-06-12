@@ -43,6 +43,15 @@ export async function monitorMessage(message, client, buildResponseFn) {
 
   console.log(`[MessageMonitoring] Nouveau message reçu - ID: ${messageId}, Canal: ${channelId}, Utilisateur: ${userId}, Serveur: ${guildId || 'DM'}, Contenu: "${message.content.substring(0, 50)}${message.content.length > 50 ? '...' : ''}"`); 
 
+  // Vérifier si le bot a les permissions d'écriture dans ce canal
+  if (message.channel && message.guild) {
+    const botPermissions = message.channel.permissionsFor(client.user.id);
+    if (!botPermissions || !botPermissions.has('SEND_MESSAGES')) {
+      console.log(`[MessageMonitoring] Pas de permission d'écriture dans le canal ${channelId} - Surveillance annulée`);
+      return;
+    }
+  }
+
   // Importer configService pour vérifier si le guild est activé
   const { isGuildEnabled, isSchedulerEnabled } = await import('../utils/configService.js');
 

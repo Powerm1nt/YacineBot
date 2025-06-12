@@ -321,12 +321,20 @@ export async function ai (client) {
             recentMessages.map(msg => `${msg.userName}: ${msg.content}`).join('\n') + '\n' + userInput.substring(0, 200) : 
             userInput.substring(0, 200);
 
+          // Récupérer les permissions du bot dans ce canal
+          let botPermissions = null;
+          if (message.channel && message.guild) {
+            botPermissions = message.channel.permissionsFor(client.user.id);
+          }
+
           // Analyser la pertinence du message du bot avec un contexte plus riche
           const analysisResult = await analysisService.analyzeMessageRelevance(
             response.output_text || '',
             contextForAnalysis,
             true, // Message du bot
-            message.channel?.name || ''
+            message.channel?.name || '',
+            guildId,
+            botPermissions
         );
 
         // Stocker le message avec son score de pertinence
@@ -452,6 +460,19 @@ export async function ai (client) {
       const channelId = context.key
 
       try {
+        // Vérifier si le bot a les permissions d'écriture dans ce canal
+        let botHasPermissions = true;
+        if (message.channel && message.guild) {
+          const botPermissions = message.channel.permissionsFor(client.user.id);
+          if (!botPermissions || !botPermissions.has('SEND_MESSAGES')) {
+            console.log(`[AI] Pas de permission d'écriture dans le canal ${channelId} - Analyse et enregistrement annulés`);
+            botHasPermissions = false;
+          }
+        }
+
+        // Si le bot n'a pas les permissions, ne pas analyser ou enregistrer le message
+        if (!botHasPermissions) return;
+
         // Vérifier si un délai d'attente est actif pour ce canal
         const isWaiting = await analysisService.isWaitingForMoreMessages(channelId, guildId);
 
