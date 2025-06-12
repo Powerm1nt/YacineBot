@@ -100,8 +100,8 @@ export async function analyzeMessageRelevance (content, contextInfo = '', isFrom
       }
     }
 
-    if (!content || content.trim() === '') {
-      console.log('[AnalysisService] Contenu vide, retour score zéro')
+    if (!content || content.trim() === '' || content.trim().length <= 1) {
+      console.log('[AnalysisService] Contenu vide ou trop court (1 caractère ou moins), retour score zéro')
       return { relevanceScore: 0, hasKeyInfo: false }
     }
 
@@ -173,8 +173,8 @@ export async function executeScheduledAnalysis (taskData) {
     } = taskData || {}
 
     // Vérifications de sécurité
-    if (!content) {
-      console.error('[AnalysisService] Données de tâche incomplètes, contenu manquant')
+    if (!content || content.trim().length <= 1) {
+      console.error('[AnalysisService] Données de tâche incomplètes ou contenu trop court (1 caractère ou moins)')
       return { relevanceScore: 0, hasKeyInfo: false }
     }
 

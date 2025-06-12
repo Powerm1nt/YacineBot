@@ -415,10 +415,10 @@ export async function monitorMessage (message, client, buildResponseFn) {
 
           // Construire et envoyer la réponse avec contexte additionnel si nécessaire
           const response = await buildResponseFn(messageInfo.content, message, additionalContext)
-          if (response && response.trim() !== '' && response !== '\' \'\' \'') {
+          if (response && response.trim() !== '' && response !== '\' \'\' \'' && response.trim().length > 1) {
             await message.reply(response)
           } else {
-            console.log(`[MessageMonitoring] Réponse vide ou invalide détectée, aucun message envoyé`)
+            console.log(`[MessageMonitoring] Réponse vide, trop courte ou invalide détectée, aucun message envoyé`)
           }
         } else {
           console.log(`Message ${messageId} ignoré après analyse différée (score: ${evaluationResult.relevanceScore})`)

@@ -800,12 +800,12 @@ export async function ai (client) {
           clearInterval(typingInterval)
 
           const trimmedResponse = res.trim()
-          if (trimmedResponse !== '' && trimmedResponse !== '\' \'\' \'') {
+          if (trimmedResponse !== '' && trimmedResponse !== '\' \'\' \'' && trimmedResponse.length > 1) {
             console.log(`[AI] Envoi de la réponse au message ${message.id} - Longueur: ${res.length} caractères`)
             await message.reply(res)
             console.log(`[AI] Réponse envoyée avec succès au message ${message.id}`)
           } else {
-            console.log(`[AI] Réponse vide ou invalide détectée ("${trimmedResponse}"), aucun message envoyé`)
+            console.log(`[AI] Réponse vide, trop courte ou invalide détectée ("${trimmedResponse}"), aucun message envoyé`)
           }
         } else {
           console.log('Réponse vide détectée, aucun message envoyé')
