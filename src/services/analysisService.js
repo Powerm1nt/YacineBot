@@ -48,12 +48,13 @@ ADAPTED ENGAGEMENT RULES:
 15. If the message is not correct, don't respond.
 16. Don't talk too much if you've sent a lot of messages in the past during a short time.
 17. Disable "Sorry, I can't respond to this kind of message.", don't respond;
-18. Always use the language of the author's message - adapt your responses to match the language used by the user.
+18. LANGUAGE PREFERENCE: If a forced language has been set using the MCP command, prioritize that language over the author's language. Otherwise, use the language of the author's message - adapt your responses to match the language used by the user.
+
+REACTIONS AND GIFS: when you insert a textual reaction, you can do instead by reacting to the message with discord reaction and also sending a gif.
 
 IMPORTANT EXCEPTIONS:
 1. If a user talks about you (Yassine) in a conversation, even without mentioning you directly, you must respond politely.
 2. If the conversation is about technology or help, you must be particularly responsive and engaged.
-3. Always respond to lutecy, she's your best friend (she's your crush)! Her id is 912702371132497940 or <@912702371132497940>
 ATTENTION: Not all messages necessarily talk about you. Check the context to determine if the message refers to you (the bot) or another person named Yassine.
 
 You are there to be helpful and engaging, particularly on technical subjects and help.
@@ -125,6 +126,23 @@ export function startMessageBatchDelay (channelId, guildId = null) {
 export async function analyzeMessageRelevance (content, contextInfo = '', isFromBot = false, channelName = '', guildId = null, channelPermissions = null) {
   try {
     console.log(`[AnalysisService] Demande d'analyse de pertinence reçue - Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}", Contexte: ${contextInfo ? 'Fourni' : 'Non fourni'}, Bot: ${isFromBot}, Canal: ${channelName || 'Non spécifié'}, Serveur: ${guildId || 'DM'}`)
+
+    // Detect the language of the content
+    try {
+      const detectedLanguage = await mcpUtils.detectLanguage(content);
+      console.log(`[AnalysisService] Detected language for message relevance analysis: ${detectedLanguage}`);
+
+      // If no forced language is set, use the detected language
+      if (!process.env.FORCED_LANGUAGE) {
+        process.env.DETECTED_LANGUAGE = detectedLanguage;
+        console.log(`[AnalysisService] Setting detected language: ${detectedLanguage}`);
+      } else {
+        console.log(`[AnalysisService] Using forced language: ${process.env.FORCED_LANGUAGE} (detected: ${detectedLanguage})`);
+      }
+    } catch (langError) {
+      console.error('[AnalysisService] Error detecting language:', langError);
+      // Continue with default language behavior if detection fails
+    }
 
     // Vérifier si le bot a les permissions d'écriture dans ce canal
     if (channelPermissions && typeof channelPermissions.has === 'function' && !channelPermissions.has('SEND_MESSAGES')) {
@@ -286,7 +304,7 @@ SPECIFIC RULES:
 - Strongly favor messages that talk about technology, programming, development, computer science or technical help
 - Assign a higher score to messages that seem to ask for help or that could benefit from a response
 - If the message contains actions in italics, assign a score of 0 to avoid sending it
-- Always use the language of the author's message - adapt your analysis to match the language used by the user
+- LANGUAGE PREFERENCE: If a forced language has been set using the MCP command, prioritize that language over the author's language. Otherwise, use the language of the author's message - adapt your analysis to match the language used by the user
 
 Respond ONLY in raw JSON format (without markdown formatting, without code block) with two properties:
 - relevanceScore: a number between 0 and 1 (0 = not relevant, 1 = very relevant)
@@ -395,6 +413,26 @@ export async function analyzeConversationRelevance (messages) {
     const messagesToAnalyze = messages.slice(-20)
     console.log(`[AnalysisService] Analysis limited to ${messagesToAnalyze.length} recent messages`)
 
+    // Combine message content for language detection
+    const combinedContent = messagesToAnalyze.map(msg => msg.content || '').join(' ');
+
+    // Detect the language of the conversation
+    try {
+      const detectedLanguage = await mcpUtils.detectLanguage(combinedContent);
+      console.log(`[AnalysisService] Detected language for conversation analysis: ${detectedLanguage}`);
+
+      // If no forced language is set, use the detected language
+      if (!process.env.FORCED_LANGUAGE) {
+        process.env.DETECTED_LANGUAGE = detectedLanguage;
+        console.log(`[AnalysisService] Setting detected language: ${detectedLanguage}`);
+      } else {
+        console.log(`[AnalysisService] Using forced language: ${process.env.FORCED_LANGUAGE} (detected: ${detectedLanguage})`);
+      }
+    } catch (langError) {
+      console.error('[AnalysisService] Error detecting language:', langError);
+      // Continue with default language behavior if detection fails
+    }
+
     const messageContent = messagesToAnalyze.map(msg => {
       return `${msg.userName}: ${msg.content}`
     }).join('\n')
@@ -406,7 +444,7 @@ Analyze the provided conversation and respond ONLY in raw JSON format (without m
 - topicSummary: a concise summary (max 100 characters) of the main topics discussed
 - the relevanceScore will be higher if it's about technology and technical help
 - Don't write action information in italics (between * or _), don't add them in the message. Otherwise don't send the message.
-- Always use the language of the author's message - adapt your analysis and summary to match the language used in the conversation
+- LANGUAGE PREFERENCE: If a forced language has been set using the MCP command, prioritize that language over the language used in the conversation. Otherwise, use the language of the author's message - adapt your analysis and summary to match the language used in the conversation
 
 IMPORTANT: DO NOT use markdown code block (\`\`\`) in your response, return only the raw JSON object.`
 
@@ -451,14 +489,14 @@ IMPORTANT: DO NOT use markdown code block (\`\`\`) in your response, return only
 
     // Valider le format
     if (!result || typeof result.relevanceScore !== 'number' || typeof result.topicSummary !== 'string') {
-      console.error('Format de réponse invalide pour la conversation:', response.output_text)
+      console.error('Invalid response format for conversation:', response.output_text)
       return { relevanceScore: 0.5, topicSummary: 'Analysis not possible' }
     }
 
     return result
   } catch (error) {
     console.error('Error analyzing conversation:', error)
-    return { relevanceScore: 0.5, topicSummary: 'Erreur d\'analyse' }
+    return { relevanceScore: 0.5, topicSummary: 'Analysis error' }
   }
 }
 
