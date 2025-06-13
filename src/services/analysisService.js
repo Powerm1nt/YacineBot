@@ -842,70 +842,7 @@ async function cleanupMonitoringTasks() {
   }
 }
 
-/**
- * Initialise le service de surveillance des messages
- * Restaure les tâches en attente depuis la base de données
- * @returns {Promise<number>} - Nombre de tâches restaurées
- */
-async function initialize() {
-  console.log('[MessageMonitoring] Initialisation du service de surveillance des messages...');
 
-  // Nettoyer d'abord les tâches terminées et expirées
-  await taskService.cleanupFinishedTasks();
-  await taskService.cleanupExpiredTasks();
-
-  // Nettoyer spécifiquement les tâches de surveillance de messages
-  await cleanupMonitoringTasks();
-
-  // Nettoyer les tâches d'attente
-  console.log('[MessageMonitoring] Nettoyage des tâches d\'attente au démarrage...');
-
-  // Supprimer les tâches d'attente de type 'waiting-conversation'
-  const waitingTasksCount = await taskService.deleteTasksByType('waiting-conversation');
-  console.log(`[MessageMonitoring] ${waitingTasksCount} tâches d'attente supprimées au démarrage`);
-
-  // Restaurer les tâches en attente
-  const restoredCount = await restorePendingMessageTasks();
-
-  console.log(`[MessageMonitoring] Service initialisé - ${restoredCount} tâches restaurées`);
-  return restoredCount;
-}
-
-/**
- * Arrête tous les jobs de surveillance
- */
-export async function shutdown() {
-  console.log(`[MessageMonitoring] Arrêt du service de surveillance - ${pendingResponses.size} messages en attente seront abandonnés`);
-
-  // Arrêter le planificateur
-  scheduler.stop();
-
-  // Marquer les tâches comme arrêtées dans la base de données
-  try {
-    // Marquer toutes les tâches de surveillance de messages comme arrêtées
-    const updatedTasks = await prisma.task.updateMany({
-      where: {
-        schedulerId: { startsWith: 'job-message-' },
-        status: 'pending'
-      },
-      data: {
-        status: 'stopped',
-        updatedAt: new Date()
-      }
-    });
-
-    console.log(`[MessageMonitoring] ${updatedTasks.count} tâches marquées comme arrêtées en base de données`);
-
-    // Nettoyer les tâches obsolètes
-    await cleanupMonitoringTasks();
-  } catch (dbError) {
-    console.error('[MessageMonitoring] Erreur lors de la mise à jour des tâches en base de données:', dbError);
-  }
-
-  // Vider la liste des messages en attente
-  pendingResponses.clear();
-  console.log('[MessageMonitoring] Service de surveillance arrêté avec succès');
-}
 
 /**
  * Arrête la surveillance d'un message spécifique
@@ -1534,10 +1471,7 @@ export const analysisService = {
   startMessageBatchDelay,
   monitorMessage,
   stopMonitoring,
-  shutdown,
   createScheduledTask,
-  initialize,
-  restorePendingMessageTasks,
   cleanupMonitoringTasks,
   analyzeMessageIntent
 }
