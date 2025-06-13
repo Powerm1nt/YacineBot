@@ -26,6 +26,7 @@ import { isSchedulerEnabled } from '../utils/configService.js'
 import { messageEvaluator } from '../utils/messageEvaluator.js'
 import { attachmentService } from './attachmentService.js'
 import { taskService } from './taskService.js'
+import { userPreferencesMcp } from '../utils/userPreferencesMcp.js'
 import dotenv from 'dotenv'
 
 dotenv.config()
@@ -182,7 +183,13 @@ EXCEPTIONS IMPORTANTES:
 
 ANALYSE DE PIÈCES JOINTES: Je peux analyser les images et les documents PDF que les utilisateurs m'envoient. Quand je reçois une pièce jointe, je la décris en détail. Pour les images, je décris ce que je vois, y compris les éléments visuels, les personnes, le texte visible, et le contexte. Pour les PDFs, je résume leur contenu et les informations importantes qu'ils contiennent. N'hésite pas à m'envoyer des images ou des PDFs pour que je les analyse.
 
-GIFS: Si un utilisateur me demande d'envoyer un GIF sur un sujet particulier, je peux rechercher et partager un GIF correspondant. Par exemple, si on me demande "envoie un gif de chat" ou "montre-moi un gif drôle", je peux répondre avec un GIF approprié. J'utilise l'API Tenor pour trouver des GIFs pertinents.`
+GIFS: Si un utilisateur me demande d'envoyer un GIF sur un sujet particulier, je peux rechercher et partager un GIF correspondant. Par exemple, si on me demande "envoie un gif de chat" ou "montre-moi un gif drôle", je peux répondre avec un GIF approprié. J'utilise l'API Tenor pour trouver des GIFs pertinents.
+
+CONTRÔLE DE FRÉQUENCE DE COMMUNICATION: Je peux ajuster ma fréquence de communication selon les préférences de l'utilisateur. Si on me demande de "parler moins", "parler plus" ou de "revenir à mon comportement normal", j'utiliserai le système MCP (Message Consumer Processor) pour ajuster mon relevanceScore en conséquence. 
+- Pour me faire parler moins: dis-moi "parle moins", "réponds moins souvent" ou une phrase similaire
+- Pour me faire parler plus: dis-moi "parle plus", "réponds plus souvent" ou une phrase similaire
+- Pour réinitialiser mon comportement: dis-moi "reviens à ton comportement normal", "réinitialise ta communication" ou une phrase similaire
+Ces commandes modifient mon relevanceScore, ce qui affecte ma tendance à répondre aux messages qui ne me sont pas directement adressés.`
 
 // Initialiser le client OpenAI
 let openAIClient = null;
@@ -596,6 +603,30 @@ export function detectGifRequest(messageContent) {
   return null;
 }
 
+// Fonction pour détecter les commandes de préférence de communication et extraire le type de préférence
+export function detectUserPreferenceCommand(messageContent) {
+  if (!messageContent) return null;
+
+  const messageContentLower = messageContent.toLowerCase();
+
+  // Patterns pour détecter une demande de modification de la fréquence de communication
+  const talkLessPattern = /(parle|parles|réponds|répond|communique|écris|écrit)[\s-]*(moins|pas autant|plus rarement)/i;
+  const talkMorePattern = /(parle|parles|réponds|répond|communique|écris|écrit)[\s-]*(plus|davantage|plus souvent)/i;
+  // Pattern plus flexible pour détecter les demandes de réinitialisation
+  const resetTalkPattern = /(recommence|reprends|reviens|retourne|reset|réinitialise)(\s+[àa]\s+|\s+)(parler|répondre|communiquer|ton comportement|ta communication|comme avant|ta communication normale|normal)/i;
+
+  // Vérifier si le message correspond à un des patterns
+  if (talkLessPattern.test(messageContentLower)) {
+    return userPreferencesMcp.TALK_PREFERENCES.LESS;
+  } else if (talkMorePattern.test(messageContentLower)) {
+    return userPreferencesMcp.TALK_PREFERENCES.MORE;
+  } else if (resetTalkPattern.test(messageContentLower)) {
+    return userPreferencesMcp.TALK_PREFERENCES.NORMAL;
+  }
+
+  return null;
+}
+
 // Fonction pour gérer les messages entrants
 export async function handleMessage(message) {
   try {
@@ -618,20 +649,12 @@ export async function handleMessage(message) {
     }
 
     const messageContentLower = message.content.toLowerCase()
-    if (messageContentLower.includes('reset conversation')) {
-      try {
-        await resetContext(message)
-        await message.reply('Conversation réinitialisée ! 🔄')
-      } catch (error) {
-        console.error('Error while resetting conversation:', error)
-        await message.reply('Désolé, je n\'ai pas pu réinitialiser la conversation.')
-      }
-      return
-    }
-
     const isDirectMention = messageContentLower.includes(`<@${process.env.CLIENT_ID}>`)
-    // Suppression des déclencheurs par nom (niceyomi, yomi)
 
+    // Vérifier si c'est un message privé
+    const isDM = !message.guild && message.channel.type === 'DM'
+
+    // Vérifier si c'est une réponse au bot
     let isReply = false
     if (message.reference) {
       try {
@@ -643,7 +666,29 @@ export async function handleMessage(message) {
       }
     }
 
-    const isDM = !message.guild && message.channel.type === 'DM'
+    if (messageContentLower.includes('reset conversation')) {
+      try {
+        await resetContext(message)
+        await message.reply('Conversation réinitialisée ! 🔄')
+      } catch (error) {
+        console.error('Error while resetting conversation:', error)
+        await message.reply('Désolé, je n\'ai pas pu réinitialiser la conversation.')
+      }
+      return
+    }
+
+    // Suppression des déclencheurs par nom (niceyomi, yomi)
+
+    isReply = false
+    if (message.reference) {
+      try {
+        const referencedMessage = await message.channel.messages.fetch(message.reference.messageId)
+        isReply = referencedMessage.author.id === client.user.id
+      } catch (error) {
+        console.error('Error while fetching referenced message:', error)
+        // Continuer même si on ne peut pas récupérer le message référencé
+      }
+    }
     // Vérifier si c'est une réponse entre utilisateurs
     let isReplyBetweenUsers = false
     if (message.reference) {
@@ -664,6 +709,7 @@ export async function handleMessage(message) {
     const hasAttachments = message.attachments && message.attachments.size > 0
     const hasImageUrls = message.content && attachmentService.extractImageUrls(message.content).length > 0
     const shouldRespond = isDirectMention || isReply || isDM || hasAttachments || hasImageUrls
+
 
     // Capturer et enregistrer le message dans tous les cas pour l'analyse future
     // Récupérer les informations de contexte
@@ -867,6 +913,45 @@ export async function handleMessage(message) {
       }
     }
 
+    // Vérifier si le message est une commande pour modifier la fréquence de communication
+    const preferenceType = detectUserPreferenceCommand(message.content);
+    if (preferenceType && (isDirectMention || isReply || isDM)) {
+      console.log(`[AI] Commande de préférence de communication détectée: "${preferenceType}"`);
+
+      try {
+        // Utiliser le MCP pour définir la préférence de l'utilisateur
+        const response = await userPreferencesMcp.processMessage({
+          type: userPreferencesMcp.MESSAGE_TYPES.SET_TALK_PREFERENCE,
+          payload: {
+            userId: message.author.id,
+            preference: preferenceType
+          }
+        });
+
+        console.log(`[AI] Préférence de communication définie pour l'utilisateur ${message.author.id}: ${preferenceType}`);
+
+        // Répondre à l'utilisateur en fonction de la préférence définie
+        let replyMessage = '';
+        switch (preferenceType) {
+          case userPreferencesMcp.TALK_PREFERENCES.LESS:
+            replyMessage = "D'accord, je vais essayer de parler moins à partir de maintenant. 🤐";
+            break;
+          case userPreferencesMcp.TALK_PREFERENCES.MORE:
+            replyMessage = "D'accord, je vais essayer de participer plus activement aux conversations à partir de maintenant! 😊";
+            break;
+          case userPreferencesMcp.TALK_PREFERENCES.NORMAL:
+            replyMessage = "D'accord, je reviens à mon comportement normal de communication. 👌";
+            break;
+        }
+
+        await message.reply(replyMessage);
+        return; // Sortir de la fonction après avoir répondu
+      } catch (error) {
+        console.error('Erreur lors de la définition de la préférence de communication:', error);
+        // Continuer avec une réponse normale en cas d'erreur
+      }
+    }
+
     // Le message a déjà été stocké et ajouté à la surveillance plus haut dans le code
     console.log(`[AI] Préparation de la réponse au message ${message.id}`)
 
@@ -973,15 +1058,10 @@ export async function handleMessage(message) {
         clearInterval(typingInterval)
 
         const trimmedResponse = res.trim()
-        // Vérifier si le message contient des actions en italique (entre * ou _)
-        const containsItalics = /(\*[^*]+\*|_[^_]+_)/.test(trimmedResponse)
-
-        if (trimmedResponse !== '' && trimmedResponse !== '\' \'\' \'' && trimmedResponse.length > 1 && !containsItalics) {
+        if (trimmedResponse !== '' && trimmedResponse !== '\' \'\' \'' && trimmedResponse.length > 1) {
           console.log(`[AI] Envoi de la réponse au message ${message.id} - Longueur: ${res.length} caractères`)
           await message.reply(res)
           console.log(`[AI] Réponse envoyée avec succès au message ${message.id}`)
-        } else if (containsItalics) {
-          console.log(`[AI] Réponse contenant des actions en italique détectée, aucun message envoyé`)
         } else {
           console.log(`[AI] Réponse vide, trop courte ou invalide détectée ("${trimmedResponse}"), aucun message envoyé`)
         }
@@ -1023,5 +1103,6 @@ export const aiService = {
   setupCleanupInterval,
   systemInstructions,
   getOpenAIClient,
-  detectGifRequest
+  detectGifRequest,
+  detectUserPreferenceCommand
 }
