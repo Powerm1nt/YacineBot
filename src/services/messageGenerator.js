@@ -1,13 +1,11 @@
 import { OpenAI } from 'openai/client.mjs';
 import dotenv from 'dotenv';
+import { mcpUtils } from '../utils/mcpUtils.js';
 
 dotenv.config();
 
-// Fonction pour vérifier si on utilise l'API DeepSeek
-function isUsingDeepSeekAPI() {
-  const baseURL = process.env['OPENAI_API_BASE_URL'] || '';
-  return baseURL.toLowerCase().includes('deepseek');
-}
+// Use isUsingDeepSeekAPI from mcpUtils.js
+const isUsingDeepSeekAPI = mcpUtils.isUsingDeepSeekAPI;
 
 const openai = new OpenAI({
   apiKey: process.env['OPENAI_API_KEY'],

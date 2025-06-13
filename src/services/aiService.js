@@ -27,6 +27,7 @@ import { messageEvaluator } from '../utils/messageEvaluator.js'
 import { attachmentService } from './attachmentService.js'
 import { taskService } from './taskService.js'
 import { userPreferencesMcp } from '../utils/userPreferencesMcp.js'
+import { mcpUtils } from '../utils/mcpUtils.js'
 import dotenv from 'dotenv'
 
 dotenv.config()
@@ -191,25 +192,9 @@ CONTRÔLE DE FRÉQUENCE DE COMMUNICATION: Je peux ajuster ma fréquence de commu
 - Pour réinitialiser mon comportement: dis-moi "reviens à ton comportement normal", "réinitialise ta communication" ou une phrase similaire
 Ces commandes modifient mon relevanceScore, ce qui affecte ma tendance à répondre aux messages qui ne me sont pas directement adressés.`
 
-// Initialiser le client OpenAI
-let openAIClient = null;
-
-// Fonction pour obtenir ou initialiser le client OpenAI
-export function getOpenAIClient() {
-  if (!openAIClient) {
-    openAIClient = new OpenAI({
-      apiKey: process.env['OPENAI_API_KEY'],
-      baseURL: process.env['OPENAI_API_BASE_URL'] || 'https://api.openai.com/v1',
-    });
-  }
-  return openAIClient;
-}
-
-// Fonction pour vérifier si on utilise l'API DeepSeek
-export function isUsingDeepSeekAPI() {
-  const baseURL = process.env['OPENAI_API_BASE_URL'] || '';
-  return baseURL.toLowerCase().includes('deepseek');
-}
+// Use getOpenAIClient and isUsingDeepSeekAPI from mcpUtils.js
+export const getOpenAIClient = mcpUtils.getOpenAIClient;
+export const isUsingDeepSeekAPI = mcpUtils.isUsingDeepSeekAPI;
 
 // Fonction pour construire une réponse à partir d'un message
 export async function buildResponse(input, message, additionalInstructions = '') {
@@ -796,7 +781,7 @@ export async function handleMessage(message) {
 
     // Utiliser l'IA pour analyser l'intention du message (GIF ou préférence utilisateur)
     try {
-      const intentAnalysis = await analysisService.analyzeMessageIntent(message.content);
+      const intentAnalysis = await mcpUtils.analyzeMessageIntent(message.content);
       console.log(`[AI] Analyse d'intention du message: ${intentAnalysis.intentType}`);
 
       // Traiter les demandes de GIF

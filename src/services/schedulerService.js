@@ -3,12 +3,10 @@ import { OpenAI } from 'openai/client.mjs'
 import { format, addMinutes, getHours } from 'date-fns'
 import dotenv from 'dotenv'
 import { randomUUID } from 'crypto'
+import { mcpUtils } from '../utils/mcpUtils.js'
 
-// Fonction pour vérifier si on utilise l'API DeepSeek
-function isUsingDeepSeekAPI() {
-  const baseURL = process.env['OPENAI_API_BASE_URL'] || '';
-  return baseURL.toLowerCase().includes('deepseek');
-}
+// Use isUsingDeepSeekAPI from mcpUtils.js
+const isUsingDeepSeekAPI = mcpUtils.isUsingDeepSeekAPI;
 import { isGuildEnabled, isChannelTypeEnabled, isSchedulerEnabled, isAnalysisEnabled, isAutoRespondEnabled, isGuildAnalysisEnabled, isGuildAutoRespondEnabled } from '../utils/configService.js'
 import { analysisService } from './analysisService.js'
 import { taskService } from './taskService.js'

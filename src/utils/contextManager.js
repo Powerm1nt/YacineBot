@@ -3,7 +3,10 @@ import { prisma } from '../services/prisma.js';
 import { conversationService } from '../services/conversationService.js';
 import { convertBigIntsToStrings } from './jsonUtils.js';
 import { analysisService } from '../services/analysisService.js';
-import { isUsingDeepSeekAPI } from '../services/aiService.js';
+import { mcpUtils } from './mcpUtils.js';
+
+// Use isUsingDeepSeekAPI from mcpUtils.js
+const isUsingDeepSeekAPI = mcpUtils.isUsingDeepSeekAPI;
 
 const guildConversations = new Map()
 const dmConversations = new Map()
