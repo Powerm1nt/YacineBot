@@ -566,66 +566,9 @@ export async function buildResponse(input, message, additionalInstructions = '')
   }
 }
 
-// Fonction pour détecter si un message demande un GIF et extraire le terme de recherche
-export function detectGifRequest(messageContent) {
-  if (!messageContent) return null;
-
-  const messageContentLower = messageContent.toLowerCase();
-
-  // Patterns pour détecter une demande de GIF
-  const gifPatterns = [
-    // Français
-    /envo(ie|yer|i) (un |une |des |le |la |les )?(gif|gifs) (de |d'|du |des |sur |avec |à propos de |concernant |montrant )([a-zàáâäæçèéêëìíîïòóôöœùúûüÿ0-9\s'-]+)/i,
-    /montre (un |une |des |le |la |les )?(gif|gifs) (de |d'|du |des |sur |avec |à propos de |concernant |montrant )([a-zàáâäæçèéêëìíîïòóôöœùúûüÿ0-9\s'-]+)/i,
-    /cherche (un |une |des |le |la |les )?(gif|gifs) (de |d'|du |des |sur |avec |à propos de |concernant |montrant )([a-zàáâäæçèéêëìíîïòóôöœùúûüÿ0-9\s'-]+)/i,
-    /trouve (un |une |des |le |la |les )?(gif|gifs) (de |d'|du |des |sur |avec |à propos de |concernant |montrant )([a-zàáâäæçèéêëìíîïòóôöœùúûüÿ0-9\s'-]+)/i,
-    /(gif|gifs) (de |d'|du |des |sur |avec |à propos de |concernant |montrant )([a-zàáâäæçèéêëìíîïòóôöœùúûüÿ0-9\s'-]+)/i,
-
-    // English
-    /send (a |an |the |some )?(gif|gifs) (of |about |with |showing |related to )([a-z0-9\s'-]+)/i,
-    /show (a |an |the |some )?(gif|gifs) (of |about |with |showing |related to )([a-z0-9\s'-]+)/i,
-    /find (a |an |the |some )?(gif|gifs) (of |about |with |showing |related to )([a-z0-9\s'-]+)/i,
-    /search (a |an |the |some )?(gif|gifs) (of |about |with |showing |related to )([a-z0-9\s'-]+)/i,
-    /(gif|gifs) (of |about |with |showing |related to )([a-z0-9\s'-]+)/i
-  ];
-
-  for (const pattern of gifPatterns) {
-    const match = messageContentLower.match(pattern);
-    if (match) {
-      // Le terme de recherche est dans le dernier groupe de capture
-      const searchTerm = match[match.length - 1].trim();
-      if (searchTerm && searchTerm.length > 0) {
-        return searchTerm;
-      }
-    }
-  }
-
-  return null;
-}
-
-// Fonction pour détecter les commandes de préférence de communication et extraire le type de préférence
-export function detectUserPreferenceCommand(messageContent) {
-  if (!messageContent) return null;
-
-  const messageContentLower = messageContent.toLowerCase();
-
-  // Patterns pour détecter une demande de modification de la fréquence de communication
-  const talkLessPattern = /(parle|parles|réponds|répond|communique|écris|écrit)[\s-]*(moins|pas autant|plus rarement)/i;
-  const talkMorePattern = /(parle|parles|réponds|répond|communique|écris|écrit)[\s-]*(plus|davantage|plus souvent)/i;
-  // Pattern plus flexible pour détecter les demandes de réinitialisation
-  const resetTalkPattern = /(recommence|reprends|reviens|retourne|reset|réinitialise)(\s+[àa]\s+|\s+)(parler|répondre|communiquer|ton comportement|ta communication|comme avant|ta communication normale|normal)/i;
-
-  // Vérifier si le message correspond à un des patterns
-  if (talkLessPattern.test(messageContentLower)) {
-    return userPreferencesMcp.TALK_PREFERENCES.LESS;
-  } else if (talkMorePattern.test(messageContentLower)) {
-    return userPreferencesMcp.TALK_PREFERENCES.MORE;
-  } else if (resetTalkPattern.test(messageContentLower)) {
-    return userPreferencesMcp.TALK_PREFERENCES.NORMAL;
-  }
-
-  return null;
-}
+// Les fonctions detectGifRequest et detectUserPreferenceCommand ont été remplacées
+// par l'utilisation de analysisService.analyzeMessageIntent qui utilise l'IA
+// pour détecter les intentions des messages de manière plus flexible
 
 // Fonction pour gérer les messages entrants
 export async function handleMessage(message) {
@@ -851,105 +794,114 @@ export async function handleMessage(message) {
       return
     }
 
-    // Vérifier si le message demande un GIF
-    const gifSearchTerm = detectGifRequest(message.content);
-    if (gifSearchTerm) {
-      console.log(`[AI] Demande de GIF détectée avec le terme: "${gifSearchTerm}"`);
+    // Utiliser l'IA pour analyser l'intention du message (GIF ou préférence utilisateur)
+    try {
+      const intentAnalysis = await analysisService.analyzeMessageIntent(message.content);
+      console.log(`[AI] Analyse d'intention du message: ${intentAnalysis.intentType}`);
 
-      try {
-        // Analyser la pertinence du message pour déterminer si on doit envoyer un GIF
-        const relevanceAnalysis = await analysisService.analyzeMessageRelevance(
-          message.content,
-          '', // Pas de contexte supplémentaire
-          false, // Pas un message de bot
-          message.channel?.name || '',
-          message.guild?.id || null,
-          message.channel && message.guild ? message.channel.permissionsFor(message.guild.members.cache.get(client.user.id)) : null
-        );
+      // Traiter les demandes de GIF
+      if (intentAnalysis.intentType === 'GIF_REQUEST' && intentAnalysis.data?.searchTerm) {
+        const gifSearchTerm = intentAnalysis.data.searchTerm;
+        console.log(`[AI] Demande de GIF détectée avec le terme: "${gifSearchTerm}"`);
 
-        console.log(`[AI] Analyse de pertinence pour demande de GIF - Score: ${relevanceAnalysis.relevanceScore}`);
+        try {
+          // Analyser la pertinence du message pour déterminer si on doit envoyer un GIF
+          const relevanceAnalysis = await analysisService.analyzeMessageRelevance(
+            message.content,
+            '', // Pas de contexte supplémentaire
+            false, // Pas un message de bot
+            message.channel?.name || '',
+            message.guild?.id || null,
+            message.channel && message.guild ? message.channel.permissionsFor(message.guild.members.cache.get(client.user.id)) : null
+          );
 
-        // Vérifier si le score de pertinence est suffisant pour envoyer un GIF
-        if (relevanceAnalysis.relevanceScore >= 0.3) { // Seuil de pertinence modéré
-          // Indiquer que le bot est en train d'écrire
-          await message.channel.sendTyping();
+          console.log(`[AI] Analyse de pertinence pour demande de GIF - Score: ${relevanceAnalysis.relevanceScore}`);
 
-          // Rechercher un GIF aléatoire correspondant au terme
-          const randomGif = await attachmentService.getRandomGif(gifSearchTerm);
+          // Vérifier si le score de pertinence est suffisant pour envoyer un GIF
+          if (relevanceAnalysis.relevanceScore >= 0.3) { // Seuil de pertinence modéré
+            // Indiquer que le bot est en train d'écrire
+            await message.channel.sendTyping();
 
-          if (randomGif) {
-            // Préparer le GIF pour Discord
-            const discordGif = attachmentService.prepareGifForDiscord(randomGif);
+            // Rechercher un GIF aléatoire correspondant au terme
+            const randomGif = await attachmentService.getRandomGif(gifSearchTerm);
 
-            if (discordGif && discordGif.url) {
-              console.log(`[AI] GIF trouvé: "${randomGif.title}" - URL: ${discordGif.url}`);
+            if (randomGif) {
+              // Préparer le GIF pour Discord
+              const discordGif = attachmentService.prepareGifForDiscord(randomGif);
 
-              // Envoyer le GIF avec un message
-              await message.reply({ 
-                content: `Voici un GIF de "${gifSearchTerm}" pour toi!`, 
-                files: [discordGif.url] 
-              });
+              if (discordGif && discordGif.url) {
+                console.log(`[AI] GIF trouvé: "${randomGif.title}" - URL: ${discordGif.url}`);
 
-              console.log(`[AI] GIF envoyé avec succès en réponse au message ${message.id}`);
-              return; // Sortir de la fonction après avoir envoyé le GIF
+                // Envoyer le GIF avec un message
+                await message.reply({ 
+                  content: `Voici un GIF de "${gifSearchTerm}" pour toi!`, 
+                  files: [discordGif.url] 
+                });
+
+                console.log(`[AI] GIF envoyé avec succès en réponse au message ${message.id}`);
+                return; // Sortir de la fonction après avoir envoyé le GIF
+              } else {
+                console.log(`[AI] GIF trouvé mais URL invalide`);
+                // Continuer avec une réponse normale
+              }
             } else {
-              console.log(`[AI] GIF trouvé mais URL invalide`);
-              // Continuer avec une réponse normale
+              console.log(`[AI] Aucun GIF trouvé pour le terme: "${gifSearchTerm}"`);
+              // Informer l'utilisateur qu'aucun GIF n'a été trouvé
+              await message.reply(`Désolé, je n'ai pas trouvé de GIF pour "${gifSearchTerm}". Essaie avec un autre terme!`);
+              return; // Sortir de la fonction après avoir informé l'utilisateur
             }
           } else {
-            console.log(`[AI] Aucun GIF trouvé pour le terme: "${gifSearchTerm}"`);
-            // Informer l'utilisateur qu'aucun GIF n'a été trouvé
-            await message.reply(`Désolé, je n'ai pas trouvé de GIF pour "${gifSearchTerm}". Essaie avec un autre terme!`);
-            return; // Sortir de la fonction après avoir informé l'utilisateur
+            console.log(`[AI] Score de pertinence insuffisant (${relevanceAnalysis.relevanceScore}) pour envoyer un GIF - Ignoré`);
+            // Ne pas envoyer de GIF si le score de pertinence est trop bas
+            // Continuer avec le traitement normal du message
           }
-        } else {
-          console.log(`[AI] Score de pertinence insuffisant (${relevanceAnalysis.relevanceScore}) pour envoyer un GIF - Ignoré`);
-          // Ne pas envoyer de GIF si le score de pertinence est trop bas
-          // Continuer avec le traitement normal du message
+        } catch (error) {
+          console.error('Erreur lors de la recherche ou de l\'envoi du GIF:', error);
+          // Continuer avec une réponse normale en cas d'erreur
         }
-      } catch (error) {
-        console.error('Erreur lors de la recherche ou de l\'envoi du GIF:', error);
-        // Continuer avec une réponse normale en cas d'erreur
       }
-    }
 
-    // Vérifier si le message est une commande pour modifier la fréquence de communication
-    const preferenceType = detectUserPreferenceCommand(message.content);
-    if (preferenceType && (isDirectMention || isReply || isDM)) {
-      console.log(`[AI] Commande de préférence de communication détectée: "${preferenceType}"`);
+      // Traiter les commandes de préférence de communication
+      if (intentAnalysis.intentType === 'TALK_PREFERENCE' && intentAnalysis.data?.preference && (isDirectMention || isReply || isDM)) {
+        const preferenceType = intentAnalysis.data.preference;
+        console.log(`[AI] Commande de préférence de communication détectée: "${preferenceType}"`);
 
-      try {
-        // Utiliser le MCP pour définir la préférence de l'utilisateur
-        const response = await userPreferencesMcp.processMessage({
-          type: userPreferencesMcp.MESSAGE_TYPES.SET_TALK_PREFERENCE,
-          payload: {
-            userId: message.author.id,
-            preference: preferenceType
+        try {
+          // Utiliser le MCP pour définir la préférence de l'utilisateur
+          const response = await userPreferencesMcp.processMessage({
+            type: userPreferencesMcp.MESSAGE_TYPES.SET_TALK_PREFERENCE,
+            payload: {
+              userId: message.author.id,
+              preference: preferenceType
+            }
+          });
+
+          console.log(`[AI] Préférence de communication définie pour l'utilisateur ${message.author.id}: ${preferenceType}`);
+
+          // Répondre à l'utilisateur en fonction de la préférence définie
+          let replyMessage = '';
+          switch (preferenceType) {
+            case userPreferencesMcp.TALK_PREFERENCES.LESS:
+              replyMessage = "D'accord, je vais essayer de parler moins à partir de maintenant. 🤐";
+              break;
+            case userPreferencesMcp.TALK_PREFERENCES.MORE:
+              replyMessage = "D'accord, je vais essayer de participer plus activement aux conversations à partir de maintenant! 😊";
+              break;
+            case userPreferencesMcp.TALK_PREFERENCES.NORMAL:
+              replyMessage = "D'accord, je reviens à mon comportement normal de communication. 👌";
+              break;
           }
-        });
 
-        console.log(`[AI] Préférence de communication définie pour l'utilisateur ${message.author.id}: ${preferenceType}`);
-
-        // Répondre à l'utilisateur en fonction de la préférence définie
-        let replyMessage = '';
-        switch (preferenceType) {
-          case userPreferencesMcp.TALK_PREFERENCES.LESS:
-            replyMessage = "D'accord, je vais essayer de parler moins à partir de maintenant. 🤐";
-            break;
-          case userPreferencesMcp.TALK_PREFERENCES.MORE:
-            replyMessage = "D'accord, je vais essayer de participer plus activement aux conversations à partir de maintenant! 😊";
-            break;
-          case userPreferencesMcp.TALK_PREFERENCES.NORMAL:
-            replyMessage = "D'accord, je reviens à mon comportement normal de communication. 👌";
-            break;
+          await message.reply(replyMessage);
+          return; // Sortir de la fonction après avoir répondu
+        } catch (error) {
+          console.error('Erreur lors de la définition de la préférence de communication:', error);
+          // Continuer avec une réponse normale en cas d'erreur
         }
-
-        await message.reply(replyMessage);
-        return; // Sortir de la fonction après avoir répondu
-      } catch (error) {
-        console.error('Erreur lors de la définition de la préférence de communication:', error);
-        // Continuer avec une réponse normale en cas d'erreur
       }
+    } catch (error) {
+      console.error('Erreur lors de l\'analyse d\'intention du message:', error);
+      // Continuer avec le traitement normal du message en cas d'erreur
     }
 
     // Le message a déjà été stocké et ajouté à la surveillance plus haut dans le code
@@ -1102,7 +1054,5 @@ export const aiService = {
   addRelevantReaction,
   setupCleanupInterval,
   systemInstructions,
-  getOpenAIClient,
-  detectGifRequest,
-  detectUserPreferenceCommand
+  getOpenAIClient
 }
