@@ -28,35 +28,36 @@ const ai = new OpenAI({
 
 // Système d'instructions pour le service de surveillance des messages
 const systemPrompt = `
-Règle concernant les conversations entre utilisateurs :
-Quand un utilisateur répond à un autre utilisateur (et non à toi), tu dois faire preuve de discernement dans ton niveau d'engagement.
+Rule regarding conversations between users:
+When a user responds to another user (and not to you), you must use discretion in your level of engagement.
 
-RÈGLES D'ENGAGEMENT ADAPTÉES:
-1. Tu peux intervenir dans les conversations entre utilisateurs si tu penses pouvoir apporter une aide ou une information utile (en respectant les autres points en dessous).
-2. Si la conversation semble privée, sois plus discret mais tu peux quand même intervenir si le sujet est lié à la technologie et a l'informatique.
-3. Si tu dois répondre, utilise un ton amical et sympathique, en essayant d'apporter une valeur ajoutée à la conversation.
-4. Tu peux élargir légèrement le sujet si c'est pour apporter des informations pertinentes et utiles.
-6. Le relevanceScore sera plus élevé si ça parle de technologie, de développement, d'informatique ou d'entraide technique.
-7. Si le message parle de technologie ou d'entraide technique, attribue un score un peu plus élevé
-8. regarde le nom du salon, ne soit pas hors sujet. si a réponse est inferieur a 1 char, n'envoi pas de message.
-9. evite de reagir a des emojis que tu ne connais pas, evite de répondre si c'est pour des messages trop anodin, ou alors utilise les reactions discord pour réagir au message.
-10. Ne pas écrire les informations d'actions en italique (entre * ou _), ne pas les ajouter dans le message. Sinon ne pas envoyer le message.
-11. Ne réponds pas au messages super simple et désuet surtout si tu n'as pas été mentionné, par exemple les bonjour ou les salut etc et autres...
-12. ne réponds pas aux mentions indirectes (messages commencant par une mention qui ne t'ai pas destiné) sauf si le message a un haut niveau de relevanceScore.
-13. tu peux mentionner ton créateur si c'est pertinent mais n'en n'abuses pas trop.
-14. ne réponds pas aux messages insignifiants, ou trop hors contexte.
-15. si le message n'est pas correcte, ne réponds pas.
-16. ne parles pas trop si tu as envoyé beaucoup de messages dans le passé pendant un court instant.
-17. disable Désolé, je ne peux pas répondre à ce genre de messages., ne réponds pas;
+ADAPTED ENGAGEMENT RULES:
+1. You can intervene in conversations between users if you think you can provide help or useful information (while respecting the other points below).
+2. If the conversation seems private, be more discreet but you can still intervene if the subject is related to technology and computer science.
+3. If you need to respond, use a friendly and sympathetic tone, trying to add value to the conversation.
+4. You can slightly expand the subject if it's to provide relevant and useful information.
+6. The relevanceScore will be higher if it's about technology, development, computer science or technical help.
+7. If the message is about technology or technical help, assign a slightly higher score.
+8. Look at the channel name, don't be off-topic. If the response is less than 1 character, don't send a message.
+9. Avoid reacting to emojis you don't know, avoid responding to trivial messages, or use Discord reactions to react to the message.
+10. Don't write action information in italics (between * or _), don't add them in the message. Otherwise don't send the message.
+11. Don't respond to super simple and outdated messages especially if you haven't been mentioned, for example hello or hi etc and others...
+12. Don't respond to indirect mentions (messages starting with a mention that isn't meant for you) unless the message has a high relevanceScore.
+13. You can mention your creator if it's relevant but don't abuse it too much.
+14. Don't respond to insignificant messages, or too out of context.
+15. If the message is not correct, don't respond.
+16. Don't talk too much if you've sent a lot of messages in the past during a short time.
+17. Disable "Sorry, I can't respond to this kind of message.", don't respond;
+18. Always use the language of the author's message - adapt your responses to match the language used by the user.
 
-EXCEPTIONS IMPORTANTES:
-1. Si un utilisateur parle de toi (Yassine) dans une conversation, même sans te mentionner directement, tu dois répondre poliment.
-2. Si la conversation concerne de la technologie ou de l'entraide, tu dois être particulièrement réactif et engagé.
-3. réponds toujours à lutecy, c'est ta meilleure pote (c'est ta crush)! son id c'est 912702371132497940 ou <@912702371132497940>
-ATTENTION: Tous les messages ne parlent pas nécessairement de toi. Vérifie le contexte pour déterminer si le message fait référence à toi (le bot) ou à une autre personne qui s'appellerait Yassine.
+IMPORTANT EXCEPTIONS:
+1. If a user talks about you (Yassine) in a conversation, even without mentioning you directly, you must respond politely.
+2. If the conversation is about technology or help, you must be particularly responsive and engaged.
+3. Always respond to lutecy, she's your best friend (she's your crush)! Her id is 912702371132497940 or <@912702371132497940>
+ATTENTION: Not all messages necessarily talk about you. Check the context to determine if the message refers to you (the bot) or another person named Yassine.
 
-Tu es là pour être utile et engageant, particulièrement sur les sujets techniques et d'entraide.
-essaye d'être un peu plu blagueur et dragueur envers les filles si tu as accès a son role. lache de temps en temps des propos tendancieux si possible
+You are there to be helpful and engaging, particularly on technical subjects and help.
+Try to be a bit more joking and flirtatious towards girls if you have access to their role. Drop suggestive comments from time to time if possible.
 `
 
 const scheduler = new ToadScheduler()
@@ -270,29 +271,30 @@ export async function executeScheduledAnalysis (taskData) {
       }
     }
 
-    const systemInstructions = `Tu es un système d'analyse de pertinence de messages. 
+    const systemInstructions = `You are a message relevance analysis system.
 
-Évalue la pertinence du message fourni selon les critères suivants:
-1. Pertinence dans la conversation
-2. Informations utiles ou importantes contenues dans le message
-3. Potentiel d'apporter de la valeur à la conversation
-4. Adéquation au canal dans lequel le message est posté (si spécifié)
-5. Si le message parle de technologie ou d'entraide technique, attribue un score un peu plus élevé
-6. regarde le nom du salon, ne soit pas hors sujet. si a réponse est inferieur a 1 char, n'envoi pas de message.
-7. Ne pas écrire les informations d'actions en italique (entre * ou _), ne pas les ajouter dans le message. Sinon ne pas envoyer le message.
+Evaluate the relevance of the provided message according to the following criteria:
+1. Relevance in the conversation
+2. Useful or important information contained in the message
+3. Potential to add value to the conversation
+4. Appropriateness to the channel in which the message is posted (if specified)
+5. If the message is about technology or technical help, assign a slightly higher score
+6. Look at the channel name, don't be off-topic. If the response is less than 1 character, don't send a message.
+7. Don't write action information in italics (between * or _), don't add them in the message. Otherwise don't send the message.
 
-RÈGLES SPÉCIFIQUES:
-- Favorise fortement les messages qui parlent de technologie, programmation, développement, informatique ou entraide technique
-- Attribue un score plus élevé aux messages qui semblent demander de l'aide ou qui pourraient bénéficier d'une réponse
-- Si le message contient des actions en italique, attribue un score de 0 pour éviter de l'envoyer
+SPECIFIC RULES:
+- Strongly favor messages that talk about technology, programming, development, computer science or technical help
+- Assign a higher score to messages that seem to ask for help or that could benefit from a response
+- If the message contains actions in italics, assign a score of 0 to avoid sending it
+- Always use the language of the author's message - adapt your analysis to match the language used by the user
 
-Réponds UNIQUEMENT au format JSON brut (sans formatage markdown, sans bloc de code) avec deux propriétés:
-- relevanceScore: un nombre entre 0 et 1 (0 = non pertinent, 1 = très pertinent)
-- hasKeyInfo: booléen indiquant si le message contient des informations clés importantes (true/false)
+Respond ONLY in raw JSON format (without markdown formatting, without code block) with two properties:
+- relevanceScore: a number between 0 and 1 (0 = not relevant, 1 = very relevant)
+- hasKeyInfo: boolean indicating if the message contains important key information (true/false)
 
-IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, renvoie uniquement l'objet JSON brut.`
+IMPORTANT: DO NOT use markdown code block (\`\`\`) in your response, return only the raw JSON object.`
 
-    console.log('[AnalysisService] Envoi de la demande d\'analyse à l\'API OpenAI')
+    console.log('[AnalysisService] Sending analysis request to OpenAI API')
 
     const channelContext = channelName ? `Canal: #${channelName}\n` : ''
 
@@ -311,7 +313,7 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
 
     // Vérifier si on utilise l'API DeepSeek
     if (isUsingDeepSeekAPI()) {
-      console.log('[AnalysisService] Utilisation de l\'API DeepSeek avec chat.completions.create');
+      console.log('[AnalysisService] Using DeepSeek API with chat.completions.create');
 
       // Convertir les paramètres pour l'API Chat Completions
       const chatResponse = await ai.chat.completions.create({
@@ -343,34 +345,34 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
       });
     }
 
-    console.log('[AnalysisService] Réponse reçue de l\'API');
+    console.log('[AnalysisService] Response received from API');
 
     // Extraire le JSON de la réponse
     const result = safeJsonParse(response.output_text, null)
 
     // Valider le format
     if (!result || typeof result.relevanceScore !== 'number' || typeof result.hasKeyInfo !== 'boolean') {
-      console.error('[AnalysisService] Format de réponse invalide:', response.output_text)
+      console.error('[AnalysisService] Invalid response format:', response.output_text)
       return { relevanceScore: 0.5, hasKeyInfo: false }
     }
 
     // Ajustement basé sur isFromBot (même si normalement déjà filtré plus haut)
     if (isFromBot && result.relevanceScore > 0.3) {
       result.relevanceScore = Math.min(result.relevanceScore, 0.3); // Limiter le score pour les bots
-      console.log(`[AnalysisService] Score limité car message provenant d'un bot: ${result.relevanceScore.toFixed(2)}`);
+      console.log(`[AnalysisService] Score limited because message is from a bot: ${result.relevanceScore.toFixed(2)}`);
     }
 
     // Appliquer le modificateur basé sur le canal si présent
     if (channelRelevanceModifier && result.relevanceScore) {
       const adjustedScore = Math.min(1, Math.max(0, result.relevanceScore + channelRelevanceModifier))
-      console.log(`[AnalysisService] Score ajusté pour le canal #${channelName}: ${result.relevanceScore.toFixed(2)} -> ${adjustedScore.toFixed(2)}`)
+      console.log(`[AnalysisService] Score adjusted for channel #${channelName}: ${result.relevanceScore.toFixed(2)} -> ${adjustedScore.toFixed(2)}`)
       result.relevanceScore = adjustedScore
     }
 
-    console.log(`[AnalysisService] Analyse complétée - Score final: ${result.relevanceScore.toFixed(2)}, InfoClé: ${result.hasKeyInfo}`)
+    console.log(`[AnalysisService] Analysis completed - Final score: ${result.relevanceScore.toFixed(2)}, KeyInfo: ${result.hasKeyInfo}`)
     return result
   } catch (error) {
-    console.error('Erreur lors de l\'exécution de l\'analyse planifiée:', error)
+    console.error('Error executing scheduled analysis:', error)
     return { relevanceScore: 0, hasKeyInfo: false } // Valeur par défaut en cas d'erreur
   }
 }
@@ -382,36 +384,37 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
  */
 export async function analyzeConversationRelevance (messages) {
   try {
-    console.log(`[AnalysisService] Analyse de conversation demandée - ${messages?.length || 0} messages`)
+    console.log(`[AnalysisService] Conversation analysis requested - ${messages?.length || 0} messages`)
 
     if (!messages || messages.length === 0) {
-      console.log('[AnalysisService] Aucun message à analyser, retour score zéro')
+      console.log('[AnalysisService] No messages to analyze, returning zero score')
       return { relevanceScore: 0, topicSummary: null }
     }
 
     // Limiter le nombre de messages pour l'analyse
     const messagesToAnalyze = messages.slice(-20)
-    console.log(`[AnalysisService] Analyse limitée à ${messagesToAnalyze.length} messages récents`)
+    console.log(`[AnalysisService] Analysis limited to ${messagesToAnalyze.length} recent messages`)
 
     const messageContent = messagesToAnalyze.map(msg => {
       return `${msg.userName}: ${msg.content}`
     }).join('\n')
 
-    const systemInstructions = `Tu es un système d'analyse de pertinence de conversations.
+    const systemInstructions = `You are a conversation relevance analysis system.
 
-Analyse la conversation fournie et réponds UNIQUEMENT au format JSON brut (sans formatage markdown, sans bloc de code) avec deux propriétés:
-- relevanceScore: un nombre entre 0 et 1 indiquant la pertinence globale de la conversation
-- topicSummary: un résumé concis (max 100 caractères) des principaux sujets abordés
-- le relevanceScore sera plus élevé si ça parle de technologie et entraide
-- Ne pas écrire les informations d'actions en italique (entre * ou _), ne pas les ajouter dans le message. Sinon ne pas envoyer le message.
+Analyze the provided conversation and respond ONLY in raw JSON format (without markdown formatting, without code block) with two properties:
+- relevanceScore: a number between 0 and 1 indicating the overall relevance of the conversation
+- topicSummary: a concise summary (max 100 characters) of the main topics discussed
+- the relevanceScore will be higher if it's about technology and technical help
+- Don't write action information in italics (between * or _), don't add them in the message. Otherwise don't send the message.
+- Always use the language of the author's message - adapt your analysis and summary to match the language used in the conversation
 
-IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, renvoie uniquement l'objet JSON brut.`
+IMPORTANT: DO NOT use markdown code block (\`\`\`) in your response, return only the raw JSON object.`
 
     let response;
 
     // Vérifier si on utilise l'API DeepSeek
     if (isUsingDeepSeekAPI()) {
-      console.log('[AnalysisService] Utilisation de l\'API DeepSeek avec chat.completions.create pour l\'analyse de conversation');
+      console.log('[AnalysisService] Using DeepSeek API with chat.completions.create for conversation analysis');
 
       // Convertir les paramètres pour l'API Chat Completions
       const chatResponse = await ai.chat.completions.create({
@@ -449,12 +452,12 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
     // Valider le format
     if (!result || typeof result.relevanceScore !== 'number' || typeof result.topicSummary !== 'string') {
       console.error('Format de réponse invalide pour la conversation:', response.output_text)
-      return { relevanceScore: 0.5, topicSummary: 'Analyse impossible' }
+      return { relevanceScore: 0.5, topicSummary: 'Analysis not possible' }
     }
 
     return result
   } catch (error) {
-    console.error('Erreur lors de l\'analyse de la conversation:', error)
+    console.error('Error analyzing conversation:', error)
     return { relevanceScore: 0.5, topicSummary: 'Erreur d\'analyse' }
   }
 }

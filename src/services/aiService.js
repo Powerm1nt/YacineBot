@@ -177,7 +177,7 @@ RÈGLES D'ENGAGEMENT ADAPTÉES:
 12. ne réponds pas aux messages insignifiants, ou trop hors contexte.
 13. si le message n'est pas correcte, ne réponds pas.
 14. disable Désolé, je ne peux pas répondre à ce genre de messages., ne réponds pas.
-15. utilise la langue de la conversation
+15. use the language of the author's message - adapt your responses to match the language used by the user
 EXCEPTIONS IMPORTANTES:
 1. Si un utilisateur parle de toi (Yassine) dans une conversation, même sans te mentionner directement, tu dois répondre poliment.
 2. Si la conversation concerne de la technologie ou de l'entraide, tu dois être particulièrement réactif et engagé.
@@ -956,12 +956,12 @@ export async function handleMessage(message) {
         await taskService.deleteTask(waitingTaskId)
         console.log(`[AI] Waiting task ${waitingTaskId} deleted after response generation`)
       } catch (deleteError) {
-        console.error(`[AI] Erreur lors de la suppression de la tâche d'attente:`, deleteError)
-        // Ne pas bloquer le processus si la suppression échoue
+        console.error(`[AI] Error deleting waiting task:`, deleteError)
+        // Don't block the process if deletion fails
       }
 
-      // Parfois, réagir au message avec un emoji pertinent
-      const shouldAddReaction = Math.random() < 0.3 // 30% de chance d'ajouter une réaction
+      // Sometimes react to the message with a relevant emoji
+      const shouldAddReaction = Math.random() < 0.3 // 30% chance of adding a reaction
       if (shouldAddReaction) {
         await addRelevantReaction(message, res)
       }
