@@ -3,6 +3,7 @@ import { prisma } from '../services/prisma.js';
 import { conversationService } from '../services/conversationService.js';
 import { convertBigIntsToStrings } from './jsonUtils.js';
 import { analysisService } from '../services/analysisService.js';
+import { isUsingDeepSeekAPI } from '../services/aiService.js';
 
 const guildConversations = new Map()
 const dmConversations = new Map()
@@ -182,7 +183,15 @@ export async function saveContextResponse(message, responseId) {
     return false
   }
 
-  if (typeof responseId !== 'string' || !responseId.startsWith('resp')) {
+  // Check if we're using DeepSeek API, which has a different response ID format
+  if (typeof responseId !== 'string') {
+    console.error(`Format d'ID de réponse invalide: ${responseId}. L'ID doit être une chaîne de caractères.`)
+    return false
+  }
+
+  // When using standard OpenAI API, response IDs must start with 'resp'
+  // When using DeepSeek API, response IDs have a different format (UUID)
+  if (!isUsingDeepSeekAPI() && !responseId.startsWith('resp')) {
     console.error(`Format d'ID de réponse invalide: ${responseId}. Les IDs doivent commencer par 'resp'`)
     return false
   }

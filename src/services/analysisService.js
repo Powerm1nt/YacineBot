@@ -248,7 +248,12 @@ export async function executeScheduledAnalysis (taskData) {
 
     // Ajuster le score initial en fonction du canal
     let channelRelevanceModifier = 0.25 // Bonus par défaut pour tous les canaux
-    if (channelName) {
+
+    // Augmenter le score pour les messages privés et les groupes
+    if (guildId === null) {
+      // Si c'est un message privé ou un groupe, augmenter significativement le score
+      channelRelevanceModifier = 0.6 // Bonus plus élevé pour les DMs et groupes
+    } else if (channelName) {
       const channelNameLower = channelName.toLowerCase()
       // Canaux où on est plus susceptible de vouloir participer
       if (channelNameLower.includes('général') || channelNameLower.includes('general') ||
@@ -348,7 +353,7 @@ IMPORTANT: N'utilise PAS de bloc de code markdown (\`\`\`) dans ta réponse, ren
     // Valider le format
     if (!result || typeof result.relevanceScore !== 'number' || typeof result.hasKeyInfo !== 'boolean') {
       console.error('[AnalysisService] Format de réponse invalide:', response.output_text)
-      return { relevanceScore: 0.4, hasKeyInfo: false }
+      return { relevanceScore: 0.5, hasKeyInfo: false }
     }
 
     // Ajustement basé sur isFromBot (même si normalement déjà filtré plus haut)
@@ -659,7 +664,7 @@ export async function getSharedConversations (userId) {
           where: {
             OR: [
               { hasKeyInfo: true },
-              { relevanceScore: { gte: 0.7 } }
+              { relevanceScore: { gte: 0.6 } }
             ]
           }
         }

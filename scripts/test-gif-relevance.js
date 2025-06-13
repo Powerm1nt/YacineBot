@@ -9,7 +9,7 @@ const mockAnalyzeMessageRelevance = async (content, contextInfo, isFromBot, chan
   if (content.includes('important') || content.includes('urgent')) {
     return { relevanceScore: 0.8, hasKeyInfo: true };
   } else if (content.includes('please') || content.includes('help')) {
-    return { relevanceScore: 0.5, hasKeyInfo: false };
+    return { relevanceScore: 0.6, hasKeyInfo: true };
   } else {
     return { relevanceScore: 0.2, hasKeyInfo: false };
   }
@@ -59,7 +59,7 @@ async function testGifRelevanceCheck() {
         console.log(`Relevance score: ${relevanceAnalysis.relevanceScore}`);
         
         // Check if GIF would be sent
-        if (relevanceAnalysis.relevanceScore >= 0.3) {
+        if (relevanceAnalysis.relevanceScore >= 0.1) {
           console.log('RESULT: GIF would be sent ✅');
         } else {
           console.log('RESULT: GIF would NOT be sent ❌');

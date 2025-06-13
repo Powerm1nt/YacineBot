@@ -25,32 +25,49 @@ async function testRelevanceScore() {
     }
   ];
 
-  // Test each case
+  // Test each case in both server and private message contexts
   for (const testCase of testCases) {
-    console.log(`\nTesting: "${testCase.content}"`);
+    console.log(`\n=== Testing: "${testCase.content}" ===`);
     console.log(`Expected: ${testCase.expected}`);
 
     try {
-      // Create mock task data
-      const taskData = {
+      // Test in server context (guildId provided)
+      console.log("\nTesting in SERVER context:");
+      const serverTaskData = {
         content: testCase.content,
         contextInfo: '',
         isFromBot: false,
         channelName: 'general',
-        guildId: null,
+        guildId: 'server123', // Simulating a server message
         channelPermissions: ['SEND_MESSAGES']
       };
 
-      // Call the executeScheduledAnalysis function directly
-      const result = await executeScheduledAnalysis(taskData);
+      const serverResult = await executeScheduledAnalysis(serverTaskData);
+      console.log(`Server result: relevanceScore = ${serverResult.relevanceScore}, hasKeyInfo = ${serverResult.hasKeyInfo}`);
 
-      console.log(`Result: relevanceScore = ${result.relevanceScore}, hasKeyInfo = ${result.hasKeyInfo}`);
+      // Test in private message context (guildId null)
+      console.log("\nTesting in PRIVATE MESSAGE context:");
+      const privateTaskData = {
+        content: testCase.content,
+        contextInfo: '',
+        isFromBot: false,
+        channelName: 'private',
+        guildId: null, // Simulating a private message
+        channelPermissions: ['SEND_MESSAGES']
+      };
+
+      const privateResult = await executeScheduledAnalysis(privateTaskData);
+      console.log(`Private result: relevanceScore = ${privateResult.relevanceScore}, hasKeyInfo = ${privateResult.hasKeyInfo}`);
+
+      // Compare the scores
+      console.log(`\nComparison: Private message score is ${privateResult.relevanceScore > serverResult.relevanceScore ? 'HIGHER' : 'LOWER'} than server score`);
+      console.log(`Difference: ${(privateResult.relevanceScore - serverResult.relevanceScore).toFixed(2)}`);
 
       // Basic validation
-      if (result.relevanceScore === 0) {
-        console.log('WARNING: relevanceScore is 0, which might indicate a problem!');
+      if (privateResult.relevanceScore <= serverResult.relevanceScore) {
+        console.log('WARNING: Private message score should be higher than server score!');
       } else {
-        console.log('relevanceScore is non-zero, which is good.');
+        console.log('SUCCESS: Private message score is higher than server score, as expected.');
       }
     } catch (error) {
       console.error('Error during testing:', error);

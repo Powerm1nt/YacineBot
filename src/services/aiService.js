@@ -413,11 +413,15 @@ export async function buildResponse(input, message, additionalInstructions = '')
       }
     }
 
-    if (lastResponseId && typeof lastResponseId === 'string' && lastResponseId.startsWith('resp')) {
-      responseParams.previous_response_id = lastResponseId
-      console.log(`Using previous response ID: ${lastResponseId}`)
-    } else if (lastResponseId) {
-      console.log(`Ignoring invalid response ID format: ${lastResponseId} (must start with 'resp')`)
+    // When using DeepSeek API, response IDs have a different format (UUID)
+    // When using standard OpenAI API, response IDs must start with 'resp'
+    if (lastResponseId && typeof lastResponseId === 'string') {
+      if (isUsingDeepSeekAPI() || lastResponseId.startsWith('resp')) {
+        responseParams.previous_response_id = lastResponseId
+        console.log(`Using previous response ID: ${lastResponseId}`)
+      } else {
+        console.log(`Ignoring invalid response ID format: ${lastResponseId} (must start with 'resp')`)
+      }
     }
 
     let response;
