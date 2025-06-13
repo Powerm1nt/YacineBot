@@ -75,13 +75,13 @@ function selectRandomChannel(client, channelType = null) {
   if (isChannelTypeEnabled(CHANNEL_TYPES.GROUP)) enabledTypes.push(CHANNEL_TYPES.GROUP);
 
   if (enabledTypes.length === 0) {
-    console.log('Aucun type de canal n\'est activé dans la configuration');
+    console.log('No channel type is enabled in the configuration');
     return null;
   }
 
   if (channelType) {
     if (!isChannelTypeEnabled(channelType)) {
-      console.log(`Le type de canal ${channelType} est désactivé dans la configuration`);
+      console.log(`Channel type ${channelType} is disabled in the configuration`);
       return null;
     }
   } else {
@@ -96,7 +96,7 @@ function selectRandomChannel(client, channelType = null) {
     case CHANNEL_TYPES.GROUP:
       return selectRandomGroupChannel(client);
     default:
-      console.log(`Type de canal non reconnu: ${channelType}`);
+      console.log(`Unrecognized channel type: ${channelType}`);
       return null;
   }
 }
@@ -119,7 +119,7 @@ function selectRandomGuildChannel(client) {
     });
 
   if (guilds.length === 0) {
-    console.log('Aucun serveur disponible ou activé dans la configuration');
+    console.log('No server available or enabled in the configuration');
     return null;
   }
 
@@ -137,7 +137,7 @@ function selectRandomGuildChannel(client) {
     });
 
   if (textChannels.length === 0) {
-    console.log(`Aucun canal textuel accessible dans ${randomGuild.name}`);
+    console.log(`No accessible text channel in ${randomGuild.name}`);
     return null;
   }
 
@@ -165,7 +165,7 @@ function selectRandomDMChannel(client) {
     .filter(channel => channel.type === 'DM' && !channel.recipient.bot);
 
   if (dmChannels.length === 0) {
-    console.log('Aucun canal de message privé disponible');
+    console.log('No private message channel available');
     return null;
   }
 
@@ -193,7 +193,7 @@ function selectRandomGroupChannel(client) {
     .filter(channel => channel.type === 'GROUP_DM');
 
   if (groupChannels.length === 0) {
-    console.log('Aucun canal de groupe disponible');
+    console.log('No group channel available');
     return null;
   }
 
@@ -222,7 +222,7 @@ async function selectRandomUser (channel, client) {
       .filter(member => !member.user.bot && member.id !== client.user.id)
 
     if (members.length === 0) {
-      console.log(`Aucun utilisateur disponible dans ${channel.name}`)
+      console.log(`No user available in ${channel.name}`)
       return null
     }
 
@@ -249,7 +249,7 @@ function isActiveHour (startHour = 8, endHour = 23) {
  * Initialise les gestionnaires de tâches spécifiques
  */
 export async function initTaskHandlers() {
-  console.log('[Scheduler] Initialisation des gestionnaires de tâches spécifiques...');
+  console.log('[Scheduler] Initializing specific task handlers...');
 
   // Gestionnaire pour les tâches d'analyse
   const analysisTaskHandler = new AsyncTask(
@@ -263,13 +263,13 @@ export async function initTaskHandlers() {
           return;
         }
 
-        console.log(`[Scheduler] ${analysisTasks.length} tâches d'analyse à traiter`);
+        console.log(`[Scheduler] ${analysisTasks.length} analysis tasks to process`);
 
         // Traiter chaque tâche d'analyse
         for (const task of analysisTasks) {
           // Vérifier si la tâche est prête à être exécutée
           if (new Date(task.nextExecution) <= new Date()) {
-            console.log(`[Scheduler] Traitement de la tâche d'analyse ${task.schedulerId}`);
+            console.log(`[Scheduler] Processing analysis task ${task.schedulerId}`);
 
             try {
               // Mettre à jour le statut de la tâche
@@ -279,7 +279,7 @@ export async function initTaskHandlers() {
               const { executeScheduledAnalysis } = await import('./analysisService.js');
               const analysisResult = await executeScheduledAnalysis(task.data);
 
-              console.log(`[Scheduler] Analyse terminée - Résultat: ${JSON.stringify(analysisResult)}`);
+              console.log(`[Scheduler] Analysis completed - Result: ${JSON.stringify(analysisResult)}`);
 
               // Marquer la tâche comme terminée
               await taskService.updateTaskStatus(task.schedulerId, 'completed');
@@ -302,7 +302,7 @@ export async function initTaskHandlers() {
   const analysisJob = new SimpleIntervalJob({ seconds: 5 }, analysisTaskHandler);
   scheduler.addSimpleIntervalJob(analysisJob);
 
-  console.log('[Scheduler] Gestionnaires de tâches spécifiques initialisés');
+  console.log('[Scheduler] Specific task handlers initialized');
 }
 
 /**
@@ -310,10 +310,10 @@ export async function initTaskHandlers() {
  * @param {Object} client - Client Discord
  */
 export async function initScheduler(client) {
-  console.log('[Scheduler] Initialisation du planificateur de tâches...')
+  console.log('[Scheduler] Initializing task scheduler...')
   // Vérifier si les messages automatiques sont activés
   if (!(await isSchedulerEnabled()) || process.env.ENABLE_AUTO_MESSAGES !== 'true') {
-    console.log('[Scheduler] Les messages automatiques sont désactivés - Planificateur non initialisé')
+    console.log('[Scheduler] Automatic messages are disabled - Scheduler not initialized')
     return
   }
 
@@ -321,8 +321,8 @@ export async function initScheduler(client) {
   await stopScheduler()
 
   const currentTime = formatDate(new Date(), 'HH:mm:ss')
-  console.log(`Planificateur initialisé à ${currentTime} avec le fuseau horaire système (${TIMEZONE} configuré)`)
-  console.log(`Configuration: délai: ${formatDelay(MIN_DELAY)}-${formatDelay(MAX_DELAY)}`)
+  console.log(`Scheduler initialized at ${currentTime} with system timezone (${TIMEZONE} configured)`)
+  console.log(`Configuration: delay: ${formatDelay(MIN_DELAY)}-${formatDelay(MAX_DELAY)}`)
 
   try {
     // Vérifier l'accès à la base de données
@@ -345,11 +345,11 @@ export async function initScheduler(client) {
 
     // Nettoyer les tâches terminées (completed ou failed)
     const cleanedFinished = await taskService.cleanupFinishedTasks();
-    console.log(`[Scheduler] ${cleanedExpired} tâches expirées et ${cleanedFinished} tâches terminées nettoyées`);
+    console.log(`[Scheduler] ${cleanedExpired} expired tasks and ${cleanedFinished} finished tasks cleaned up`);
 
     // Synchroniser le cache mémoire avec la base de données
     const restoredCount = await taskService.syncMemoryCache();
-    console.log(`[Scheduler] Service de tâches initialisé: ${cleanedExpired + cleanedFinished} tâches nettoyées, ${restoredCount} tâches restaurées en mémoire`);
+    console.log(`[Scheduler] Task service initialized: ${cleanedExpired + cleanedFinished} tasks cleaned up, ${restoredCount} tasks restored in memory`);
 
     // Initialiser les gestionnaires de tâches spécifiques
     await initTaskHandlers();
@@ -358,7 +358,7 @@ export async function initScheduler(client) {
     try {
       const deletedCount = await taskService.deleteTasksByType('random-question-task');
       if (deletedCount > 0) {
-        console.log(`[Scheduler] ${deletedCount} anciennes tâches de questions aléatoires supprimées`);
+        console.log(`[Scheduler] ${deletedCount} old random question tasks deleted`);
       }
     } catch (deleteError) {
       console.error('[Scheduler] Erreur lors de la suppression des anciennes tâches:', deleteError);
@@ -370,7 +370,7 @@ export async function initScheduler(client) {
     // Vérifier s'il existe déjà une tâche d'analyse active
     const existingAnalysisTasks = await taskService.getTasksByType('analysis-task');
     if (existingAnalysisTasks.length > 0) {
-      console.log(`[Scheduler] ${existingAnalysisTasks.length} tâches d'analyse existantes trouvées en base de données`);
+      console.log(`[Scheduler] ${existingAnalysisTasks.length} existing analysis tasks found in database`);
 
       // Si les tâches sont expirées ou arrêtées, les supprimer et en créer de nouvelles
       const now = new Date();
@@ -379,7 +379,7 @@ export async function initScheduler(client) {
       );
 
       if (activeTask) {
-        console.log(`[Scheduler] Tâche d'analyse active trouvée (ID: ${activeTask.schedulerId}), reprogrammation non nécessaire`);
+        console.log(`[Scheduler] Active analysis task found (ID: ${activeTask.schedulerId}), rescheduling not necessary`);
         // Ajouter à la liste des tâches actives en mémoire
         activeTasks.set(activeTask.schedulerId, {
           taskNumber: activeTask.taskNumber || 1,
@@ -388,7 +388,7 @@ export async function initScheduler(client) {
           taskData: activeTask
         });
       } else {
-        console.log('[Scheduler] Aucune tâche d\'analyse active trouvée, suppression des tâches expirées et création d\'une nouvelle');
+        console.log('[Scheduler] No active analysis task found, deleting expired tasks and creating a new one');
         // Supprimer les tâches expirées ou arrêtées
         for (const task of existingAnalysisTasks) {
           await taskService.deleteTask(task.schedulerId);
@@ -396,9 +396,9 @@ export async function initScheduler(client) {
       }
     }
 
-    console.log('[Scheduler] Initialisation du planificateur terminée. Les tâches de message seront créées par le service d\'analyse si nécessaire.');
+    console.log('[Scheduler] Scheduler initialization completed. Message tasks will be created by the analysis service if needed.');
   } catch (error) {
-    console.error('[Scheduler] Erreur lors de l\'initialisation du planificateur:', error);
+    console.error('[Scheduler] Error during scheduler initialization:', error);
   }
 }
 
@@ -416,34 +416,34 @@ async function createAnalysisTask(client, taskNumber) {
   // Générer un identifiant unique pour cette tâche
   const taskId = `analysis-task-${taskNumber}-${randomUUID().substring(0, 8)}`;
 
-  console.log(`[Scheduler] Création d'une nouvelle tâche d'analyse: ${taskId}`);
+  console.log(`[Scheduler] Creating a new analysis task: ${taskId}`);
 
   // Créer la tâche asynchrone
   const task = new AsyncTask(
     taskId,
     async () => {
       try {
-        console.log('[Scheduler] Exécution de la tâche d\'analyse de conversation');
+        console.log('[Scheduler] Executing conversation analysis task');
 
         // Mettre à jour le statut de la tâche dans la base de données
         await taskService.updateTaskStatus(taskId, 'running');
 
         // Traiter les tâches intermédiaires (analyse des messages capturés)
         const processedTasks = await messageTaskService.processIntermediateTasks();
-        console.log(`[Scheduler] ${processedTasks} tâches intermédiaires traitées`);
+        console.log(`[Scheduler] ${processedTasks} intermediate tasks processed`);
 
         // Exécuter les tâches de réponse
         const executedTasks = await messageTaskService.executeResponseTasks(client);
-        console.log(`[Scheduler] ${executedTasks} tâches de réponse exécutées`);
+        console.log(`[Scheduler] ${executedTasks} response tasks executed`);
 
         // Vérifier si l'analyse est activée
         const analysisEnabled = await isAnalysisEnabled();
         const autoRespondEnabled = await isAutoRespondEnabled();
 
-        console.log(`[Scheduler] Configuration - Analyse: ${analysisEnabled ? 'activée' : 'désactivée'}, Réponse auto: ${autoRespondEnabled ? 'activée' : 'désactivée'}`);
+        console.log(`[Scheduler] Configuration - Analysis: ${analysisEnabled ? 'enabled' : 'disabled'}, Auto-response: ${autoRespondEnabled ? 'enabled' : 'disabled'}`);
 
         if (!analysisEnabled) {
-          console.log('[Scheduler] Tâche d\'analyse ignorée - L\'analyse est désactivée');
+          console.log('[Scheduler] Analysis task skipped - Analysis is disabled');
           // Marquer comme terminée même si ignorée
           await taskService.updateTaskStatus(taskId, 'completed');
           return;
@@ -452,19 +452,19 @@ async function createAnalysisTask(client, taskNumber) {
         // Vérifier si nous sommes dans les heures actives
         if (!isActiveHour()) {
           const currentTime = formatDate(new Date(), 'HH:mm');
-          console.log(`[Scheduler] Tâche d'analyse ignorée - Hors des heures actives (${currentTime})`);
+          console.log(`[Scheduler] Analysis task skipped - Outside active hours (${currentTime})`);
           // Marquer comme terminée même si ignorée
           await taskService.updateTaskStatus(taskId, 'completed');
           return;
         }
 
-        console.log('[Scheduler] Tâche d\'analyse en cours d\'exécution - Dans les heures actives');
+        console.log('[Scheduler] Analysis task executing - Within active hours');
 
         // Récupérer aussi les tâches de conversation planifiées en utilisant directement la base de données
         // pour avoir les données les plus récentes
         const pendingTasks = await taskService.getTasksByType('conversation');
         if (pendingTasks && pendingTasks.length > 0) {
-          console.log(`Traitement de ${pendingTasks.length} tâches de conversation planifiées...`);
+          console.log(`Processing ${pendingTasks.length} scheduled conversation tasks...`);
 
           for (const task of pendingTasks) {
             if (task.data && task.data.channelId) {
@@ -507,7 +507,7 @@ async function createAnalysisTask(client, taskNumber) {
                     // Envoyer le message
                     await channel.send(messageContent);
 
-                    console.log(`Message de suivi envoyé dans ${task.data.channelId} sur le sujet: ${topicSummary}`);
+                    console.log(`Follow-up message sent in ${task.data.channelId} on topic: ${topicSummary}`);
                   }
                 }
 
@@ -549,7 +549,7 @@ async function createAnalysisTask(client, taskNumber) {
         });
 
         if (recentConversations.length === 0) {
-          console.log('Aucune conversation récente à analyser');
+          console.log('No recent conversation to analyze');
           // Marquer la tâche comme terminée
           await taskService.updateTaskStatus(taskId, 'completed');
           return;
@@ -607,12 +607,12 @@ async function createAnalysisTask(client, taskNumber) {
               // Envoyer le message
               await channel.send(messageContent);
 
-              console.log(`Message automatique envoyé dans ${selectedConversation.channelId} sur le sujet: ${analysis.topicSummary}`);
+              console.log(`Automatic message sent in ${selectedConversation.channelId} on topic: ${analysis.topicSummary}`);
             }
           }
         }
 
-        console.log(`Conversation ${selectedConversation.id} analysée, score: ${analysis.relevanceScore}, sujet: ${analysis.topicSummary}`);
+        console.log(`Conversation ${selectedConversation.id} analyzed, score: ${analysis.relevanceScore}, topic: ${analysis.topicSummary}`);
 
         // Marquer la tâche comme terminée
         await taskService.updateTaskStatus(taskId, 'completed');
@@ -642,7 +642,7 @@ async function createAnalysisTask(client, taskNumber) {
   const analysisDelay = minDelayMs + Math.floor(Math.random() * (maxDelayMs - minDelayMs));
   const nextExecutionTime = addMinutes(new Date(), Math.floor(analysisDelay / 60000));
 
-  console.log(`[Tâche d'analyse ${taskNumber}] Planifiée pour ${formatDate(nextExecutionTime, 'HH:mm:ss')}`);
+  console.log(`[Analysis task ${taskNumber}] Scheduled for ${formatDate(nextExecutionTime, 'HH:mm:ss')}`);
 
   // Créer un job pour l'analyse
   const job = new SimpleIntervalJob(
@@ -670,9 +670,9 @@ async function createAnalysisTask(client, taskNumber) {
       taskData: savedTask
     });
 
-    console.log(`[Scheduler] Tâche d'analyse ${taskId} enregistrée dans la base de données et le cache mémoire`);
+    console.log(`[Scheduler] Analysis task ${taskId} registered in database and memory cache`);
   } catch (error) {
-    console.warn(`Erreur lors de l'enregistrement de la tâche d'analyse ${taskId}:`, error.message);
+    console.warn(`Error while registering analysis task ${taskId}:`, error.message);
   }
 
   return taskId;
@@ -706,7 +706,7 @@ Ne pas inclure d'introduction comme "Alors," ou "Au fait,". Donne simplement la 
 
     // Vérifier si on utilise l'API DeepSeek
     if (isUsingDeepSeekAPI()) {
-      console.log(`[SchedulerService] Utilisation de l'API DeepSeek avec chat.completions.create pour question de suivi`);
+      console.log(`[SchedulerService] Using DeepSeek API with chat.completions.create for follow-up question`);
 
       // Convertir les paramètres pour l'API Chat Completions
       const chatResponse = await openai.chat.completions.create({
@@ -773,7 +773,7 @@ Ne pas inclure d'introduction comme "Je pense que" ou "À mon avis". Donne simpl
 
     // Vérifier si on utilise l'API DeepSeek
     if (isUsingDeepSeekAPI()) {
-      console.log(`[SchedulerService] Utilisation de l'API DeepSeek avec chat.completions.create pour commentaire de sujet`);
+      console.log(`[SchedulerService] Using DeepSeek API with chat.completions.create for topic comment`);
 
       // Convertir les paramètres pour l'API Chat Completions
       const chatResponse = await openai.chat.completions.create({
@@ -1102,27 +1102,27 @@ export function getTaskByNumber (taskNumber) {
 export function setDefaultChannelType(channelType) {
   // Vérifier si le type de canal est valide
   if (!Object.values(CHANNEL_TYPES).includes(channelType)) {
-    throw new Error(`Type de canal non valide: ${channelType}. Utilisez: ${Object.values(CHANNEL_TYPES).join(', ')}`);
+    throw new Error(`Invalid channel type: ${channelType}. Use: ${Object.values(CHANNEL_TYPES).join(', ')}`);
   }
 
   process.env.TARGET_CHANNEL_TYPE = channelType;
-  console.log(`Type de canal cible par défaut défini sur: ${channelType}`);
+  console.log(`Default target channel type set to: ${channelType}`);
 }
 
 export async function stopScheduler() {
-  console.log('Arrêt du planificateur de tâches en cours...');
+  console.log('Stopping task scheduler...');
 
   // Supprimer chaque tâche individuellement du planificateur
   for (const [taskId, taskInfo] of activeTasks.entries()) {
     try {
       scheduler.removeById(taskId);
-      console.log(`Tâche ${taskId} supprimée du planificateur`);
+      console.log(`Task ${taskId} removed from scheduler`);
 
       // Marquer la tâche comme terminée dans la base de données
       await taskService.updateTaskStatus(taskId, 'completed');
     } catch (e) {
       // Ignorer si la tâche n'existe pas dans le planificateur
-      console.log(`Impossible de supprimer la tâche ${taskId} du planificateur: ${e.message}`);
+      console.log(`Unable to remove task ${taskId} from scheduler: ${e.message}`);
     }
   }
 
@@ -1146,10 +1146,10 @@ export async function stopScheduler() {
       }
     });
   } catch (dbError) {
-    console.error('Erreur lors de la mise à jour du statut des tâches en base de données:', dbError);
+    console.error('Error updating task status in database:', dbError);
   }
 
-  console.log('Planificateur de tâches arrêté - toutes les tâches ont été supprimées du planificateur et marquées comme arrêtées en base de données');
+  console.log('Task scheduler stopped - all tasks have been removed from the scheduler and marked as stopped in the database');
 }
 
 /**
@@ -1160,9 +1160,9 @@ async function cleanupExpiredTasks() {
   try {
     // Utiliser la méthode du taskService pour nettoyer les tâches expirées
     const count = await taskService.cleanupExpiredTasks();
-    console.log(`${count} tâches expirées supprimées de la base de données et du cache mémoire`);
+    console.log(`${count} expired tasks removed from database and memory cache`);
   } catch (error) {
-    console.error('Erreur lors du nettoyage des tâches expirées:', error);
+    console.error('Error cleaning up expired tasks:', error);
   }
 }
 
@@ -1181,7 +1181,7 @@ async function restorePendingTasks(client) {
         status: { in: ['completed', 'failed'] }
       }
     });
-    console.log(`[Scheduler] ${cleanedTasks.count} tâches terminées ou échouées nettoyées avant restauration`);
+    console.log(`[Scheduler] ${cleanedTasks.count} completed or failed tasks cleaned up before restoration`);
 
     // Nettoyer les tâches expirées
     const expiredTasks = await prisma.task.deleteMany({
@@ -1191,7 +1191,7 @@ async function restorePendingTasks(client) {
         }
       }
     });
-    console.log(`[Scheduler] ${expiredTasks.count} tâches expirées nettoyées avant restauration`);
+    console.log(`[Scheduler] ${expiredTasks.count} expired tasks cleaned up before restoration`);
 
     // Récupérer toutes les tâches non expirées
     const pendingTasks = await prisma.task.findMany({
@@ -1204,11 +1204,11 @@ async function restorePendingTasks(client) {
     });
 
     if (pendingTasks.length === 0) {
-      console.log('[Scheduler] Aucune tâche en attente à restaurer');
+      console.log('[Scheduler] No pending tasks to restore');
       return 0;
     }
 
-    console.log(`[Scheduler] Restauration de ${pendingTasks.length} tâches en attente...`);
+    console.log(`[Scheduler] Restoring ${pendingTasks.length} pending tasks...`);
 
     // Le cache mémoire est déjà synchronisé par initializeTaskService
     let restoredCount = 0;
@@ -1227,7 +1227,7 @@ async function restorePendingTasks(client) {
           restoredCount++;
         } else if (task.schedulerId.includes('conversation-task')) {
           // Les tâches de conversation sont gérées par analysisService (anciennement messageMonitoringService)
-          console.log(`[Scheduler] Tâche de conversation ${task.schedulerId} restaurée, sera traitée par l'analyseur`);
+          console.log(`[Scheduler] Conversation task ${task.schedulerId} restored, will be processed by the analyzer`);
 
           // S'assurer que la tâche est à jour dans le cache mémoire des tâches actives
           if (!activeTasks.has(task.schedulerId)) {
@@ -1241,7 +1241,7 @@ async function restorePendingTasks(client) {
           restoredCount++;
         } else {
           // Autres types de tâches
-          console.log(`[Scheduler] Tâche de type inconnu ${task.schedulerId} restaurée en mémoire`);
+          console.log(`[Scheduler] Unknown task type ${task.schedulerId} restored in memory`);
           if (!activeTasks.has(task.schedulerId)) {
             activeTasks.set(task.schedulerId, {
               taskNumber: task.taskNumber,
@@ -1253,14 +1253,14 @@ async function restorePendingTasks(client) {
           restoredCount++;
         }
       } catch (taskError) {
-        console.error(`[Scheduler] Erreur lors de la restauration de la tâche ${task.schedulerId}:`, taskError);
+        console.error(`[Scheduler] Error restoring task ${task.schedulerId}:`, taskError);
       }
     }
 
-    console.log(`[Scheduler] Restauration des tâches terminée (${restoredCount}/${pendingTasks.length} restaurées)`);
+    console.log(`[Scheduler] Task restoration completed (${restoredCount}/${pendingTasks.length} restored)`);
     return restoredCount;
   } catch (error) {
-    console.error('[Scheduler] Erreur lors de la restauration des tâches en attente:', error);
+    console.error('[Scheduler] Error restoring pending tasks:', error);
     return 0;
   }
 }

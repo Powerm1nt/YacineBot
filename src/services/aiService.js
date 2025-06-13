@@ -38,28 +38,28 @@ const BOT_NAME = process.env.BOT_NAME || 'Yascine'
 export async function setupCleanupInterval(client) {
   // Nettoyer immédiatement au démarrage
   try {
-    console.log('[AI] Nettoyage initial des tâches de surveillance des messages...')
+    console.log('[AI] Initial cleanup of message monitoring tasks...')
     const cleanedCount = await analysisService.cleanupMonitoringTasks()
-    console.log(`[AI] Nettoyage initial terminé - ${cleanedCount} tâches nettoyées`)
+    console.log(`[AI] Initial cleanup completed - ${cleanedCount} tasks cleaned up`)
 
     // Nettoyer également toutes les tâches d'attente au démarrage
-    console.log('[AI] Nettoyage initial des tâches d\'attente...')
+    console.log('[AI] Initial cleanup of waiting tasks...')
 
     // Supprimer les tâches d'attente de type 'waiting-ai'
     const aiWaitingTasksCount = await taskService.deleteTasksByType('waiting-ai')
-    console.log(`[AI] ${aiWaitingTasksCount} tâches d'attente AI supprimées`)
+    console.log(`[AI] ${aiWaitingTasksCount} AI waiting tasks deleted`)
 
     // Supprimer les tâches d'attente de type 'waiting-conversation'
     const convWaitingTasksCount = await taskService.deleteTasksByType('waiting-conversation')
-    console.log(`[AI] ${convWaitingTasksCount} tâches d'attente de conversation supprimées`)
+    console.log(`[AI] ${convWaitingTasksCount} conversation waiting tasks deleted`)
 
     // Nettoyer les tâches terminées
     const finishedTasksCount = await taskService.cleanupFinishedTasks()
-    console.log(`[AI] ${finishedTasksCount} tâches terminées nettoyées`)
+    console.log(`[AI] ${finishedTasksCount} finished tasks cleaned up`)
 
-    console.log(`[AI] Nettoyage initial des tâches d'attente terminé - ${aiWaitingTasksCount + convWaitingTasksCount + finishedTasksCount} tâches nettoyées au total`)
+    console.log(`[AI] Initial cleanup of waiting tasks completed - ${aiWaitingTasksCount + convWaitingTasksCount + finishedTasksCount} tasks cleaned up in total`)
   } catch (error) {
-    console.error('[AI] Erreur lors du nettoyage initial des tâches:', error)
+    console.error('[AI] Error during initial task cleanup:', error)
   }
 
   // Configurer un intervalle pour nettoyer périodiquement (toutes les 30 minutes)
@@ -67,7 +67,7 @@ export async function setupCleanupInterval(client) {
 
   setInterval(async () => {
     try {
-      console.log('[AI] Nettoyage périodique des tâches de surveillance des messages...')
+      console.log('[AI] Periodic cleanup of message monitoring tasks...')
       const cleanedCount = await analysisService.cleanupMonitoringTasks()
 
       // Nettoyer également les tâches d'attente et terminées périodiquement
@@ -76,13 +76,13 @@ export async function setupCleanupInterval(client) {
       const finishedTasksCount = await taskService.cleanupFinishedTasks()
 
       const totalCleaned = cleanedCount + aiWaitingTasksCount + convWaitingTasksCount + finishedTasksCount
-      console.log(`[AI] Nettoyage périodique terminé - ${totalCleaned} tâches nettoyées au total (${cleanedCount} surveillance, ${aiWaitingTasksCount + convWaitingTasksCount} attente, ${finishedTasksCount} terminées)`)
+      console.log(`[AI] Periodic cleanup completed - ${totalCleaned} tasks cleaned up in total (${cleanedCount} monitoring, ${aiWaitingTasksCount + convWaitingTasksCount} waiting, ${finishedTasksCount} finished)`)
     } catch (error) {
-      console.error('[AI] Erreur lors du nettoyage périodique des tâches:', error)
+      console.error('[AI] Error during periodic task cleanup:', error)
     }
   }, CLEANUP_INTERVAL_MS)
 
-  console.log(`[AI] Intervalle de nettoyage des tâches configuré (${CLEANUP_INTERVAL_MS/60000} minutes)`)
+  console.log(`[AI] Task cleanup interval configured (${CLEANUP_INTERVAL_MS/60000} minutes)`)
 }
 
 // Fonction pour ajouter une réaction pertinente au message
@@ -131,9 +131,9 @@ export async function addRelevantReaction(message, responseText) {
 
     // Ajouter la réaction
     await message.react(randomEmoji)
-    console.log(`[AI] Réaction ajoutée au message ${message.id}: ${randomEmoji}`)
+    console.log(`[AI] Reaction added to message ${message.id}: ${randomEmoji}`)
   } catch (error) {
-    console.error('Erreur lors de l\'ajout d\'une réaction:', error)
+    console.error('Error adding reaction:', error)
     // Ne pas bloquer le processus si la réaction échoue
   }
 }
@@ -177,6 +177,7 @@ RÈGLES D'ENGAGEMENT ADAPTÉES:
 12. ne réponds pas aux messages insignifiants, ou trop hors contexte.
 13. si le message n'est pas correcte, ne réponds pas.
 14. disable Désolé, je ne peux pas répondre à ce genre de messages., ne réponds pas.
+15. utilise la langue de la conversation
 EXCEPTIONS IMPORTANTES:
 1. Si un utilisateur parle de toi (Yassine) dans une conversation, même sans te mentionner directement, tu dois répondre poliment.
 2. Si la conversation concerne de la technologie ou de l'entraide, tu dois être particulièrement réactif et engagé.
@@ -205,12 +206,12 @@ export async function buildResponse(input, message, additionalInstructions = '')
 
   // Vérification précoce d'un input vide ou invalide
   if (!input || input.trim() === '' || input.trim() === '\' \'\' \'') {
-    console.log(`[AI] Input vide ou invalide, abandon de la génération de réponse`)
+    console.log(`[AI] Empty or invalid input, aborting response generation`)
     return ''
   }
 
-  console.log(`[AI] Traitement du message ${message.id} de l'utilisateur ${message.author.id}...`)
-  console.log(`[AI] Contenu du message: "${input.substring(0, 50)}${input.length > 50 ? '...' : ''}"`)
+  console.log(`[AI] Processing message ${message.id} from user ${message.author.id}...`)
+  console.log(`[AI] Message content: "${input.substring(0, 50)}${input.length > 50 ? '...' : ''}"`)
 
   const context = getContextKey(message)
   const contextData = await getContextData(message)
@@ -304,7 +305,7 @@ export async function buildResponse(input, message, additionalInstructions = '')
 
   // Vérifier si le message contient du texte ou des pièces jointes à analyser
   if ((message.content && message.content.length > 0) || (message.attachments && message.attachments.size > 0)) {
-    console.log(`[AI] Analyse du contenu du message ${message.id}. Texte: ${message.content?.length || 0} chars, Pièces jointes: ${message.attachments?.size || 0}`)
+    console.log(`[AI] Analyzing message content ${message.id}. Text: ${message.content?.length || 0} chars, Attachments: ${message.attachments?.size || 0}`)
     try {
       // Utiliser la nouvelle fonction qui analyse le texte et les pièces jointes
       const analysisResults = await attachmentService.analyzeMessageContent(message)
@@ -314,10 +315,10 @@ export async function buildResponse(input, message, additionalInstructions = '')
       imageUrlsAnalysis = analysisResults.imageUrlsAnalysis || ''
 
       if (attachmentAnalysis || imageUrlsAnalysis) {
-        console.log(`[AI] Analyse terminée - Pièces jointes: ${attachmentAnalysis.length} chars, URLs d'images: ${imageUrlsAnalysis.length} chars`)
+        console.log(`[AI] Analysis completed - Attachments: ${attachmentAnalysis.length} chars, Image URLs: ${imageUrlsAnalysis.length} chars`)
       }
     } catch (analysisError) {
-      console.error('Erreur lors de l\'analyse du contenu du message:', analysisError)
+      console.error('Error analyzing message content:', analysisError)
       attachmentAnalysis = 'J\'ai rencontré un problème lors de l\'analyse du contenu du message.'
     }
   }
@@ -420,7 +421,7 @@ export async function buildResponse(input, message, additionalInstructions = '')
 
     // Vérifier si on utilise l'API DeepSeek
     if (isUsingDeepSeekAPI()) {
-      console.log(`[AI] Utilisation de l'API DeepSeek avec chat.completions.create`);
+      console.log(`[AI] Using DeepSeek API with chat.completions.create`);
 
       // Récupérer les messages récents pour un meilleur contexte
       const guildId = message.guild?.id || null;
@@ -469,11 +470,11 @@ export async function buildResponse(input, message, additionalInstructions = '')
 
       // Si un ID de réponse précédente est disponible, on peut l'ajouter comme contexte
       if (responseParams.previous_response_id) {
-        console.log(`[AI] Ajout du contexte de conversation précédent: ${responseParams.previous_response_id}`);
+        console.log(`[AI] Adding previous conversation context: ${responseParams.previous_response_id}`);
         // L'historique est déjà inclus dans enhancedInput
       }
 
-      console.log(`[AI] Contexte enrichi pour DeepSeek avec ${recentMessages.length} messages récents et analyse de conversation`);
+      console.log(`[AI] Enhanced context for DeepSeek with ${recentMessages.length} recent messages and conversation analysis`);
 
       // Appeler l'API Chat Completions
       const chatResponse = await ai.chat.completions.create(chatCompletionParams);
@@ -494,7 +495,7 @@ export async function buildResponse(input, message, additionalInstructions = '')
     if (response.output_text && response.output_text.trim() !== '' && response.output_text.trim() !== '\' \'\' \'') {
       await saveContextResponse(message, response.id);
     } else {
-      console.log(`[AI] Réponse invalide détectée, le contexte n'est pas sauvegardé`);
+      console.log(`[AI] Invalid response detected, context not saved`);
     }
 
     const guildId = message.guild?.id || null
@@ -556,12 +557,6 @@ export async function buildResponse(input, message, additionalInstructions = '')
 
     let responseText = response.output_text || ''
 
-    // Check if the response contains the specific message we want to disable
-    if (responseText.includes("Désolé, je ne peux pas répondre à ce genre de messages.")) {
-      console.log(`[AI] Message "Désolé, je ne peux pas répondre à ce genre de messages." détecté, retour d'une chaîne vide`)
-      return '' // Return empty string to prevent the bot from responding
-    }
-
     const incorrectNameRegex = new RegExp(`(?<!${BOT_NAME})(\s|^)(je m'appelle|mon nom est|je suis)\s+([A-Za-zÀ-ÖØ-öø-ÿ]{2,})`, 'i')
     responseText = responseText.replace(incorrectNameRegex, `$1$2 ${BOT_NAME}`)
 
@@ -602,7 +597,7 @@ export async function handleMessage(message) {
 
     // Ne pas répondre aux messages des bots
     if (message.author.bot) {
-      console.log(`[AI] Message ignoré car provenant d'un bot: ${message.author.username}`)
+      console.log(`[AI] Message ignored because it's from a bot: ${message.author.username}`)
       return
     }
 
@@ -655,10 +650,10 @@ export async function handleMessage(message) {
         // Si c'est une réponse à un autre utilisateur et pas au bot
         if (referencedMessage.author.id !== client.user.id && referencedMessage.author.id !== message.author.id) {
           isReplyBetweenUsers = true
-          console.log(`[AI] Message détecté comme réponse entre utilisateurs`)
+          console.log(`[AI] Message detected as a reply between users`)
         }
       } catch (error) {
-        console.error('Erreur lors de la vérification du message référencé:', error)
+        console.error('Error checking referenced message:', error)
       }
     }
 
@@ -682,7 +677,7 @@ export async function handleMessage(message) {
         const botMember = message.guild.members.cache.get(client.user.id)
         const botPermissions = message.channel.permissionsFor(botMember)
         if (!botPermissions || !botPermissions.has('SEND_MESSAGES')) {
-          console.log(`[AI] Pas de permission d'écriture dans le canal ${channelId} - Analyse et enregistrement annulés`)
+          console.log(`[AI] No write permission in channel ${channelId} - Analysis and recording canceled`)
           botHasPermissions = false
         }
       }
@@ -694,11 +689,11 @@ export async function handleMessage(message) {
       const isWaiting = await analysisService.isWaitingForMoreMessages(channelId, guildId)
 
       if (isWaiting && !isDirectMention && !isDM && !isReply) {
-        console.log(`[AI] Délai d'attente actif pour le canal ${channelId} - Message ajouté au bloc de conversation`)
+        console.log(`[AI] Active waiting delay for channel ${channelId} - Message added to conversation block`)
       }
 
       // Enregistrer le message de l'utilisateur dans tous les cas pour l'analyse ultérieure
-      console.log(`[AI] Enregistrement du message de l'utilisateur ${message.author.id} dans le canal ${channelId}`)
+      console.log(`[AI] Recording user message ${message.author.id} in channel ${channelId}`)
       await conversationService.addMessage(
         channelId,
         message.author.id,
@@ -714,20 +709,20 @@ export async function handleMessage(message) {
 
       // Si le planificateur est activé, ajouter le message à la surveillance
       if (await isSchedulerEnabled()) {
-        console.log(`[AI] Ajout du message ${message.id} à la surveillance`)
+        console.log(`[AI] Adding message ${message.id} to monitoring`)
         await analysisService.monitorMessage(message, client, buildResponse)
       }
     } catch (error) {
-      console.error('Erreur lors de l\'enregistrement du message utilisateur:', error)
+      console.error('Error recording user message:', error)
     }
 
     // Si nous ne devons pas répondre, sortir maintenant
     if (!shouldRespond) {
-      console.log(`[AI] Message ignoré car pas de mention directe, pas de réponse et pas en DM`)
+      console.log(`[AI] Message ignored because no direct mention, no reply, and not in DM`)
 
       // Si un délai d'attente est actif pour ce canal, le maintenir actif
       if (await analysisService.isWaitingForMoreMessages(channelId, guildId)) {
-        console.log(`[AI] Délai d'attente maintenu actif pour le canal ${channelId} - Attente de plus de messages`)
+        console.log(`[AI] Waiting delay maintained active for channel ${channelId} - Waiting for more messages`)
         await analysisService.startMessageBatchDelay(channelId, guildId)
       }
 
@@ -743,7 +738,7 @@ export async function handleMessage(message) {
       )
 
       if (shouldIntervene) {
-        console.log(`[AI] Intervention dans une conversation entre utilisateurs jugée appropriée`)
+        console.log(`[AI] Intervention in a conversation between users deemed appropriate`)
       } else {
         // Faire une analyse de pertinence rapide pour décider
         try {
@@ -753,15 +748,15 @@ export async function handleMessage(message) {
 
           // Si le score de pertinence est modéré ou élevé, intervenir quand même
           if (quickAnalysis.relevanceScore >= 0.4) {
-            console.log(`[AI] Conversation entre utilisateurs avec score pertinent (${quickAnalysis.relevanceScore.toFixed(2)}) - Intervention jugée appropriée`)
+            console.log(`[AI] Conversation between users with relevant score (${quickAnalysis.relevanceScore.toFixed(2)}) - Intervention deemed appropriate`)
           } else {
-            console.log(`[AI] Message ignoré car conversation entre utilisateurs avec score faible (${quickAnalysis.relevanceScore.toFixed(2)})`)
+            console.log(`[AI] Message ignored because conversation between users has low score (${quickAnalysis.relevanceScore.toFixed(2)})`)
             return
           }
         } catch (analysisError) {
-          console.error('Erreur lors de l\'analyse rapide de pertinence:', analysisError)
+          console.error('Error during quick relevance analysis:', analysisError)
           // En cas d'erreur d'analyse, on intervient par défaut
-          console.log(`[AI] Intervention par défaut suite à une erreur d'analyse`)
+          console.log(`[AI] Default intervention following an analysis error`)
         }
       }
     }
@@ -786,10 +781,10 @@ export async function handleMessage(message) {
           const randomReaction = reactions[Math.floor(Math.random() * reactions.length)]
           try {
             await message.react(randomReaction)
-            console.log(`[AI] Réponse rapide par réaction: ${randomReaction} pour le message: "${message.content}"`)
+            console.log(`[AI] Quick response by reaction: ${randomReaction} for message: "${message.content}"`)
             return // Sortir après avoir ajouté la réaction
           } catch (error) {
-            console.error('Erreur lors de l\'ajout d\'une réaction rapide:', error)
+            console.error('Error adding quick reaction:', error)
             // Continuer avec la réponse textuelle si la réaction échoue
             break
           }
@@ -799,25 +794,25 @@ export async function handleMessage(message) {
 
     // Comme on va répondre immédiatement, arrêter la surveillance du message
     if (await isSchedulerEnabled()) {
-      console.log(`[AI] Arrêt de la surveillance du message ${message.id} car réponse immédiate`)
+      console.log(`[AI] Stopping monitoring of message ${message.id} due to immediate response`)
       analysisService.stopMonitoring(message.id)
     }
 
     // Vérification des limites de taux
     if (aiLimiter.check(message.author.id) !== true) {
-      console.log(`[AI] Limite de taux atteinte pour l'utilisateur ${message.author.id}`)
+      console.log(`[AI] Rate limit reached for user ${message.author.id}`)
       return
     }
 
     // Utiliser l'IA pour analyser l'intention du message (GIF ou préférence utilisateur)
     try {
       const intentAnalysis = await mcpUtils.analyzeMessageIntent(message.content);
-      console.log(`[AI] Analyse d'intention du message: ${intentAnalysis.intentType}`);
+      console.log(`[AI] Message intent analysis: ${intentAnalysis.intentType}`);
 
       // Traiter les demandes de GIF
       if (intentAnalysis.intentType === 'GIF_REQUEST' && intentAnalysis.data?.searchTerm) {
         const gifSearchTerm = intentAnalysis.data.searchTerm;
-        console.log(`[AI] Demande de GIF détectée avec le terme: "${gifSearchTerm}"`);
+        console.log(`[AI] GIF request detected with term: "${gifSearchTerm}"`);
 
         try {
           // Analyser la pertinence du message pour déterminer si on doit envoyer un GIF
@@ -830,7 +825,7 @@ export async function handleMessage(message) {
             message.channel && message.guild ? message.channel.permissionsFor(message.guild.members.cache.get(client.user.id)) : null
           );
 
-          console.log(`[AI] Analyse de pertinence pour demande de GIF - Score: ${relevanceAnalysis.relevanceScore}`);
+          console.log(`[AI] Relevance analysis for GIF request - Score: ${relevanceAnalysis.relevanceScore}`);
 
           // Vérifier si le score de pertinence est suffisant pour envoyer un GIF
           if (relevanceAnalysis.relevanceScore >= 0.3) { // Seuil de pertinence modéré
@@ -845,7 +840,7 @@ export async function handleMessage(message) {
               const discordGif = attachmentService.prepareGifForDiscord(randomGif);
 
               if (discordGif && discordGif.url) {
-                console.log(`[AI] GIF trouvé: "${randomGif.title}" - URL: ${discordGif.url}`);
+                console.log(`[AI] GIF found: "${randomGif.title}" - URL: ${discordGif.url}`);
 
                 // Envoyer le GIF avec un message
                 await message.reply({ 
@@ -853,25 +848,25 @@ export async function handleMessage(message) {
                   files: [discordGif.url] 
                 });
 
-                console.log(`[AI] GIF envoyé avec succès en réponse au message ${message.id}`);
+                console.log(`[AI] GIF successfully sent in response to message ${message.id}`);
                 return; // Sortir de la fonction après avoir envoyé le GIF
               } else {
-                console.log(`[AI] GIF trouvé mais URL invalide`);
+                console.log(`[AI] GIF found but invalid URL`);
                 // Continuer avec une réponse normale
               }
             } else {
-              console.log(`[AI] Aucun GIF trouvé pour le terme: "${gifSearchTerm}"`);
+              console.log(`[AI] No GIF found for term: "${gifSearchTerm}"`);
               // Informer l'utilisateur qu'aucun GIF n'a été trouvé
               await message.reply(`Désolé, je n'ai pas trouvé de GIF pour "${gifSearchTerm}". Essaie avec un autre terme!`);
               return; // Sortir de la fonction après avoir informé l'utilisateur
             }
           } else {
-            console.log(`[AI] Score de pertinence insuffisant (${relevanceAnalysis.relevanceScore}) pour envoyer un GIF - Ignoré`);
+            console.log(`[AI] Insufficient relevance score (${relevanceAnalysis.relevanceScore}) to send a GIF - Ignored`);
             // Ne pas envoyer de GIF si le score de pertinence est trop bas
             // Continuer avec le traitement normal du message
           }
         } catch (error) {
-          console.error('Erreur lors de la recherche ou de l\'envoi du GIF:', error);
+          console.error('Error searching for or sending the GIF:', error);
           // Continuer avec une réponse normale en cas d'erreur
         }
       }
@@ -879,7 +874,7 @@ export async function handleMessage(message) {
       // Traiter les commandes de préférence de communication
       if (intentAnalysis.intentType === 'TALK_PREFERENCE' && intentAnalysis.data?.preference && (isDirectMention || isReply || isDM)) {
         const preferenceType = intentAnalysis.data.preference;
-        console.log(`[AI] Commande de préférence de communication détectée: "${preferenceType}"`);
+        console.log(`[AI] Communication preference command detected: "${preferenceType}"`);
 
         try {
           // Utiliser le MCP pour définir la préférence de l'utilisateur
@@ -891,7 +886,7 @@ export async function handleMessage(message) {
             }
           });
 
-          console.log(`[AI] Préférence de communication définie pour l'utilisateur ${message.author.id}: ${preferenceType}`);
+          console.log(`[AI] Communication preference set for user ${message.author.id}: ${preferenceType}`);
 
           // Répondre à l'utilisateur en fonction de la préférence définie
           let replyMessage = '';
@@ -910,17 +905,17 @@ export async function handleMessage(message) {
           await message.reply(replyMessage);
           return; // Sortir de la fonction après avoir répondu
         } catch (error) {
-          console.error('Erreur lors de la définition de la préférence de communication:', error);
+          console.error('Error setting communication preference:', error);
           // Continuer avec une réponse normale en cas d'erreur
         }
       }
     } catch (error) {
-      console.error('Erreur lors de l\'analyse d\'intention du message:', error);
+      console.error('Error during message intent analysis:', error);
       // Continuer avec le traitement normal du message en cas d'erreur
     }
 
     // Le message a déjà été stocké et ajouté à la surveillance plus haut dans le code
-    console.log(`[AI] Préparation de la réponse au message ${message.id}`)
+    console.log(`[AI] Preparing response to message ${message.id}`)
 
     try {
       const thinkingDelay = Math.floor(Math.random() * 1500) + 500
@@ -928,7 +923,7 @@ export async function handleMessage(message) {
 
       // Créer une tâche d'attente avant de répondre
       const waitingTaskId = `ai-waiting-${message.id}-${Date.now()}`
-      console.log(`[AI] Création d'une tâche d'attente: ${waitingTaskId}`)
+      console.log(`[AI] Creating a waiting task: ${waitingTaskId}`)
 
       try {
         // Enregistrer la tâche d'attente dans la base de données
@@ -946,9 +941,9 @@ export async function handleMessage(message) {
             content: message.content.substring(0, 100) // Limiter la taille pour éviter des problèmes de stockage
           }
         )
-        console.log(`[AI] Tâche d'attente ${waitingTaskId} créée avec succès`)
+        console.log(`[AI] Waiting task ${waitingTaskId} created successfully`)
       } catch (taskError) {
-        console.error(`[AI] Erreur lors de la création de la tâche d'attente:`, taskError)
+        console.error(`[AI] Error creating waiting task:`, taskError)
         // Continuer même en cas d'erreur
       }
 
@@ -959,7 +954,7 @@ export async function handleMessage(message) {
       // Supprimer la tâche d'attente une fois la réponse générée
       try {
         await taskService.deleteTask(waitingTaskId)
-        console.log(`[AI] Tâche d'attente ${waitingTaskId} supprimée après génération de la réponse`)
+        console.log(`[AI] Waiting task ${waitingTaskId} deleted after response generation`)
       } catch (deleteError) {
         console.error(`[AI] Erreur lors de la suppression de la tâche d'attente:`, deleteError)
         // Ne pas bloquer le processus si la suppression échoue

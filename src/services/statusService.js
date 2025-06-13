@@ -41,16 +41,16 @@ function getStatusForCurrentTime() {
  */
 async function updateStatus(client) {
   if (!client || !client.user) {
-    console.error('[StatusService] Client Discord non disponible');
+    console.error('[StatusService] Discord client not available');
     return;
   }
 
   try {
     const newStatus = getStatusForCurrentTime();
     await client.user.setStatus(newStatus);
-    console.log(`[StatusService] Statut mis à jour: ${newStatus}`);
+    console.log(`[StatusService] Status updated: ${newStatus}`);
   } catch (error) {
-    console.error('[StatusService] Erreur lors de la mise à jour du statut:', error);
+    console.error('[StatusService] Error updating status:', error);
   }
 }
 
@@ -59,10 +59,10 @@ async function updateStatus(client) {
  * @param {Client} client - Le client Discord
  */
 export async function initStatusService(client) {
-  console.log('[StatusService] Initialisation du service de statut...');
+  console.log('[StatusService] Initializing status service...');
 
   if (!client) {
-    console.error('[StatusService] Client Discord non fourni');
+    console.error('[StatusService] Discord client not provided');
     return;
   }
 
@@ -72,7 +72,7 @@ export async function initStatusService(client) {
   // Planifier la mise à jour toutes les heures
   setInterval(() => updateStatus(client), 60 * 60 * 1000);
 
-  console.log('[StatusService] Service de statut initialisé avec succès');
+  console.log('[StatusService] Status service successfully initialized');
 }
 
 /**

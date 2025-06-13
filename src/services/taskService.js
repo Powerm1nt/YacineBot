@@ -19,7 +19,7 @@ const tasksMemoryCache = new Map();
  */
 export async function saveTask(schedulerId, taskNumber, nextExecution, targetChannelType = null, type = 'scheduler', data = {}) {
   try {
-    console.log(`[TaskService] Sauvegarde de tâche - ID: ${schedulerId}, Type: ${type}, Exécution: ${nextExecution.toISOString()}`);
+    console.log(`[TaskService] Saving task - ID: ${schedulerId}, Type: ${type}, Execution: ${nextExecution.toISOString()}`);
 
     // Sauvegarde dans la base de données
     const task = await prisma.task.upsert({
@@ -56,10 +56,10 @@ export async function saveTask(schedulerId, taskNumber, nextExecution, targetCha
       updatedAt: new Date()
     });
 
-    console.log(`[TaskService] Tâche sauvegardée avec succès - ID BDD: ${task.id}, Scheduler ID: ${schedulerId}`);
+    console.log(`[TaskService] Task successfully saved - DB ID: ${task.id}, Scheduler ID: ${schedulerId}`);
     return task;
   } catch (error) {
-    console.error('Erreur lors de la sauvegarde de la tâche:', error);
+    console.error('Error saving task:', error);
     throw error;
   }
 }
@@ -86,7 +86,7 @@ export async function getAllTasks() {
 
     return tasks;
   } catch (error) {
-    console.error('Erreur lors de la récupération des tâches:', error);
+    console.error('Error retrieving tasks:', error);
     return [];
   }
 }
@@ -115,7 +115,7 @@ export async function getTaskById(schedulerId) {
 
     return task;
   } catch (error) {
-    console.error(`Erreur lors de la récupération de la tâche ${schedulerId}:`, error);
+    console.error(`Error retrieving task ${schedulerId}:`, error);
     return null;
   }
 }
@@ -128,7 +128,7 @@ export async function getTaskById(schedulerId) {
 export async function getTasksByType(taskType) {
   try {
     if (taskType === 'random-question-task') {
-      console.log(`[TaskService] Type de tâche "random-question-task" déprécié`);
+      console.log(`[TaskService] Task type "random-question-task" deprecated`);
       return [];
     }
 
@@ -147,7 +147,7 @@ export async function getTasksByType(taskType) {
 
     return tasks;
   } catch (error) {
-    console.error(`[TaskService] Erreur lors de la récupération des tâches de type ${taskType}:`, error);
+    console.error(`[TaskService] Error retrieving tasks of type ${taskType}:`, error);
     return [];
   }
 }
@@ -178,7 +178,7 @@ export async function updateTaskStatus(schedulerId, status) {
 
     return task;
   } catch (error) {
-    console.error(`Erreur lors de la mise à jour du statut de la tâche ${schedulerId}:`, error);
+    console.error(`Error updating task status ${schedulerId}:`, error);
     return null;
   }
 }
@@ -197,7 +197,7 @@ export async function deleteTask(schedulerId) {
     });
 
     if (!taskExists) {
-      console.log(`[TaskService] Aucune tâche trouvée avec l'ID ${schedulerId}, aucune suppression nécessaire`);
+      console.log(`[TaskService] No task found with ID ${schedulerId}, no deletion needed`);
       // Remove from memory cache if present
       if (tasksMemoryCache.has(schedulerId)) {
         tasksMemoryCache.delete(schedulerId);
@@ -217,7 +217,7 @@ export async function deleteTask(schedulerId) {
 
     return true;
   } catch (error) {
-    console.error('Erreur lors de la suppression de la tâche:', error);
+    console.error('Error deleting task:', error);
     return false;
   }
 }
@@ -240,7 +240,7 @@ export async function deleteAllTasks() {
 
     return true;
   } catch (error) {
-    console.error('Erreur lors de la suppression de toutes les tâches:', error);
+    console.error('Error deleting all tasks:', error);
     return false;
   }
 }
@@ -276,7 +276,7 @@ export async function deleteTasksByType(taskType) {
 
     return result.count;
   } catch (error) {
-    console.error(`Erreur lors de la suppression des tâches de type ${taskType}:`, error);
+    console.error(`Error deleting tasks of type ${taskType}:`, error);
     return 0;
   }
 }
@@ -311,10 +311,10 @@ export async function cleanupExpiredTasks() {
       }
     });
 
-    console.log(`[TaskService] ${result.count} tâches expirées nettoyées`);
+    console.log(`[TaskService] ${result.count} expired tasks cleaned up`);
     return result.count;
   } catch (error) {
-    console.error('Erreur lors du nettoyage des tâches expirées:', error);
+    console.error('Error cleaning up expired tasks:', error);
     return 0;
   }
 }
@@ -325,7 +325,7 @@ export async function cleanupExpiredTasks() {
  */
 export async function syncMemoryCache() {
   try {
-    console.log('[TaskService] Synchronisation du cache mémoire avec la base de données');
+    console.log('[TaskService] Synchronizing memory cache with database');
     const dbTasks = await prisma.task.findMany({
       where: {
         schedulerId: { not: null }
@@ -342,10 +342,10 @@ export async function syncMemoryCache() {
       }
     });
 
-    console.log(`[TaskService] ${dbTasks.length} tâches synchronisées dans le cache mémoire`);
+    console.log(`[TaskService] ${dbTasks.length} tasks synchronized in memory cache`);
     return dbTasks.length;
   } catch (error) {
-    console.error('Erreur lors de la synchronisation du cache mémoire:', error);
+    console.error('Error synchronizing memory cache:', error);
     return 0;
   }
 }
@@ -387,10 +387,10 @@ export async function cleanupFinishedTasks() {
       }
     });
 
-    console.log(`[TaskService] ${result.count} tâches terminées nettoyées`);
+    console.log(`[TaskService] ${result.count} finished tasks cleaned up`);
     return result.count;
   } catch (error) {
-    console.error('Erreur lors du nettoyage des tâches terminées:', error);
+    console.error('Error cleaning up finished tasks:', error);
     return 0;
   }
 }
