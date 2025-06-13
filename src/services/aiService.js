@@ -422,6 +422,34 @@ export async function buildResponse(input, message, additionalInstructions = '')
     if (isUsingDeepSeekAPI()) {
       console.log(`[AI] Utilisation de l'API DeepSeek avec chat.completions.create`);
 
+      // Récupérer les messages récents pour un meilleur contexte
+      const guildId = message.guild?.id || null;
+      const channelId = context.key;
+      const recentMessages = await conversationService.getRecentMessages(channelId, guildId, 20);
+
+      // Formater les messages récents pour le contexte
+      let conversationHistory = '';
+      if (recentMessages.length > 0) {
+        conversationHistory = recentMessages
+          .reverse() // Inverser pour avoir l'ordre chronologique
+          .map(msg => `${msg.userName}: ${msg.content}`)
+          .join('\n');
+      }
+
+      // Analyser la conversation pour obtenir un résumé et un score de pertinence
+      let conversationAnalysis = '';
+      try {
+        const analysis = await analysisService.analyzeConversationRelevance(recentMessages);
+        if (analysis && analysis.topicSummary) {
+          conversationAnalysis = `\n[Résumé de la conversation: ${analysis.topicSummary}]`;
+        }
+      } catch (analysisError) {
+        console.error('[AI] Erreur lors de l\'analyse de la conversation:', analysisError);
+      }
+
+      // Enrichir l'entrée utilisateur avec l'historique et l'analyse
+      const enhancedInput = `${conversationHistory ? `[Historique de conversation récent]\n${conversationHistory}\n\n` : ''}${conversationAnalysis ? `${conversationAnalysis}\n\n` : ''}[Message actuel]\n${responseParams.input}`;
+
       // Convertir les paramètres pour l'API Chat Completions
       const chatCompletionParams = {
         model: responseParams.model,
@@ -432,18 +460,20 @@ export async function buildResponse(input, message, additionalInstructions = '')
           },
           {
             role: "user",
-            content: responseParams.input
+            content: enhancedInput
           }
         ],
-        max_tokens: 1000, // Limite appropriée pour les réponses de conversation
+        max_tokens: 2000, // Limite augmentée pour permettre des réponses plus détaillées
         // Ajouter d'autres paramètres si nécessaire
       };
 
       // Si un ID de réponse précédente est disponible, on peut l'ajouter comme contexte
       if (responseParams.previous_response_id) {
         console.log(`[AI] Ajout du contexte de conversation précédent: ${responseParams.previous_response_id}`);
-        // On pourrait ajouter des messages supplémentaires ici si nécessaire
+        // L'historique est déjà inclus dans enhancedInput
       }
+
+      console.log(`[AI] Contexte enrichi pour DeepSeek avec ${recentMessages.length} messages récents et analyse de conversation`);
 
       // Appeler l'API Chat Completions
       const chatResponse = await ai.chat.completions.create(chatCompletionParams);
@@ -456,7 +486,7 @@ export async function buildResponse(input, message, additionalInstructions = '')
     } else {
       // Utiliser l'API Assistants standard
       // Ajouter max_tokens au responseParams
-      responseParams.max_tokens = 1000; // Limite appropriée pour les réponses de conversation
+      responseParams.max_tokens = 2000; // Limite augmentée pour permettre des réponses plus détaillées
       response = await ai.responses.create(responseParams);
     }
 
@@ -471,7 +501,7 @@ export async function buildResponse(input, message, additionalInstructions = '')
     const channelId = context.key
     try {
       // Récupérer les messages récents pour fournir un meilleur contexte pour l'analyse
-      const recentMessages = await conversationService.getRecentMessages(channelId, guildId, 3)
+      const recentMessages = await conversationService.getRecentMessages(channelId, guildId, 20)
       const contextForAnalysis = recentMessages.length > 0 ?
         recentMessages.map(msg => `${msg.userName}: ${msg.content}`).join('\n') + '\n' + userInput.substring(0, 200) :
         userInput.substring(0, 200)

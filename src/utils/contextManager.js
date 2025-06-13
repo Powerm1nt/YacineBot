@@ -120,7 +120,7 @@ export async function getContextData(message) {
       }
     });
 
-    const recentMessages = await conversationService.getRecentMessages(channelId, guildId, 10);
+    const recentMessages = await conversationService.getRecentMessages(channelId, guildId, 20);
 
     if (recentMessages.length > 0) {
       const lastMessage = recentMessages[0];
@@ -238,7 +238,7 @@ export async function saveContextResponse(message, responseId) {
 
       try {
         // Récupérer les messages récents pour le contexte
-        const recentMessages = await conversationService.getRecentMessages(channelId, guildId, 3);
+        const recentMessages = await conversationService.getRecentMessages(channelId, guildId, 20);
         const contextForAnalysis = recentMessages.length > 0 ? 
           recentMessages.map(msg => `${msg.userName}: ${msg.content}`).join('\n') : '';
 

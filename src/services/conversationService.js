@@ -185,6 +185,9 @@ export async function deleteConversationHistory(channelId, guildId = null) {
  */
 export async function getRecentMessages(channelId, guildId = null, limit = 10) {
   try {
+    console.log(`[ConversationService] Récupération des messages pour le canal ${channelId}, serveur ${guildId || 'DM'}, limite ${limit}`);
+
+    // Get the conversation ID first
     const conversation = await prisma.conversation.findUnique({
       where: {
         channelId_guildId: {
@@ -192,17 +195,58 @@ export async function getRecentMessages(channelId, guildId = null, limit = 10) {
           guildId: guildId || ""
         }
       },
-      include: {
-        messages: {
-          orderBy: {
-            createdAt: 'desc'
-          },
-          take: limit
-        }
+      select: {
+        id: true
       }
     });
 
-    return conversation?.messages || [];
+    if (!conversation) {
+      console.log(`[ConversationService] Aucune conversation trouvée pour le canal ${channelId}`);
+      return [];
+    }
+
+    // Get relevant messages (relevanceScore >= 0.6)
+    const relevantMessages = await prisma.message.findMany({
+      where: {
+        conversationId: conversation.id,
+        relevanceScore: { gte: 0.6 }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    console.log(`[ConversationService] ${relevantMessages.length} messages pertinents trouvés (relevanceScore >= 0.6)`);
+
+    // Get recent messages
+    const recentMessages = await prisma.message.findMany({
+      where: {
+        conversationId: conversation.id
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: limit
+    });
+
+    console.log(`[ConversationService] ${recentMessages.length} messages récents trouvés (limité à ${limit})`);
+
+    // Combine both sets, remove duplicates by ID, and sort by creation date (newest first)
+    const messageMap = new Map();
+
+    // Add all messages to the map with ID as key to remove duplicates
+    [...relevantMessages, ...recentMessages].forEach(msg => {
+      messageMap.set(msg.id, msg);
+    });
+
+    // Convert map values to array and sort by creation date
+    const combinedMessages = Array.from(messageMap.values()).sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+
+    console.log(`[ConversationService] ${combinedMessages.length} messages combinés après déduplication`);
+
+    return combinedMessages;
   } catch (error) {
     console.error('Erreur lors de la récupération des messages récents:', error);
     return [];
