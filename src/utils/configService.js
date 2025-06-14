@@ -12,8 +12,6 @@ export const defaultConfig = {
       dm: true,
       group: true
     },
-    analysisEnabled: true,  // Enables message relevance analysis
-    autoRespond: true,      // Allows automatic responses to relevant messages
     sharingEnabled: true,   // Enables context sharing
     disabledConversations: {}  // Conversations for which analysis is disabled
   }
@@ -109,69 +107,10 @@ export async function setGuildEnabled(guildId, enabled) {
   }
 }
 
-/**
- * Enables or disables message analysis for a specific server
- * @param {string} guildId - Server ID
- * @param {boolean} enabled - Analysis state for this server
- * @returns {Promise<boolean>} - Operation success
- */
-export async function setGuildAnalysisEnabled(guildId, enabled) {
-  try {
-    console.log(`[ConfigService] Changing analysis state for server ${guildId}: ${enabled ? 'enabling' : 'disabling'}`);
-    const config = await loadConfig();
-
-    if (!config.scheduler) {
-      config.scheduler = defaultConfig.scheduler;
-    }
-    if (!config.scheduler.guilds) {
-      config.scheduler.guilds = {};
-    }
-    if (!config.scheduler.guilds[guildId]) {
-      config.scheduler.guilds[guildId] = { enabled: true };
-    }
-
-    config.scheduler.guilds[guildId].analysisEnabled = enabled;
-
-    return saveConfig(config);
-  } catch (error) {
-    console.error(`[ConfigService] Error updating analysis state for server ${guildId}:`, error);
-    return false;
-  }
-}
-
-/**
- * Enables or disables automatic response for a specific server
- * @param {string} guildId - Server ID
- * @param {boolean} enabled - Auto-response state for this server
- * @returns {Promise<boolean>} - Operation success
- */
-export async function setGuildAutoRespondEnabled(guildId, enabled) {
-  try {
-    console.log(`[ConfigService] Changing auto-response state for server ${guildId}: ${enabled ? 'enabling' : 'disabling'}`);
-    const config = await loadConfig();
-
-    if (!config.scheduler) {
-      config.scheduler = defaultConfig.scheduler;
-    }
-    if (!config.scheduler.guilds) {
-      config.scheduler.guilds = {};
-    }
-    if (!config.scheduler.guilds[guildId]) {
-      config.scheduler.guilds[guildId] = { enabled: true };
-    }
-
-    config.scheduler.guilds[guildId].autoRespond = enabled;
-
-    return saveConfig(config);
-  } catch (error) {
-    console.error(`[ConfigService] Error updating auto-response state for server ${guildId}:`, error);
-    return false;
-  }
-}
 
 export async function getGuildConfig(guildId) {
   const config = await loadConfig();
-  return config.scheduler?.guilds?.[guildId] || { enabled: true, analysisEnabled: true, autoRespond: true };
+  return config.scheduler?.guilds?.[guildId] || { enabled: true };
 }
 
 export async function isGuildEnabled(guildId) {
@@ -179,33 +118,6 @@ export async function isGuildEnabled(guildId) {
   return guildConfig.enabled !== false;
 }
 
-/**
- * Checks if relevance analysis is enabled for a specific server
- * @param {string} guildId - Server ID
- * @returns {Promise<boolean>} - true if analysis is enabled for this server
- */
-export async function isGuildAnalysisEnabled(guildId) {
-  const guildConfig = await getGuildConfig(guildId);
-  // If server config doesn't specify, use global config
-  if (guildConfig.analysisEnabled === undefined) {
-    return await isAnalysisEnabled();
-  }
-  return guildConfig.analysisEnabled !== false;
-}
-
-/**
- * Checks if automatic response is enabled for a specific server
- * @param {string} guildId - Server ID
- * @returns {Promise<boolean>} - true if automatic response is enabled for this server
- */
-export async function isGuildAutoRespondEnabled(guildId) {
-  const guildConfig = await getGuildConfig(guildId);
-  // If server config doesn't specify, use global config
-  if (guildConfig.autoRespond === undefined) {
-    return await isAutoRespondEnabled();
-  }
-  return guildConfig.autoRespond !== false;
-}
 
 export async function setChannelTypeEnabled(channelType, enabled) {
   try {
@@ -263,73 +175,6 @@ export async function isSchedulerEnabled() {
   return defaultConfig.scheduler.enabled;
 }
 
-/**
- * Checks if relevance analysis is enabled
- * @returns {Promise<boolean>} - true if analysis is enabled
- */
-export async function isAnalysisEnabled() {
-  const config = await loadConfig();
-  const isEnabled = config.scheduler?.analysisEnabled !== false && defaultConfig.scheduler.analysisEnabled !== false;
-  console.log(`[ConfigService] Relevance analysis state: ${isEnabled ? 'enabled' : 'disabled'}`);
-  return isEnabled;
-}
-
-/**
- * Enables or disables relevance analysis
- * @param {boolean} enabled - Analysis state
- * @returns {Promise<boolean>} - Operation success
- */
-export async function setAnalysisEnabled(enabled) {
-  console.log(`[ConfigService] Changing analysis state: ${enabled ? 'enabling' : 'disabling'}`);
-  try {
-    const config = await loadConfig();
-
-    if (!config.scheduler) {
-      config.scheduler = defaultConfig.scheduler;
-    }
-
-    config.scheduler.analysisEnabled = enabled;
-
-    return saveConfig(config);
-  } catch (error) {
-    console.error('Error updating analysis state:', error);
-    return false;
-  }
-}
-
-/**
- * Checks if automatic response is enabled
- * @returns {Promise<boolean>} - true if automatic response is enabled
- */
-export async function isAutoRespondEnabled() {
-  const config = await loadConfig();
-  const isEnabled = config.scheduler?.autoRespond !== false && defaultConfig.scheduler.autoRespond !== false;
-  console.log(`[ConfigService] Auto-response state: ${isEnabled ? 'enabled' : 'disabled'}`);
-  return isEnabled;
-}
-
-/**
- * Enables or disables automatic response
- * @param {boolean} enabled - Auto-response state
- * @returns {Promise<boolean>} - Operation success
- */
-export async function setAutoRespondEnabled(enabled) {
-  console.log(`[ConfigService] Changing auto-response state: ${enabled ? 'enabling' : 'disabling'}`);
-  try {
-    const config = await loadConfig();
-
-    if (!config.scheduler) {
-      config.scheduler = defaultConfig.scheduler;
-    }
-
-    config.scheduler.autoRespond = enabled;
-
-    return saveConfig(config);
-  } catch (error) {
-    console.error('Error updating auto-response state:', error);
-    return false;
-  }
-}
 
 /**
  * Checks if analysis is disabled for a specific conversation

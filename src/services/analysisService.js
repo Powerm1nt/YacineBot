@@ -11,12 +11,10 @@ import { messageEvaluator } from '../utils/messageEvaluator.js'
 import { ToadScheduler, SimpleIntervalJob, AsyncTask } from 'toad-scheduler'
 import { format, isAfter } from 'date-fns'
 import { randomUUID } from 'crypto'
+import { getUserRoles } from '../utils/messageUtils.js'
 import {
   isGuildEnabled,
   isSchedulerEnabled,
-  isGuildAnalysisEnabled,
-  isAutoRespondEnabled,
-  isGuildAutoRespondEnabled,
   isConversationAnalysisDisabled
 } from '../utils/configService.js'
 
@@ -162,16 +160,9 @@ export async function analyzeMessageRelevance (content, contextInfo = '', isFrom
 
     // Vérifier si le guild est activé (pour les messages de serveur)
     if (guildId) {
-      const { isGuildEnabled, isSchedulerEnabled, isAnalysisEnabled } = await import('../utils/configService.js')
-
       // Vérifier si le service de planification et l'analyse sont activés
       if (!(await isSchedulerEnabled())) {
         console.log(`[AnalysisService] Le service de planification est désactivé - Analyse annulée`)
-        return { relevanceScore: 0, hasKeyInfo: false }
-      }
-
-      if (!(await isAnalysisEnabled())) {
-        console.log(`[AnalysisService] L'analyse de pertinence est désactivée - Analyse annulée`)
         return { relevanceScore: 0, hasKeyInfo: false }
       }
 
@@ -335,16 +326,7 @@ IMPORTANT: DO NOT use markdown code block (\`\`\`) in your response, return only
 
     const channelContext = channelName ? `Canal: #${channelName}\n` : ''
 
-    const { OpenAI } = await import('openai/client.mjs')
-    const dotenv = await import('dotenv')
-    const { safeJsonParse } = await import('../utils/jsonUtils.js')
-
-    dotenv.config()
-
-    const ai = new OpenAI({
-      apiKey: process.env['OPENAI_API_KEY'],
-      baseURL: process.env['OPENAI_API_BASE_URL'] || 'https://api.openai.com/v1',
-    })
+    // Use the OpenAI instance already initialized at the top of the file
 
     let response;
 
@@ -572,16 +554,8 @@ export async function updateConversationRelevance (channelId, guildId = null, cl
 
     // Vérifier si le guild est activé (pour les messages de serveur)
     if (guildId) {
-      const { isGuildEnabled, isSchedulerEnabled, isAnalysisEnabled } = await import('../utils/configService.js')
-
-      // Vérifier si le service de planification et l'analyse sont activés
       if (!(await isSchedulerEnabled())) {
         console.log(`[AnalysisService] Le service de planification est désactivé - Analyse annulée pour le canal ${channelId}`)
-        return null
-      }
-
-      if (!(await isAnalysisEnabled())) {
-        console.log(`[AnalysisService] L'analyse de pertinence est désactivée - Analyse annulée pour le canal ${channelId}`)
         return null
       }
 
@@ -748,113 +722,6 @@ export async function getSharedConversations (userId) {
   }
 }
 /**
- * Restaure les tâches de surveillance de messages en attente depuis la base de données
- * @returns {Promise<number>} - Nombre de tâches restaurées
- */
-async function restorePendingMessageTasks() {
-  try {
-    const now = new Date();
-
-    // Récupérer les tâches de surveillance de messages en attente
-    const pendingTasks = await prisma.task.findMany({
-      where: {
-        schedulerId: { startsWith: 'job-message-' },
-        nextExecution: { gte: now },
-        status: 'pending'
-      }
-    });
-
-    if (pendingTasks.length === 0) {
-      console.log('[MessageMonitoring] Aucune tâche de surveillance de messages à restaurer');
-      return 0;
-    }
-
-    console.log(`[MessageMonitoring] Restauration de ${pendingTasks.length} tâches de surveillance de messages...`);
-
-    let restoredCount = 0;
-
-    for (const task of pendingTasks) {
-      try {
-        if (!task.data || !task.data.message) {
-          console.log(`[MessageMonitoring] Tâche ${task.schedulerId} ignorée - données incomplètes`);
-          await taskService.deleteTask(task.schedulerId);
-          continue;
-        }
-
-        const messageId = task.schedulerId.replace('job-message-', '');
-        const messageData = task.data;
-        const nextExecution = new Date(task.nextExecution);
-
-        // Vérifier si la tâche n'est pas expirée
-        if (isAfter(nextExecution, now)) {
-          console.log(`[MessageMonitoring] Restauration de la tâche ${task.schedulerId} pour le message ${messageId}`);
-
-          // Recréer la tâche asynchrone
-          const restoredTask = new AsyncTask(
-            task.schedulerId,
-            async () => {
-              try {
-                // Vérifier si le message est toujours pertinent
-                if (!pendingResponses.has(messageId)) return;
-
-                // Récupérer les données du message depuis la Map
-                const messageInfo = pendingResponses.get(messageId);
-
-                // Exécuter la logique d'analyse (code simplifié pour éviter la duplication)
-                console.log(`[MessageMonitoring] Exécution de la tâche restaurée ${task.schedulerId}`);
-
-                // L'analyse sera faite par la fonction originale
-
-                // Supprimer le message de la liste des messages en attente
-                pendingResponses.delete(messageId);
-              } catch (error) {
-                console.error(`Erreur lors de l'exécution de la tâche restaurée ${task.schedulerId}:`, error);
-                pendingResponses.delete(messageId);
-              }
-            },
-            (err) => {
-              console.error(`Erreur dans la tâche restaurée ${task.schedulerId}:`, err);
-              pendingResponses.delete(messageId);
-            }
-          );
-
-          // Calculer le délai restant
-          const remainingDelay = nextExecution.getTime() - now.getTime();
-
-          if (remainingDelay > 0) {
-            // Ajouter les données du message à pendingResponses
-            pendingResponses.set(messageId, messageData);
-
-            // Créer et ajouter le job au planificateur
-            const job = new SimpleIntervalJob({ milliseconds: remainingDelay, runImmediately: false }, restoredTask, task.schedulerId);
-            scheduler.addSimpleIntervalJob(job);
-
-            console.log(`[MessageMonitoring] Tâche ${task.schedulerId} restaurée avec un délai de ${(remainingDelay / 1000).toFixed(1)}s`);
-            restoredCount++;
-          } else {
-            // Supprimer la tâche expirée
-            await taskService.deleteTask(task.schedulerId);
-            console.log(`[MessageMonitoring] Tâche ${task.schedulerId} supprimée car le délai est dépassé`);
-          }
-        } else {
-          // Supprimer la tâche expirée
-          await taskService.deleteTask(task.schedulerId);
-          console.log(`[MessageMonitoring] Tâche ${task.schedulerId} supprimée car expirée`);
-        }
-      } catch (taskError) {
-        console.error(`[MessageMonitoring] Erreur lors de la restauration de la tâche ${task.schedulerId}:`, taskError);
-      }
-    }
-
-    console.log(`[MessageMonitoring] ${restoredCount}/${pendingTasks.length} tâches de surveillance de messages restaurées`);
-    return restoredCount;
-  } catch (error) {
-    console.error('[MessageMonitoring] Erreur lors de la restauration des tâches de surveillance de messages:', error);
-    return 0;
-  }
-}
-
-/**
  * Nettoie les tâches de surveillance obsolètes et les tâches d'attente terminées
  * @returns {Promise<number>} - Nombre de tâches nettoyées
  */
@@ -967,14 +834,8 @@ export async function createScheduledTask(client, channelId, guildId, relevanceS
       return false;
     }
 
-    // Vérifier si la réponse auto est activée globalement
-    if (!(await isAutoRespondEnabled())) {
-      console.log(`[MessageMonitoring] La réponse automatique est désactivée - Création de tâche annulée pour le canal ${channelId}`);
-      return false;
-    }
-
     // Vérifier si la réponse auto est activée pour ce serveur
-    if (guildId && !(await isGuildAutoRespondEnabled(guildId))) {
+    if (guildId && !(await isGuildEnabled(guildId))) {
       console.log(`[MessageMonitoring] La réponse automatique est désactivée pour le serveur ${guildId} - Création de tâche annulée pour le canal ${channelId}`);
       return false;
     }
@@ -1227,13 +1088,6 @@ export async function monitorMessage(message, client, buildResponseFn) {
           return;
         }
 
-        // Vérifier si la réponse auto est activée globalement
-        if (!(await isAutoRespondEnabled())) {
-          console.log(`[MessageMonitoring] La réponse automatique est désactivée - Analyse annulée pour le message ${messageId}`);
-          pendingResponses.delete(messageId);
-          return;
-        }
-
         // Vérifier si la réponse auto est activée pour ce serveur
         if (guildId && !(await isGuildAutoRespondEnabled(guildId))) {
           console.log(`[MessageMonitoring] La réponse automatique est désactivée pour le serveur ${guildId} - Analyse annulée pour le message ${messageId}`);
@@ -1275,7 +1129,6 @@ export async function monitorMessage(message, client, buildResponseFn) {
 
                   // Pour les conversations entre utilisateurs, on vérifie quand même la pertinence
                   // mais on favorise la réponse si le score est suffisant
-                  const { messageEvaluator } = await import('../utils/messageEvaluator.js');
 
                   // On vérifie d'abord avec shouldRespondImmediately pour les cas évidents
                   const shouldRespondImmediate = await messageEvaluator.shouldRespondImmediately(
@@ -1315,7 +1168,6 @@ export async function monitorMessage(message, client, buildResponseFn) {
           // Récupérer les rôles de l'auteur du message si on est dans un serveur
           if (message.guild) {
             try {
-              const { getUserRoles } = await import('../utils/messageUtils.js');
               // On passe les rôles à buildResponseFn via le contexte additionnel
               const authorRoles = await getUserRoles(message.guild, message.author.id);
               if (authorRoles) {
@@ -1467,6 +1319,5 @@ export const analysisService = {
   stopMonitoring,
   createScheduledTask,
   cleanupMonitoringTasks,
-  analyzeMessageIntent,
-  isConversationAnalysisDisabled
+  analyzeMessageIntent
 }

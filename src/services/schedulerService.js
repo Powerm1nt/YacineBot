@@ -7,7 +7,7 @@ import { mcpUtils } from '../utils/mcpUtils.js'
 
 // Use isUsingDeepSeekAPI from mcpUtils.js
 const isUsingDeepSeekAPI = mcpUtils.isUsingDeepSeekAPI;
-import { isGuildEnabled, isChannelTypeEnabled, isSchedulerEnabled, isAnalysisEnabled, isAutoRespondEnabled, isGuildAnalysisEnabled, isGuildAutoRespondEnabled } from '../utils/configService.js'
+import { isGuildEnabled, isChannelTypeEnabled, isSchedulerEnabled } from '../utils/configService.js'
 import { analysisService } from './analysisService.js'
 import { taskService } from './taskService.js'
 import { messageTaskService } from './messageTaskService.js'
@@ -112,10 +112,7 @@ function selectRandomGuildChannel(client) {
     // Filtrer pour ne garder que les serveurs activés dans la configuration
     // et où l'analyse/auto-réponse est activée
     .filter(async guild => {
-      const enabled = await isGuildEnabled(guild.id);
-      const analysisEnabled = await isGuildAnalysisEnabled(guild.id);
-      const autoRespondEnabled = await isGuildAutoRespondEnabled(guild.id);
-      return enabled && analysisEnabled && autoRespondEnabled;
+      return await isGuildEnabled(guild.id);
     });
 
   if (guilds.length === 0) {
@@ -435,19 +432,6 @@ async function createAnalysisTask(client, taskNumber) {
         // Exécuter les tâches de réponse
         const executedTasks = await messageTaskService.executeResponseTasks(client);
         console.log(`[Scheduler] ${executedTasks} response tasks executed`);
-
-        // Vérifier si l'analyse est activée
-        const analysisEnabled = await isAnalysisEnabled();
-        const autoRespondEnabled = await isAutoRespondEnabled();
-
-        console.log(`[Scheduler] Configuration - Analysis: ${analysisEnabled ? 'enabled' : 'disabled'}, Auto-response: ${autoRespondEnabled ? 'enabled' : 'disabled'}`);
-
-        if (!analysisEnabled) {
-          console.log('[Scheduler] Analysis task skipped - Analysis is disabled');
-          // Marquer comme terminée même si ignorée
-          await taskService.updateTaskStatus(taskId, 'completed');
-          return;
-        }
 
         // Vérifier si nous sommes dans les heures actives
         if (!isActiveHour()) {

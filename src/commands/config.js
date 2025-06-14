@@ -4,17 +4,9 @@ import {
   setChannelTypeEnabled,
   setSchedulerEnabled,
   isSchedulerEnabled,
-  setAnalysisEnabled,
-  isAnalysisEnabled,
-  setAutoRespondEnabled,
-  isAutoRespondEnabled,
   defaultConfig,
   setGuildConfig,
   getGuildConfig,
-  setGuildAnalysisEnabled,
-  isGuildAnalysisEnabled,
-  setGuildAutoRespondEnabled,
-  isGuildAutoRespondEnabled,
   isConversationAnalysisDisabled,
   setConversationAnalysisDisabled,
   setGuildEnabled
@@ -83,8 +75,6 @@ const EMOJIS = {
   ENABLE: '✅',
   DISABLE: '⭕',
   SCHEDULER: '⏰',
-  ANALYSIS: '🔍',
-  AUTO_RESPOND: '🤖',
   AUTO_QUESTION: '❓',
   SHARING: '🔄',
   SERVER: '🏢',
@@ -169,8 +159,6 @@ async function showConfigList(client, message, showFull) {
     configMessage += `▫️ Servers: ${config.scheduler.channelTypes?.guild ? '✅ enabled' : '⭕ disabled'}\n`;
     configMessage += `▫️ Private messages: ${config.scheduler.channelTypes?.dm ? '✅ enabled' : '⭕ disabled'}\n`;
     configMessage += `▫️ Groups: ${config.scheduler.channelTypes?.group ? '✅ enabled' : '⭕ disabled'}\n`;
-    configMessage += `▫️ Relevance analysis: ${config.scheduler.analysisEnabled !== false ? '✅ enabled' : '⭕ disabled'}\n`;
-    configMessage += `▫️ Automatic response: ${config.scheduler.autoRespond !== false ? '✅ enabled' : '⭕ disabled'}\n`;
     configMessage += `▫️ Context sharing: ${config.scheduler.sharingEnabled !== false ? '✅ enabled' : '⭕ disabled'}\n\n`;
 
     if (showFull) {
@@ -185,14 +173,6 @@ async function showConfigList(client, message, showFull) {
           } catch (error) {}
 
           configMessage += `▫️ Server ${serverName}: ${guildConfig.enabled !== false ? '✅ enabled' : '⭕ disabled'}\n`;
-
-          // Display server-specific configuration
-          if (guildConfig.analysisEnabled !== undefined) {
-            configMessage += `   - Message analysis: ${guildConfig.analysisEnabled ? '✅ enabled' : '⭕ disabled'}\n`;
-          }
-          if (guildConfig.autoRespond !== undefined) {
-            configMessage += `   - Automatic responses: ${guildConfig.autoRespond ? '✅ enabled' : '⭕ disabled'}\n`;
-          }
         }
         configMessage += '\n';
       }
@@ -286,27 +266,6 @@ async function toggleChannelTypeSetting(client, message, settingType, currentVal
   );
 }
 
-async function toggleAnalysisSetting(client, message, currentValue) {
-  return toggleSetting(
-    client,
-    message,
-    'Modify Relevance Analysis',
-    currentValue,
-    setAnalysisEnabled,
-    'Relevance analysis'
-  );
-}
-
-async function toggleAutoRespondSetting(client, message, currentValue) {
-  return toggleSetting(
-    client,
-    message,
-    'Modify Automatic Response',
-    currentValue,
-    setAutoRespondEnabled,
-    'Automatic response'
-  );
-}
 
 async function toggleAutoQuestionSetting(client, message, currentValue) {
   return toggleSetting(
@@ -349,8 +308,6 @@ async function showSetMenu(client, message) {
   const guildEnabled = config.scheduler?.channelTypes?.guild ?? true;
   const dmEnabled = config.scheduler?.channelTypes?.dm ?? true;
   const groupEnabled = config.scheduler?.channelTypes?.group ?? true;
-  const analysisEnabled = await isAnalysisEnabled();
-  const autoRespondEnabled = await isAutoRespondEnabled();
   const autoQuestionEnabled = await isAutoQuestionEnabled();
   const sharingEnabled = await isSharingEnabled();
 
@@ -361,8 +318,6 @@ async function showSetMenu(client, message) {
     `${EMOJIS.GUILD} Servers: ${guildEnabled ? '✅ enabled' : '⭕ disabled'}\n` +
     `${EMOJIS.DM} Private messages: ${dmEnabled ? '✅ enabled' : '⭕ disabled'}\n` +
     `${EMOJIS.GROUP} Groups: ${groupEnabled ? '✅ enabled' : '⭕ disabled'}\n` +
-    `${EMOJIS.ANALYSIS} Relevance analysis: ${analysisEnabled ? '✅ enabled' : '⭕ disabled'}\n` +
-    `${EMOJIS.AUTO_RESPOND} Automatic response: ${autoRespondEnabled ? '✅ enabled' : '⭕ disabled'}\n` +
     `${EMOJIS.AUTO_QUESTION} Automatic questions: ${autoQuestionEnabled ? '✅ enabled' : '⭕ disabled'}\n` +
     `${EMOJIS.SHARING} Context sharing: ${sharingEnabled ? '✅ enabled' : '⭕ disabled'}\n` +
     `${EMOJIS.CONVERSATION} Conversation analysis: Manage disabled conversations\n` +
@@ -373,7 +328,6 @@ async function showSetMenu(client, message) {
 
   const allEmojis = [
     EMOJIS.SCHEDULER, EMOJIS.GUILD, EMOJIS.DM, EMOJIS.GROUP,
-    EMOJIS.ANALYSIS, EMOJIS.AUTO_RESPOND, 
     EMOJIS.AUTO_QUESTION, EMOJIS.SHARING, 
     EMOJIS.CONVERSATION, EMOJIS.GUILD_MANAGEMENT, EMOJIS.BACK
   ];
@@ -404,10 +358,6 @@ async function showSetMenu(client, message) {
       return toggleChannelTypeSetting(client, message, 'dm', dmEnabled);
     case EMOJIS.GROUP:
       return toggleChannelTypeSetting(client, message, 'group', groupEnabled);
-    case EMOJIS.ANALYSIS:
-      return toggleAnalysisSetting(client, message, analysisEnabled);
-    case EMOJIS.AUTO_RESPOND:
-      return toggleAutoRespondSetting(client, message, autoRespondEnabled);
     case EMOJIS.AUTO_QUESTION:
       return toggleAutoQuestionSetting(client, message, autoQuestionEnabled);
     case EMOJIS.SHARING:
@@ -913,8 +863,6 @@ async function showStatus(client, message) {
     statusMessage += `▫️ Servers: ${config.scheduler?.channelTypes?.guild ? '✅ enabled' : '⭕ disabled'}\n`;
     statusMessage += `▫️ Private messages: ${config.scheduler?.channelTypes?.dm ? '✅ enabled' : '⭕ disabled'}\n`;
     statusMessage += `▫️ Groups: ${config.scheduler?.channelTypes?.group ? '✅ enabled' : '⭕ disabled'}\n`;
-    statusMessage += `▫️ Relevance analysis: ${config.scheduler?.analysisEnabled !== false ? '✅ enabled' : '⭕ disabled'}\n`;
-    statusMessage += `▫️ Automatic response: ${config.scheduler?.autoRespond !== false ? '✅ enabled' : '⭕ disabled'}\n`;
     statusMessage += `▫️ Automatic questions: ${config.scheduler?.autoQuestion !== false ? '✅ enabled' : '⭕ disabled'}\n`;
     statusMessage += `▫️ Context sharing: ${config.scheduler?.sharingEnabled !== false ? '✅ enabled' : '⭕ disabled'}\n`;
 
