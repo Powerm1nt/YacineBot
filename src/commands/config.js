@@ -14,7 +14,10 @@ import {
   setGuildAnalysisEnabled,
   isGuildAnalysisEnabled,
   setGuildAutoRespondEnabled,
-  isGuildAutoRespondEnabled
+  isGuildAutoRespondEnabled,
+  isConversationAnalysisDisabled,
+  setConversationAnalysisDisabled,
+  setGuildEnabled
 } from '../utils/configService.js'
 
 // Helper functions for settings not yet implemented in configService
@@ -55,7 +58,7 @@ import { initScheduler, stopScheduler } from '../services/schedulerService.js'
 
 export const metadata = {
   name: 'config',
-  description: 'Gère la configuration du bot',
+  description: 'Manages bot configuration',
   restricted: true,
   usage: 'config'
 };
@@ -85,7 +88,9 @@ const EMOJIS = {
   AUTO_QUESTION: '❓',
   SHARING: '🔄',
   SERVER: '🏢',
-  SERVER_CONFIG: '🛠️'
+  SERVER_CONFIG: '🛠️',
+  CONVERSATION: '💭',
+  GUILD_MANAGEMENT: '🌐'
 };
 
 async function safeDeleteMessage(message) {
@@ -399,7 +404,9 @@ async function showSetMenu(client, message) {
     `${EMOJIS.ANALYSIS} Analyse de pertinence: ${analysisEnabled ? '✅ activée' : '⭕ désactivée'}\n` +
     `${EMOJIS.AUTO_RESPOND} Réponse automatique: ${autoRespondEnabled ? '✅ activée' : '⭕ désactivée'}\n` +
     `${EMOJIS.AUTO_QUESTION} Questions automatiques: ${autoQuestionEnabled ? '✅ activées' : '⭕ désactivées'}\n` +
-    `${EMOJIS.SHARING} Partage de contexte: ${sharingEnabled ? '✅ activé' : '⭕ désactivé'}\n\n` +
+    `${EMOJIS.SHARING} Partage de contexte: ${sharingEnabled ? '✅ activé' : '⭕ désactivé'}\n` +
+    `${EMOJIS.CONVERSATION} Analyse de conversation: Gérer les conversations désactivées\n` +
+    `${EMOJIS.GUILD_MANAGEMENT} Gestion des serveurs: Activer/désactiver des serveurs entiers\n\n` +
     `${EMOJIS.BACK} Retour au menu principal\n\n` +
     'Cliquez sur une réaction pour modifier un paramètre...'
   );
@@ -408,7 +415,7 @@ async function showSetMenu(client, message) {
     EMOJIS.SCHEDULER, EMOJIS.GUILD, EMOJIS.DM, EMOJIS.GROUP,
     EMOJIS.ANALYSIS, EMOJIS.AUTO_RESPOND, 
     EMOJIS.AUTO_QUESTION, EMOJIS.SHARING, 
-    EMOJIS.BACK
+    EMOJIS.CONVERSATION, EMOJIS.GUILD_MANAGEMENT, EMOJIS.BACK
   ];
 
   await addReactions(setMessage, allEmojis);
@@ -445,8 +452,503 @@ async function showSetMenu(client, message) {
       return toggleAutoQuestionSetting(client, message, autoQuestionEnabled);
     case EMOJIS.SHARING:
       return toggleSharingSetting(client, message, sharingEnabled);
+    case EMOJIS.CONVERSATION:
+      return showConversationMenu(client, message);
+    case EMOJIS.GUILD_MANAGEMENT:
+      return showGuildManagementMenu(client, message);
     case EMOJIS.BACK:
       return showMainMenu(client, message);
+  }
+}
+
+async function showConversationMenu(client, message) {
+  try {
+    const config = await loadConfig();
+
+    // Get the list of disabled conversations
+    const disabledConversations = config.scheduler?.disabledConversations || {};
+    const disabledCount = Object.keys(disabledConversations).length;
+
+    let menuContent = '💭 **Gestion des analyses de conversation**\n\n';
+
+    if (disabledCount === 0) {
+      menuContent += 'Aucune conversation n\'a d\'analyse désactivée actuellement.\n\n';
+    } else {
+      menuContent += `**${disabledCount} conversation(s) avec analyse désactivée:**\n`;
+
+      // List all disabled conversations
+      for (const [key, value] of Object.entries(disabledConversations)) {
+        if (value === true) {
+          const [channelId, guildId] = key.split('-');
+          let locationInfo = `Canal: ${channelId}`;
+
+          // Try to get guild name if possible
+          if (guildId && guildId !== 'dm') {
+            try {
+              const guild = client.guilds.cache.get(guildId);
+              if (guild) {
+                locationInfo += ` (Serveur: ${guild.name})`;
+              } else {
+                locationInfo += ` (Serveur: ${guildId})`;
+              }
+            } catch (error) {
+              locationInfo += ` (Serveur: ${guildId})`;
+            }
+          } else {
+            locationInfo += ' (Messages privés)';
+          }
+
+          menuContent += `▫️ ${locationInfo}\n`;
+        }
+      }
+      menuContent += '\n';
+    }
+
+    // Instructions
+    menuContent += '**Actions disponibles:**\n';
+    menuContent += '1️⃣ - Désactiver l\'analyse pour une conversation (par ID de canal)\n';
+    menuContent += '2️⃣ - Réactiver l\'analyse pour une conversation (par ID de canal)\n';
+    menuContent += `${EMOJIS.BACK} - Retour au menu de configuration\n\n`;
+    menuContent += 'Cliquez sur une réaction pour continuer...';
+
+    const menuMessage = await message.reply(menuContent);
+
+    // Add reactions
+    await addReactions(menuMessage, ['1️⃣', '2️⃣', EMOJIS.BACK]);
+
+    // Wait for reaction
+    const filter = (reaction, user) => {
+      return ['1️⃣', '2️⃣', EMOJIS.BACK].includes(reaction.emoji.name) && 
+             user.id === message.author.id;
+    };
+
+    const collected = await createReactionCollector(menuMessage, filter);
+
+    await safeDeleteMessage(menuMessage);
+
+    if (collected.size === 0) {
+      return message.reply('⏱️ Action annulée - temps écoulé.');
+    }
+
+    const reaction = collected.first();
+
+    switch (reaction.emoji.name) {
+      case '1️⃣':
+        return promptForConversationDisable(client, message);
+      case '2️⃣':
+        return promptForConversationEnable(client, message);
+      case EMOJIS.BACK:
+        return showSetMenu(client, message);
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'affichage du menu de conversation:', error);
+    await message.reply('❌ Une erreur est survenue lors de l\'affichage du menu de conversation.');
+    return showSetMenu(client, message);
+  }
+}
+
+async function showGuildManagementMenu(client, message) {
+  try {
+    const config = await loadConfig();
+
+    // Get the list of guilds
+    const guilds = config.scheduler?.guilds || {};
+
+    // Count disabled guilds
+    let disabledCount = 0;
+    for (const [guildId, guildConfig] of Object.entries(guilds)) {
+      if (guildConfig.enabled === false) {
+        disabledCount++;
+      }
+    }
+
+    let menuContent = '🌐 **Gestion des serveurs**\n\n';
+
+    if (Object.keys(guilds).length === 0) {
+      menuContent += 'Aucun serveur n\'a de configuration spécifique actuellement.\n\n';
+    } else {
+      menuContent += `**${Object.keys(guilds).length} serveur(s) configuré(s), dont ${disabledCount} désactivé(s):**\n`;
+
+      // List all guilds
+      for (const [guildId, guildConfig] of Object.entries(guilds)) {
+        let guildName = guildId;
+
+        // Try to get guild name if possible
+        try {
+          const guild = client.guilds.cache.get(guildId);
+          if (guild) {
+            guildName = guild.name;
+          }
+        } catch (error) {
+          // Keep the ID as name if we can't get the guild
+        }
+
+        const isEnabled = guildConfig.enabled !== false;
+        menuContent += `▫️ ${guildName} (${guildId}): ${isEnabled ? '✅ activé' : '⭕ désactivé'}\n`;
+      }
+      menuContent += '\n';
+    }
+
+    // Instructions
+    menuContent += '**Actions disponibles:**\n';
+    menuContent += '1️⃣ - Désactiver un serveur entier (par ID)\n';
+    menuContent += '2️⃣ - Réactiver un serveur entier (par ID)\n';
+    menuContent += `${EMOJIS.BACK} - Retour au menu de configuration\n\n`;
+    menuContent += 'Cliquez sur une réaction pour continuer...';
+
+    const menuMessage = await message.reply(menuContent);
+
+    // Add reactions
+    await addReactions(menuMessage, ['1️⃣', '2️⃣', EMOJIS.BACK]);
+
+    // Wait for reaction
+    const filter = (reaction, user) => {
+      return ['1️⃣', '2️⃣', EMOJIS.BACK].includes(reaction.emoji.name) && 
+             user.id === message.author.id;
+    };
+
+    const collected = await createReactionCollector(menuMessage, filter);
+
+    await safeDeleteMessage(menuMessage);
+
+    if (collected.size === 0) {
+      return message.reply('⏱️ Action annulée - temps écoulé.');
+    }
+
+    const reaction = collected.first();
+
+    switch (reaction.emoji.name) {
+      case '1️⃣':
+        return promptForGuildDisable(client, message);
+      case '2️⃣':
+        return promptForGuildEnable(client, message);
+      case EMOJIS.BACK:
+        return showSetMenu(client, message);
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'affichage du menu de gestion des serveurs:', error);
+    await message.reply('❌ Une erreur est survenue lors de l\'affichage du menu de gestion des serveurs.');
+    return showSetMenu(client, message);
+  }
+}
+
+async function promptForConversationDisable(client, message) {
+  try {
+    const promptMessage = await message.reply(
+      '**Désactiver l\'analyse pour une conversation**\n\n' +
+      'Veuillez entrer l\'ID du canal pour lequel vous souhaitez désactiver l\'analyse.\n' +
+      'Format: `channelId` ou `channelId guildId` (pour les canaux de serveur)\n\n' +
+      'Exemple: `123456789012345678` ou `123456789012345678 987654321098765432`\n\n' +
+      'Tapez `annuler` pour revenir au menu précédent.'
+    );
+
+    // Create message collector
+    const filter = m => m.author.id === message.author.id;
+    const collector = message.channel.createMessageCollector({ filter, time: 60000, max: 1 });
+
+    collector.on('collect', async m => {
+      await safeDeleteMessage(promptMessage);
+      await safeDeleteMessage(m);
+
+      const input = m.content.trim();
+
+      if (input.toLowerCase() === 'annuler') {
+        return showConversationMenu(client, message);
+      }
+
+      const parts = input.split(' ');
+      const channelId = parts[0];
+      const guildId = parts.length > 1 ? parts[1] : null;
+
+      if (!channelId || channelId.length < 10) {
+        await message.reply('❌ ID de canal invalide. Veuillez réessayer.');
+        return showConversationMenu(client, message);
+      }
+
+      // Disable analysis for the conversation
+      const success = await setConversationAnalysisDisabled(channelId, guildId, true);
+
+      if (success) {
+        await message.reply(`✅ L'analyse a été désactivée pour le canal ${channelId}${guildId ? ` dans le serveur ${guildId}` : ''}.`);
+      } else {
+        await message.reply('❌ Une erreur est survenue lors de la désactivation de l\'analyse pour cette conversation.');
+      }
+
+      return showConversationMenu(client, message);
+    });
+
+    collector.on('end', async collected => {
+      if (collected.size === 0) {
+        await safeDeleteMessage(promptMessage);
+        await message.reply('⏱️ Action annulée - temps écoulé.');
+        return showConversationMenu(client, message);
+      }
+    });
+  } catch (error) {
+    console.error('Erreur lors de la désactivation de l\'analyse pour une conversation:', error);
+    await message.reply('❌ Une erreur est survenue lors de la désactivation de l\'analyse pour une conversation.');
+    return showConversationMenu(client, message);
+  }
+}
+
+async function promptForConversationEnable(client, message) {
+  try {
+    // Get the list of disabled conversations
+    const config = await loadConfig();
+    const disabledConversations = config.scheduler?.disabledConversations || {};
+    const disabledCount = Object.keys(disabledConversations).length;
+
+    if (disabledCount === 0) {
+      await message.reply('ℹ️ Aucune conversation n\'a d\'analyse désactivée actuellement.');
+      return showConversationMenu(client, message);
+    }
+
+    const promptMessage = await message.reply(
+      '**Réactiver l\'analyse pour une conversation**\n\n' +
+      'Veuillez entrer l\'ID du canal pour lequel vous souhaitez réactiver l\'analyse.\n' +
+      'Format: `channelId` ou `channelId guildId` (pour les canaux de serveur)\n\n' +
+      'Exemple: `123456789012345678` ou `123456789012345678 987654321098765432`\n\n' +
+      'Tapez `annuler` pour revenir au menu précédent.'
+    );
+
+    // Create message collector
+    const filter = m => m.author.id === message.author.id;
+    const collector = message.channel.createMessageCollector({ filter, time: 60000, max: 1 });
+
+    collector.on('collect', async m => {
+      await safeDeleteMessage(promptMessage);
+      await safeDeleteMessage(m);
+
+      const input = m.content.trim();
+
+      if (input.toLowerCase() === 'annuler') {
+        return showConversationMenu(client, message);
+      }
+
+      const parts = input.split(' ');
+      const channelId = parts[0];
+      const guildId = parts.length > 1 ? parts[1] : null;
+
+      if (!channelId || channelId.length < 10) {
+        await message.reply('❌ ID de canal invalide. Veuillez réessayer.');
+        return showConversationMenu(client, message);
+      }
+
+      // Check if the conversation is actually disabled
+      const conversationKey = `${channelId}-${guildId || 'dm'}`;
+      if (!disabledConversations[conversationKey]) {
+        await message.reply(`ℹ️ L'analyse n'est pas désactivée pour le canal ${channelId}${guildId ? ` dans le serveur ${guildId}` : ''}.`);
+        return showConversationMenu(client, message);
+      }
+
+      // Enable analysis for the conversation
+      const success = await setConversationAnalysisDisabled(channelId, guildId, false);
+
+      if (success) {
+        await message.reply(`✅ L'analyse a été réactivée pour le canal ${channelId}${guildId ? ` dans le serveur ${guildId}` : ''}.`);
+      } else {
+        await message.reply('❌ Une erreur est survenue lors de la réactivation de l\'analyse pour cette conversation.');
+      }
+
+      return showConversationMenu(client, message);
+    });
+
+    collector.on('end', async collected => {
+      if (collected.size === 0) {
+        await safeDeleteMessage(promptMessage);
+        await message.reply('⏱️ Action annulée - temps écoulé.');
+        return showConversationMenu(client, message);
+      }
+    });
+  } catch (error) {
+    console.error('Erreur lors de la réactivation de l\'analyse pour une conversation:', error);
+    await message.reply('❌ Une erreur est survenue lors de la réactivation de l\'analyse pour une conversation.');
+    return showConversationMenu(client, message);
+  }
+}
+
+async function promptForGuildDisable(client, message) {
+  try {
+    // Get the list of available guilds
+    let availableGuilds = [];
+    client.guilds.cache.forEach(guild => {
+      availableGuilds.push({ id: guild.id, name: guild.name });
+    });
+
+    let promptContent = '**Désactiver un serveur entier**\n\n';
+
+    if (availableGuilds.length > 0) {
+      promptContent += 'Serveurs disponibles:\n';
+      availableGuilds.forEach(guild => {
+        promptContent += `▫️ ${guild.name} (ID: ${guild.id})\n`;
+      });
+      promptContent += '\n';
+    }
+
+    promptContent += 'Veuillez entrer l\'ID du serveur que vous souhaitez désactiver.\n';
+    promptContent += 'Exemple: `123456789012345678`\n\n';
+    promptContent += 'Tapez `annuler` pour revenir au menu précédent.';
+
+    const promptMessage = await message.reply(promptContent);
+
+    // Create message collector
+    const filter = m => m.author.id === message.author.id;
+    const collector = message.channel.createMessageCollector({ filter, time: 60000, max: 1 });
+
+    collector.on('collect', async m => {
+      await safeDeleteMessage(promptMessage);
+      await safeDeleteMessage(m);
+
+      const input = m.content.trim();
+
+      if (input.toLowerCase() === 'annuler') {
+        return showGuildManagementMenu(client, message);
+      }
+
+      const guildId = input;
+
+      if (!guildId || guildId.length < 10) {
+        await message.reply('❌ ID de serveur invalide. Veuillez réessayer.');
+        return showGuildManagementMenu(client, message);
+      }
+
+      // Check if the guild exists
+      const guild = client.guilds.cache.get(guildId);
+      if (!guild) {
+        await message.reply('⚠️ Attention: Ce serveur n\'est pas accessible par le bot. Vous pouvez quand même le désactiver, mais vérifiez que l\'ID est correct.');
+      }
+
+      // Disable the guild
+      const success = await setGuildEnabled(guildId, false);
+
+      if (success) {
+        await message.reply(`✅ Le serveur ${guild ? guild.name : guildId} a été désactivé.`);
+      } else {
+        await message.reply('❌ Une erreur est survenue lors de la désactivation du serveur.');
+      }
+
+      return showGuildManagementMenu(client, message);
+    });
+
+    collector.on('end', async collected => {
+      if (collected.size === 0) {
+        await safeDeleteMessage(promptMessage);
+        await message.reply('⏱️ Action annulée - temps écoulé.');
+        return showGuildManagementMenu(client, message);
+      }
+    });
+  } catch (error) {
+    console.error('Erreur lors de la désactivation d\'un serveur:', error);
+    await message.reply('❌ Une erreur est survenue lors de la désactivation du serveur.');
+    return showGuildManagementMenu(client, message);
+  }
+}
+
+async function promptForGuildEnable(client, message) {
+  try {
+    const config = await loadConfig();
+    const guilds = config.scheduler?.guilds || {};
+
+    // Find disabled guilds
+    const disabledGuilds = [];
+    for (const [guildId, guildConfig] of Object.entries(guilds)) {
+      if (guildConfig.enabled === false) {
+        let guildName = guildId;
+
+        // Try to get guild name if possible
+        try {
+          const guild = client.guilds.cache.get(guildId);
+          if (guild) {
+            guildName = guild.name;
+          }
+        } catch (error) {
+          // Keep the ID as name if we can't get the guild
+        }
+
+        disabledGuilds.push({ id: guildId, name: guildName });
+      }
+    }
+
+    if (disabledGuilds.length === 0) {
+      await message.reply('ℹ️ Aucun serveur n\'est désactivé actuellement.');
+      return showGuildManagementMenu(client, message);
+    }
+
+    let promptContent = '**Réactiver un serveur**\n\n';
+    promptContent += 'Serveurs désactivés:\n';
+
+    disabledGuilds.forEach(guild => {
+      promptContent += `▫️ ${guild.name} (ID: ${guild.id})\n`;
+    });
+
+    promptContent += '\nVeuillez entrer l\'ID du serveur que vous souhaitez réactiver.\n';
+    promptContent += 'Exemple: `123456789012345678`\n\n';
+    promptContent += 'Tapez `annuler` pour revenir au menu précédent.';
+
+    const promptMessage = await message.reply(promptContent);
+
+    // Create message collector
+    const filter = m => m.author.id === message.author.id;
+    const collector = message.channel.createMessageCollector({ filter, time: 60000, max: 1 });
+
+    collector.on('collect', async m => {
+      await safeDeleteMessage(promptMessage);
+      await safeDeleteMessage(m);
+
+      const input = m.content.trim();
+
+      if (input.toLowerCase() === 'annuler') {
+        return showGuildManagementMenu(client, message);
+      }
+
+      const guildId = input;
+
+      if (!guildId || guildId.length < 10) {
+        await message.reply('❌ ID de serveur invalide. Veuillez réessayer.');
+        return showGuildManagementMenu(client, message);
+      }
+
+      // Check if the guild is actually disabled
+      const guildConfig = guilds[guildId];
+      if (!guildConfig || guildConfig.enabled !== false) {
+        await message.reply(`ℹ️ Le serveur ${guildId} n'est pas désactivé.`);
+        return showGuildManagementMenu(client, message);
+      }
+
+      // Enable the guild
+      const success = await setGuildEnabled(guildId, true);
+
+      if (success) {
+        // Try to get guild name if possible
+        let guildName = guildId;
+        try {
+          const guild = client.guilds.cache.get(guildId);
+          if (guild) {
+            guildName = guild.name;
+          }
+        } catch (error) {
+          // Keep the ID as name if we can't get the guild
+        }
+
+        await message.reply(`✅ Le serveur ${guildName} a été réactivé.`);
+      } else {
+        await message.reply('❌ Une erreur est survenue lors de la réactivation du serveur.');
+      }
+
+      return showGuildManagementMenu(client, message);
+    });
+
+    collector.on('end', async collected => {
+      if (collected.size === 0) {
+        await safeDeleteMessage(promptMessage);
+        await message.reply('⏱️ Action annulée - temps écoulé.');
+        return showGuildManagementMenu(client, message);
+      }
+    });
+  } catch (error) {
+    console.error('Erreur lors de la réactivation d\'un serveur:', error);
+    await message.reply('❌ Une erreur est survenue lors de la réactivation du serveur.');
+    return showGuildManagementMenu(client, message);
   }
 }
 
@@ -465,7 +967,22 @@ async function showStatus(client, message) {
     statusMessage += `▫️ Analyse de pertinence: ${config.scheduler?.analysisEnabled !== false ? '✅ activée' : '⭕ désactivée'}\n`;
     statusMessage += `▫️ Réponse automatique: ${config.scheduler?.autoRespond !== false ? '✅ activée' : '⭕ désactivée'}\n`;
     statusMessage += `▫️ Questions automatiques: ${config.scheduler?.autoQuestion !== false ? '✅ activées' : '⭕ désactivées'}\n`;
-    statusMessage += `▫️ Partage de contexte: ${config.scheduler?.sharingEnabled !== false ? '✅ activé' : '⭕ désactivé'}\n\n`;
+    statusMessage += `▫️ Partage de contexte: ${config.scheduler?.sharingEnabled !== false ? '✅ activé' : '⭕ désactivé'}\n`;
+
+    // Afficher les informations sur les conversations désactivées
+    const disabledConversations = config.scheduler?.disabledConversations || {};
+    const disabledConversationsCount = Object.keys(disabledConversations).length;
+    statusMessage += `▫️ Conversations avec analyse désactivée: ${disabledConversationsCount}\n`;
+
+    // Afficher les informations sur les serveurs désactivés
+    const guilds = config.scheduler?.guilds || {};
+    let disabledGuildsCount = 0;
+    for (const [guildId, guildConfig] of Object.entries(guilds)) {
+      if (guildConfig.enabled === false) {
+        disabledGuildsCount++;
+      }
+    }
+    statusMessage += `▫️ Serveurs désactivés: ${disabledGuildsCount}\n`;
 
     const schedulerStatus = getSchedulerStatus();
     if (schedulerStatus) {

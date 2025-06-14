@@ -16,7 +16,8 @@ import {
   isSchedulerEnabled,
   isGuildAnalysisEnabled,
   isAutoRespondEnabled,
-  isGuildAutoRespondEnabled
+  isGuildAutoRespondEnabled,
+  isConversationAnalysisDisabled
 } from '../utils/configService.js'
 
 dotenv.config()
@@ -126,7 +127,7 @@ export function startMessageBatchDelay (channelId, guildId = null) {
  * @param channe Permissions
  * @returns {Promise<Object>} - Résultat d'analyse avec score et hasKeyInfo
  */
-export async function analyzeMessageRelevance (content, contextInfo = '', isFromBot = false, channelName = '', guildId = null, channelPermissions = null) {
+export async function analyzeMessageRelevance (content, contextInfo = '', isFromBot = false, channelName = '', guildId = null, channelPermissions = null, channelId = null) {
   try {
     console.log(`[AnalysisService] Demande d'analyse de pertinence reçue - Contenu: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}", Contexte: ${contextInfo ? 'Fourni' : 'Non fourni'}, Bot: ${isFromBot}, Canal: ${channelName || 'Non spécifié'}, Serveur: ${guildId || 'DM'}`)
 
@@ -150,6 +151,12 @@ export async function analyzeMessageRelevance (content, contextInfo = '', isFrom
     // Vérifier si le bot a les permissions d'écriture dans ce canal
     if (channelPermissions && typeof channelPermissions.has === 'function' && !channelPermissions.has('SEND_MESSAGES')) {
       console.log(`[AnalysisService] Pas de permission d'écriture dans le canal - Analyse annulée`)
+      return { relevanceScore: 0, hasKeyInfo: false }
+    }
+
+    // Vérifier si l'analyse est désactivée pour cette conversation spécifique
+    if (channelId && await isConversationAnalysisDisabled(channelId, guildId)) {
+      console.log(`[AnalysisService] L'analyse est désactivée pour la conversation dans le canal ${channelId} - Analyse annulée`)
       return { relevanceScore: 0, hasKeyInfo: false }
     }
 
@@ -243,7 +250,8 @@ export async function executeScheduledAnalysis (taskData) {
       isFromBot = false, 
       channelName = '', 
       guildId = null, 
-      channelPermissions = null 
+      channelPermissions = null,
+      channelId = null
     } = taskData || {}
 
     // Vérifications de sécurité
@@ -256,6 +264,12 @@ export async function executeScheduledAnalysis (taskData) {
     if (isFromBot) {
       console.log('[AnalysisService] Message provenant d\'un bot, analyse rapide')
       return { relevanceScore: 0.1, hasKeyInfo: false }
+    }
+
+    // Vérifier si l'analyse est désactivée pour cette conversation spécifique
+    if (channelId && await isConversationAnalysisDisabled(channelId, guildId)) {
+      console.log(`[AnalysisService] L'analyse est désactivée pour la conversation dans le canal ${channelId} - Analyse annulée`)
+      return { relevanceScore: 0, hasKeyInfo: false }
     }
 
     // Vérifier les permissions si fournies
@@ -405,13 +419,19 @@ IMPORTANT: DO NOT use markdown code block (\`\`\`) in your response, return only
  * @param {Array} messages - Liste des messages de la conversation
  * @returns {Promise<Object>} - Résultat avec score global et résumé
  */
-export async function analyzeConversationRelevance (messages) {
+export async function analyzeConversationRelevance (messages, channelId = null, guildId = null) {
   try {
     console.log(`[AnalysisService] Conversation analysis requested - ${messages?.length || 0} messages`)
 
     if (!messages || messages.length === 0) {
       console.log('[AnalysisService] No messages to analyze, returning zero score')
       return { relevanceScore: 0, topicSummary: null }
+    }
+
+    // Vérifier si l'analyse est désactivée pour cette conversation spécifique
+    if (channelId && await isConversationAnalysisDisabled(channelId, guildId)) {
+      console.log(`[AnalysisService] L'analyse est désactivée pour la conversation dans le canal ${channelId} - Analyse annulée`)
+      return { relevanceScore: 0, topicSummary: 'Analysis disabled' }
     }
 
     // Limiter le nombre de messages pour l'analyse
@@ -518,6 +538,12 @@ export async function updateConversationRelevance (channelId, guildId = null, cl
   try {
     console.log(`[AnalysisService] Mise à jour de la pertinence de conversation - Canal: ${channelId}, Serveur: ${guildId || 'DM'}`)
 
+    // Vérifier si l'analyse est désactivée pour cette conversation spécifique
+    if (await isConversationAnalysisDisabled(channelId, guildId)) {
+      console.log(`[AnalysisService] L'analyse est désactivée pour la conversation dans le canal ${channelId} - Analyse annulée`)
+      return null
+    }
+
     // Vérifier si le bot a les permissions d'écriture dans ce canal
     if (client) {
       try {
@@ -594,7 +620,7 @@ export async function updateConversationRelevance (channelId, guildId = null, cl
     }
 
     // Analyser la conversation
-    const analysis = await analyzeConversationRelevance(conversation.messages)
+    const analysis = await analyzeConversationRelevance(conversation.messages, channelId, guildId)
 
     // Mettre à jour la conversation dans la base de données
     const updatedConversation = await prisma.conversation.update({
@@ -1047,6 +1073,12 @@ export async function monitorMessage(message, client, buildResponseFn) {
     }
   }
 
+  // Vérifier si l'analyse est désactivée pour cette conversation spécifique
+  if (await isConversationAnalysisDisabled(channelId, guildId)) {
+    console.log(`[MessageMonitoring] L'analyse est désactivée pour la conversation dans le canal ${channelId} - Message ${messageId} ignoré`);
+    return;
+  }
+
   // Vérifier si le service de planification est activé
   if (!(await isSchedulerEnabled())) {
     console.log(`[MessageMonitoring] Le service de planification est désactivé - Message ${messageId} ignoré`);
@@ -1435,5 +1467,6 @@ export const analysisService = {
   stopMonitoring,
   createScheduledTask,
   cleanupMonitoringTasks,
-  analyzeMessageIntent
+  analyzeMessageIntent,
+  isConversationAnalysisDisabled
 }
