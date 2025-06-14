@@ -12,6 +12,6 @@ Le bot répond dans les cas suivants :
 - Réponses à ses propres messages
 - Questions (messages contenant un point d'interrogation)
 - Messages urgents ou demandes d'aide
-- **Nouveauté** : Messages qui parlent de lui (contenant les mots "Yassine", "Yascine", "le bot", etc.), même dans des conversations entre utilisateurs
+- **Nouveauté** : Messages qui parlent de lui (contenant les mots "Yassine", "Yassine", "le bot", etc.), même dans des conversations entre utilisateurs
 
 Dans les conversations entre utilisateurs, le bot reste généralement en retrait, sauf si on parle explicitement de lui ou si une aide est clairement demandée.

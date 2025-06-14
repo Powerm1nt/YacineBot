@@ -1267,7 +1267,7 @@ export async function monitorMessage(message, client, buildResponseFn) {
           // Si c'est une conversation entre utilisateurs, ne pas intervenir à moins qu'il ne s'agisse d'une mention du bot
           if (isReplyBetweenUsers) {
             // Vérifier si le message parle du bot (Yassine)
-            const botNameVariants = ['yassine', 'yascine', 'yasine', 'yacine', 'le bot'];
+            const botNameVariants = ['yassine', 'Yassine', 'yasine', 'yacine', 'le bot'];
             const contentLower = messageInfo.content.toLowerCase();
             const botMentioned = botNameVariants.some(variant => contentLower.includes(variant));
 

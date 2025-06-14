@@ -31,7 +31,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 const BOT_CONFIG = {
-  name: process.env.BOT_NAME || 'Yascine',
+  name: process.env.BOT_NAME || 'Yassine',
   prefix: process.env.COMMAND_PREFIX || 'f!'
 };
 

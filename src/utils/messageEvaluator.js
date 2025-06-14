@@ -21,7 +21,7 @@ import { prisma } from '../services/prisma.js';
     console.log('[MessageEvaluator] Réponse entre utilisateurs détectée - Le bot reste en retrait');
 
     // Vérifier si le message parle du bot (Yassine)
-    const botNameVariants = ['yassine', 'yascine', 'yasine', 'yacine', 'le bot'];
+    const botNameVariants = ['yassine', 'Yassine', 'yasine', 'yacine', 'le bot'];
     const contentLower = content.toLowerCase();
     const botMentioned = botNameVariants.some(variant => contentLower.includes(variant));
 
@@ -78,7 +78,7 @@ import { prisma } from '../services/prisma.js';
     }
 
     // Vérifier si le message parle du bot (Yassine)
-    const botNameVariants = ['yassine', 'yascine', 'yasine', 'yacine', 'le bot'];
+    const botNameVariants = ['yassine', 'Yassine', 'yasine', 'yacine', 'le bot'];
     const contentLower = content.toLowerCase();
     const botMentioned = botNameVariants.some(variant => contentLower.includes(variant));
 

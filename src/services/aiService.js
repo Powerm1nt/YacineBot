@@ -32,7 +32,7 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
-const BOT_NAME = process.env.BOT_NAME || 'Yascine'
+const BOT_NAME = process.env.BOT_NAME || 'Yassine'
 
 // Fonction pour nettoyer périodiquement les tâches de surveillance des messages et les tâches d'attente
 export async function setupCleanupInterval(client) {

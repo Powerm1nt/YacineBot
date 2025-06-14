@@ -86,7 +86,7 @@ Créez un fichier `.env` à la racine du projet avec les variables suivantes :
 OPENAI_API_KEY=your_openai_api_key
 CLIENT_TOKEN=your_discord_bot_token
 CLIENT_ID=your_discord_bot_id
-BOT_NAME=Yascine
+BOT_NAME=Yassine
 DATABASE_URL=postgresql://user:password@localhost:5432/bot_db
 ```
 
